@@ -1,0 +1,3535 @@
+#!/usr/bin/env python3
+"""State bridge for one digest-bound ChatGPT Pro planning response."""
+
+from __future__ import annotations
+
+import argparse
+from contextlib import contextmanager
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+import fcntl
+import hashlib
+import importlib.machinery
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import sys
+import tempfile
+from typing import Any, Iterator
+
+
+SCHEMA = "pro-lifecycle"
+CONTINUATION_SCHEMA = "planning-continuation"
+WAIT_RESULT_SCHEMA = "pro-lifecycle-wait-result"
+CONVERSATION_BINDING_SCHEMA = "pro-lifecycle-conversation-binding"
+CAPTURE_RESULT_SCHEMA = "pro-lifecycle-capture-result"
+LIFECYCLE_STATES = {
+    "prepared",
+    "primary_send_intent",
+    "conversation_bound",
+    "wait_admitted",
+    "manual_resume_required",
+    "response_ready",
+    "response_captured",
+    "response_invalidated",
+}
+WAIT_RESULTS = {
+    "heartbeat_registered",
+    "generation_running",
+    "generation_completed",
+    "manual_resume_required",
+    "manual_resume_observed",
+}
+WAIT_PRODUCERS = {
+    "same_task_heartbeat",
+    "heartbeat_capability_probe",
+    "manual_resume",
+}
+WAIT_FRESHNESS_SECONDS = 20 * 60
+WORK_STATE_SCRIPT = (
+    Path(__file__).absolute().parents[4]
+    / ".agents/workflows/spec-work-orchestrator/scripts/work-state"
+)
+DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+UNCERTAIN_SEND_BLOCKER = "BLK-PRO-UNCERTAIN-SEND"
+INVALID_RESPONSE_EXHAUSTED_BLOCKER = "BLK-PRO-INVALID-RESPONSE-EXHAUSTED"
+
+EXIT_USAGE = 2
+EXIT_CAS = 3
+EXIT_INTEGRITY = 4
+EXIT_AUTHORITY = 5
+
+
+class LifecycleError(RuntimeError):
+    """A deterministic validation, CAS, or authority failure."""
+
+    def __init__(self, message: str, exit_code: int = EXIT_USAGE):
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def parse_timestamp(value: str, label: str) -> datetime:
+    if not isinstance(value, str):
+        raise LifecycleError(
+            f"{label} must be an RFC3339 timestamp", EXIT_INTEGRITY
+        )
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError) as error:
+        raise LifecycleError(f"{label} must be an RFC3339 timestamp") from error
+    if parsed.tzinfo is None:
+        raise LifecycleError(f"{label} must include a timezone")
+    return parsed
+
+
+def canonical_bytes(value: object) -> bytes:
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+
+
+def digest_value(value: object) -> str:
+    return hashlib.sha256(canonical_bytes(value)).hexdigest()
+
+
+def digest_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def conversation_binding_anchor_digest(
+    consultation: str,
+    conversation_ref_digest: str,
+    conversation_generation_id: str,
+    binding_result_digest: str,
+) -> str:
+    return digest_value(
+        {
+            "consultation_id": consultation,
+            "conversation_ref_digest": conversation_ref_digest,
+            "conversation_generation_id": conversation_generation_id,
+            "binding_result_digest": binding_result_digest,
+        }
+    )
+
+
+def work_state_runtime():
+    loader = importlib.machinery.SourceFileLoader(
+        "pro_lifecycle_work_state", str(WORK_STATE_SCRIPT)
+    )
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    if spec is None or spec.loader is None:
+        raise LifecycleError("work-state runtime is unavailable", EXIT_INTEGRITY)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def digest_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as error:
+        raise LifecycleError(f"cannot read {path}: {error}") from error
+    return digest.hexdigest()
+
+
+def locator_digest(path: Path) -> str:
+    return hashlib.sha256(str(path).encode("utf-8")).hexdigest()
+
+
+def output_json(value: object) -> None:
+    json.dump(value, sys.stdout, indent=2, sort_keys=True, ensure_ascii=True)
+    sys.stdout.write("\n")
+
+
+def require_string(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise LifecycleError(f"{label} must be a nonempty string")
+    return value
+
+
+def require_digest(value: object, label: str) -> str:
+    candidate = require_string(value, label)
+    if DIGEST_RE.fullmatch(candidate) is None:
+        raise LifecycleError(f"{label} must be a lowercase SHA-256 digest")
+    return candidate
+
+
+def require_sha(value: object, label: str) -> str:
+    candidate = require_string(value, label)
+    if SHA_RE.fullmatch(candidate) is None:
+        raise LifecycleError(f"{label} must be a lowercase 40-character Git SHA")
+    return candidate
+
+
+def normalized_conversation_url(value: object) -> str:
+    candidate = require_string(value, "conversation URL").strip(" \t\n\r\f\v")
+    match = re.fullmatch(
+        r"(?ai:https://chatgpt\.com/c/)([A-Za-z0-9_-]+)/?",
+        candidate,
+    )
+    if match is None:
+        raise LifecycleError(
+            "conversation URL must be a canonical ChatGPT conversation URL"
+        )
+    return f"https://chatgpt.com/c/{match.group(1)}"
+
+
+def require_exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:
+    missing = expected - set(value)
+    extra = set(value) - expected
+    if missing or extra:
+        details = []
+        if missing:
+            details.append(f"missing {', '.join(sorted(missing))}")
+        if extra:
+            details.append(f"unexpected {', '.join(sorted(extra))}")
+        raise LifecycleError(
+            f"{label} fields are invalid: {'; '.join(details)}", EXIT_INTEGRITY
+        )
+
+
+def validate_optional_digest(value: object, label: str) -> None:
+    if value is not None:
+        require_digest(value, label)
+
+
+def validate_optional_timestamp(value: object, label: str) -> None:
+    if value is not None:
+        parse_timestamp(require_string(value, label), label)
+
+
+def safe_regular_path(value: str | Path, label: str, *, required: bool) -> Path:
+    path = Path(value).expanduser().absolute()
+    if path.is_symlink():
+        raise LifecycleError(f"{label} must not be a symlink")
+    if path.exists() and not path.is_file():
+        raise LifecycleError(f"{label} must be a regular file")
+    if required and not path.is_file():
+        raise LifecycleError(f"{label} is missing: {path}", EXIT_AUTHORITY)
+    parent = path.parent
+    if parent.is_symlink() or not parent.is_dir():
+        raise LifecycleError(
+            f"{label} parent must be an existing non-symlink directory"
+        )
+    return path
+
+
+def canonical_locator(value: str | Path, label: str) -> Path:
+    path = Path(value).expanduser().absolute()
+    if path != path.resolve():
+        raise LifecycleError(
+            f"{label} must use its exact canonical path", EXIT_INTEGRITY
+        )
+    return path
+
+
+def repository_root_for(path: Path) -> Path | None:
+    resolved = path.resolve(strict=False)
+    for parent in (resolved, *resolved.parents):
+        marker = parent / ".git"
+        if marker.is_file() or marker.is_dir():
+            return parent
+    return None
+
+
+def canonical_bundle_path(value: str | Path, label: str = "work bundle") -> Path:
+    path = canonical_locator(value, label)
+    if not path.is_dir():
+        raise LifecycleError(f"{label} must be an existing directory", EXIT_INTEGRITY)
+    return path
+
+
+def canonical_bundle_state_path(value: str | Path) -> Path:
+    path = canonical_locator(value, "bundle state.json")
+    if not path.is_file():
+        raise LifecycleError(
+            f"bundle state.json is missing: {path}", EXIT_INTEGRITY
+        )
+    return safe_regular_path(path, "bundle state.json", required=True)
+
+
+def load_json(path: Path, label: str, *, required: bool = True) -> Any:
+    safe_regular_path(path, label, required=required)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise LifecycleError(
+            f"malformed JSON in {label}: {error.msg}", EXIT_INTEGRITY
+        ) from error
+    except OSError as error:
+        raise LifecycleError(f"cannot read {label}: {error}") from error
+
+
+def atomic_write_json(path: Path, value: object) -> None:
+    safe_regular_path(path, path.name, required=False)
+    payload = (
+        json.dumps(value, indent=2, sort_keys=True, ensure_ascii=True).encode("utf-8")
+        + b"\n"
+    )
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb", closefd=True) as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        safe_regular_path(path, path.name, required=False)
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except OSError as error:
+        raise LifecycleError(f"atomic write failed for {path}: {error}") from error
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def atomic_write_bytes(path: Path, payload: bytes) -> None:
+    safe_regular_path(path, path.name, required=False)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb", closefd=True) as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except OSError as error:
+        raise LifecycleError(f"atomic write failed for {path}: {error}") from error
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+@contextmanager
+def locked_directories(paths: list[Path]) -> Iterator[None]:
+    descriptors: list[int] = []
+    lock_roots: set[str] = set()
+    for path in paths:
+        directory = path.parent.absolute()
+        while not directory.exists() and directory != directory.parent:
+            directory = directory.parent
+        lock_roots.add(str(directory.resolve()))
+    owned = getattr(locked_directories, "_owned", set())
+    newly_owned: list[str] = []
+    try:
+        for directory in sorted(lock_roots):
+            if directory in owned:
+                continue
+            descriptor = os.open(directory, os.O_RDONLY)
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            descriptors.append(descriptor)
+            owned.add(directory)
+            newly_owned.append(directory)
+        locked_directories._owned = owned
+        yield
+    except OSError as error:
+        raise LifecycleError(f"cannot lock lifecycle state: {error}") from error
+    finally:
+        for directory in newly_owned:
+            owned.remove(directory)
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
+def consultation_id(identity: dict[str, str]) -> str:
+    canonical_identity: dict[str, object] = {
+        key: identity[key]
+        for key in (
+            "work_kind",
+            "work_id",
+            "repository",
+            "specification_digest",
+            "source_branch",
+            "source_commit",
+            "prompt_digest",
+        )
+    }
+    attempt_ordinal = identity.get("attempt_ordinal", 1)
+    if attempt_ordinal != 1:
+        canonical_identity["attempt_ordinal"] = attempt_ordinal
+    return digest_value(canonical_identity)
+
+
+def empty_wait() -> dict[str, Any]:
+    return {
+        "generation": 0,
+        "task_id": None,
+        "status": "not_started",
+        "producer_kind": None,
+        "conversation_binding_digest": None,
+        "conversation_generation_id": None,
+        "observed_at": None,
+        "consumed_result_digests": [],
+    }
+
+
+def base_receipt(identity: dict[str, str]) -> dict[str, Any]:
+    now = utc_now()
+    return {
+        "schema": SCHEMA,
+        "revision": 0,
+        "identity": identity,
+        "consultation_id": consultation_id(identity),
+        "lifecycle_state": "prepared",
+        "automation": {
+            "id": None,
+            "mode": "none",
+            "status": "absent",
+        },
+        "conversation": {
+            "url": None,
+            "ref_digest": None,
+            "generation_id": None,
+            "binding_task_id": None,
+            "binding_result_digest": None,
+            "bound_at": None,
+            "origin_anchor_digest": None,
+        },
+        "send_intents": {
+            "primary": {
+                "intent_digest": None,
+                "attempted_at": None,
+                "submission_ref_digest": None,
+                "committed": False,
+            }
+        },
+        "response": {
+            "artifact": None,
+            "digest": None,
+        },
+        "wait": empty_wait(),
+        "invalidation": None,
+        "submitted_at": None,
+        "deadline": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def validate_receipt(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict) or value.get("schema") != SCHEMA:
+        raise LifecycleError(f"receipt schema must be {SCHEMA}", EXIT_INTEGRITY)
+    require_exact_keys(
+        value,
+        {
+            "schema",
+            "revision",
+            "identity",
+            "consultation_id",
+            "lifecycle_state",
+            "automation",
+            "conversation",
+            "send_intents",
+            "response",
+            "wait",
+            "invalidation",
+            "submitted_at",
+            "deadline",
+            "created_at",
+            "updated_at",
+        },
+        "receipt",
+    )
+    if type(value["revision"]) is not int or value["revision"] < 0:
+        raise LifecycleError(
+            "receipt revision must be a nonnegative integer", EXIT_INTEGRITY
+        )
+    identity = value["identity"]
+    if not isinstance(identity, dict):
+        raise LifecycleError("receipt identity must be an object", EXIT_INTEGRITY)
+    require_exact_keys(
+        identity,
+        {
+            "work_kind",
+            "work_id",
+            "work_bundle",
+            "repository",
+            "source_branch",
+            "source_commit",
+            "specification_digest",
+            "prompt_digest",
+            "attempt_ordinal",
+        },
+        "receipt identity",
+    )
+    if identity["work_kind"] not in {"feature", "bug_fix"}:
+        raise LifecycleError("identity.work_kind is invalid", EXIT_INTEGRITY)
+    for key in ("work_id", "work_bundle", "repository", "source_branch"):
+        require_string(identity[key], f"identity.{key}")
+    canonical_locator(identity["work_bundle"], "identity.work_bundle")
+    require_sha(identity["source_commit"], "identity.source_commit")
+    require_digest(identity["specification_digest"], "identity.specification_digest")
+    require_digest(identity["prompt_digest"], "identity.prompt_digest")
+    if (
+        type(identity["attempt_ordinal"]) is not int
+        or identity["attempt_ordinal"] not in {1, 2}
+    ):
+        raise LifecycleError(
+            "identity.attempt_ordinal must be one or two", EXIT_INTEGRITY
+        )
+    if value["consultation_id"] != consultation_id(identity):
+        raise LifecycleError("consultation_id does not match identity", EXIT_INTEGRITY)
+    if value["lifecycle_state"] not in LIFECYCLE_STATES:
+        raise LifecycleError("invalid lifecycle_state", EXIT_INTEGRITY)
+
+    if value["automation"] != {
+        "id": None,
+        "mode": "none",
+        "status": "absent",
+    }:
+        raise LifecycleError(
+            "Pro lifecycle cannot bind automation authority", EXIT_INTEGRITY
+        )
+    conversation = value["conversation"]
+    if not isinstance(conversation, dict):
+        raise LifecycleError("conversation must be an object", EXIT_INTEGRITY)
+    require_exact_keys(
+        conversation,
+        {
+            "url",
+            "ref_digest",
+            "generation_id",
+            "binding_task_id",
+            "binding_result_digest",
+            "bound_at",
+            "origin_anchor_digest",
+        },
+        "conversation",
+    )
+    if conversation["url"] is None:
+        if conversation != {
+            "url": None,
+            "ref_digest": None,
+            "generation_id": None,
+            "binding_task_id": None,
+            "binding_result_digest": None,
+            "bound_at": None,
+            "origin_anchor_digest": None,
+        }:
+            raise LifecycleError(
+                "conversation digests require a canonical URL", EXIT_INTEGRITY
+            )
+    else:
+        canonical_url = normalized_conversation_url(conversation["url"])
+        if canonical_url != conversation["url"]:
+            raise LifecycleError(
+                "conversation URL must already be canonical", EXIT_INTEGRITY
+            )
+        expected_ref = digest_text(canonical_url)
+        if conversation["ref_digest"] != expected_ref:
+            raise LifecycleError(
+                "conversation reference digest mismatch", EXIT_INTEGRITY
+            )
+        generation_id = require_string(
+            conversation["generation_id"], "conversation.generation_id"
+        )
+        require_string(
+            conversation["binding_task_id"], "conversation.binding_task_id"
+        )
+        binding_result_digest = require_digest(
+            conversation["binding_result_digest"],
+            "conversation.binding_result_digest",
+        )
+        parse_timestamp(conversation["bound_at"], "conversation.bound_at")
+        if conversation["origin_anchor_digest"] != (
+            conversation_binding_anchor_digest(
+                value["consultation_id"],
+                expected_ref,
+                generation_id,
+                binding_result_digest,
+            )
+        ):
+            raise LifecycleError(
+                "conversation origin anchor mismatch", EXIT_INTEGRITY
+            )
+
+    send_intents = value["send_intents"]
+    if not isinstance(send_intents, dict):
+        raise LifecycleError("send_intents must be an object", EXIT_INTEGRITY)
+    require_exact_keys(send_intents, {"primary"}, "send_intents")
+    primary = send_intents["primary"]
+    if not isinstance(primary, dict):
+        raise LifecycleError("send_intents.primary must be an object", EXIT_INTEGRITY)
+    require_exact_keys(
+        primary,
+        {
+            "intent_digest",
+            "attempted_at",
+            "submission_ref_digest",
+            "committed",
+        },
+        "send_intents.primary",
+    )
+    validate_optional_digest(primary["intent_digest"], "primary.intent_digest")
+    validate_optional_timestamp(primary["attempted_at"], "primary.attempted_at")
+    validate_optional_digest(
+        primary["submission_ref_digest"], "primary.submission_ref_digest"
+    )
+    if type(primary["committed"]) is not bool:
+        raise LifecycleError("primary.committed must be boolean", EXIT_INTEGRITY)
+    response = value["response"]
+    if not isinstance(response, dict):
+        raise LifecycleError("response must be an object", EXIT_INTEGRITY)
+    require_exact_keys(response, {"artifact", "digest"}, "response")
+    if response["artifact"] is None:
+        if response["digest"] is not None:
+            raise LifecycleError(
+                "response digest requires an artifact", EXIT_INTEGRITY
+            )
+    else:
+        artifact = Path(require_string(response["artifact"], "response.artifact"))
+        if artifact.is_absolute() or ".." in artifact.parts or artifact.suffix != ".md":
+            raise LifecycleError(
+                "response artifact must be a bundle-relative Markdown path",
+                EXIT_INTEGRITY,
+            )
+        require_digest(response["digest"], "response.digest")
+
+    wait = value["wait"]
+    if not isinstance(wait, dict):
+        raise LifecycleError("wait must be an object", EXIT_INTEGRITY)
+    require_exact_keys(
+        wait,
+        {
+            "generation",
+            "task_id",
+            "status",
+            "producer_kind",
+            "conversation_binding_digest",
+            "conversation_generation_id",
+            "observed_at",
+            "consumed_result_digests",
+        },
+        "wait",
+    )
+    if type(wait["generation"]) is not int or wait["generation"] < 0:
+        raise LifecycleError("wait.generation must be nonnegative", EXIT_INTEGRITY)
+    if wait["task_id"] is not None:
+        require_string(wait["task_id"], "wait.task_id")
+    if wait["status"] not in {
+        "not_started",
+        "heartbeat_registered",
+        "generation_running",
+        "generation_completed",
+        "manual_resume_required",
+        "manual_resume_observed",
+    }:
+        raise LifecycleError("wait.status is invalid", EXIT_INTEGRITY)
+    if wait["producer_kind"] is not None and wait["producer_kind"] not in (
+        WAIT_PRODUCERS
+    ):
+        raise LifecycleError("wait.producer_kind is invalid", EXIT_INTEGRITY)
+    validate_optional_digest(
+        wait["conversation_binding_digest"], "wait.conversation_binding_digest"
+    )
+    if wait["conversation_generation_id"] is not None:
+        require_string(
+            wait["conversation_generation_id"], "wait.conversation_generation_id"
+        )
+    validate_optional_timestamp(wait["observed_at"], "wait.observed_at")
+    consumed = wait["consumed_result_digests"]
+    if (
+        not isinstance(consumed, list)
+        or any(DIGEST_RE.fullmatch(item) is None for item in consumed)
+        or len(consumed) != len(set(consumed))
+    ):
+        raise LifecycleError(
+            "wait.consumed_result_digests is invalid", EXIT_INTEGRITY
+        )
+    if wait["generation"] == 0:
+        if wait != empty_wait():
+            raise LifecycleError(
+                "zero-generation wait must be unobserved", EXIT_INTEGRITY
+            )
+    elif (
+        wait["task_id"] is None
+        or wait["producer_kind"] is None
+        or wait["conversation_binding_digest"] is None
+        or wait["conversation_generation_id"] is None
+        or wait["observed_at"] is None
+        or not consumed
+    ):
+        raise LifecycleError(
+            "observed wait has incomplete authority", EXIT_INTEGRITY
+        )
+    if wait["generation"] > 0 and (
+        wait["task_id"] != conversation["binding_task_id"]
+        or wait["conversation_binding_digest"]
+        != conversation["binding_result_digest"]
+        or wait["conversation_generation_id"] != conversation["generation_id"]
+    ):
+        raise LifecycleError(
+            "observed wait is bound to a different task or conversation generation",
+            EXIT_INTEGRITY,
+        )
+
+    invalidation = value["invalidation"]
+    if invalidation is not None:
+        if not isinstance(invalidation, dict):
+            raise LifecycleError("invalidation must be an object", EXIT_INTEGRITY)
+        require_exact_keys(
+            invalidation,
+            {
+                "reason_code",
+                "validation_digest",
+                "successor_consultation_id",
+            },
+            "invalidation",
+        )
+        if invalidation["reason_code"] != "semantic_response_unusable":
+            raise LifecycleError(
+                "invalidation.reason_code is invalid", EXIT_INTEGRITY
+            )
+        require_digest(
+            invalidation["validation_digest"], "invalidation.validation_digest"
+        )
+        require_digest(
+            invalidation["successor_consultation_id"],
+            "invalidation.successor_consultation_id",
+        )
+    validate_optional_timestamp(value["submitted_at"], "submitted_at")
+    validate_optional_timestamp(value["deadline"], "deadline")
+    parse_timestamp(require_string(value["created_at"], "created_at"), "created_at")
+    parse_timestamp(require_string(value["updated_at"], "updated_at"), "updated_at")
+
+    if value["lifecycle_state"] == "prepared":
+        if primary != {
+            "intent_digest": None,
+            "attempted_at": None,
+            "submission_ref_digest": None,
+            "committed": False,
+        }:
+            raise LifecycleError(
+                "prepared receipt cannot carry send authority", EXIT_INTEGRITY
+            )
+        if value["submitted_at"] is not None or value["deadline"] is not None:
+            raise LifecycleError(
+                "prepared receipt cannot carry submission timestamps", EXIT_INTEGRITY
+            )
+        if conversation["url"] is not None or response["artifact"] is not None:
+            raise LifecycleError(
+                "prepared receipt cannot carry response authority", EXIT_INTEGRITY
+            )
+        if wait != empty_wait() or invalidation is not None:
+            raise LifecycleError(
+                "prepared receipt cannot carry wait or invalidation authority",
+                EXIT_INTEGRITY,
+            )
+        return value
+
+    if (
+        primary["intent_digest"] != identity["prompt_digest"]
+        or primary["attempted_at"] != value["submitted_at"]
+        or value["submitted_at"] is None
+        or value["deadline"] is None
+    ):
+        raise LifecycleError(
+            "primary send intent has contradictory authority", EXIT_INTEGRITY
+        )
+    if (
+        parse_timestamp(value["deadline"], "deadline")
+        - parse_timestamp(value["submitted_at"], "submitted_at")
+    ).total_seconds() != 5400:
+        raise LifecycleError(
+            "primary send deadline must be exactly 5,400 seconds after submission",
+            EXIT_INTEGRITY,
+        )
+    if value["lifecycle_state"] == "primary_send_intent":
+        if (
+            primary["submission_ref_digest"] is not None
+            or primary["committed"]
+            or conversation["url"] is not None
+            or response["artifact"] is not None
+        ):
+            raise LifecycleError(
+                "primary send intent cannot carry captured response authority",
+                EXIT_INTEGRITY,
+            )
+        if wait != empty_wait():
+            raise LifecycleError(
+                "unbound primary send cannot carry wait authority", EXIT_INTEGRITY
+            )
+        if invalidation is not None:
+            raise LifecycleError(
+                "uncaptured response cannot be invalidated", EXIT_INTEGRITY
+            )
+    elif value["lifecycle_state"] in {
+        "conversation_bound",
+        "wait_admitted",
+        "manual_resume_required",
+        "response_ready",
+    }:
+        if (
+            conversation["url"] is None
+            or primary["submission_ref_digest"] is None
+            or not primary["committed"]
+            or response["artifact"] is not None
+        ):
+            raise LifecycleError(
+                "bound conversation has incomplete send authority", EXIT_INTEGRITY
+            )
+        expected_submission = digest_value(
+            {
+                "intent_digest": primary["intent_digest"],
+                "conversation_ref_digest": conversation["ref_digest"],
+                "conversation_generation_id": conversation["generation_id"],
+                "binding_result_digest": conversation["binding_result_digest"],
+            }
+        )
+        if primary["submission_ref_digest"] != expected_submission:
+            raise LifecycleError(
+                "bound conversation submission reference mismatch", EXIT_INTEGRITY
+            )
+        expected_wait_statuses = {
+            "conversation_bound": {
+                "not_started",
+                "generation_running",
+                "manual_resume_observed",
+            },
+            "wait_admitted": {"heartbeat_registered"},
+            "manual_resume_required": {"manual_resume_required"},
+            "response_ready": {"generation_completed"},
+        }
+        if wait["status"] not in expected_wait_statuses[value["lifecycle_state"]]:
+            raise LifecycleError(
+                "lifecycle state contradicts wait authority", EXIT_INTEGRITY
+            )
+        if invalidation is not None:
+            raise LifecycleError(
+                "uncaptured response cannot be invalidated", EXIT_INTEGRITY
+            )
+    else:
+        if (
+            primary["submission_ref_digest"] is None
+            or not primary["committed"]
+            or conversation["url"] is None
+            or response["artifact"] is None
+        ):
+            raise LifecycleError(
+                "captured response has incomplete authority", EXIT_INTEGRITY
+            )
+        expected_submission = digest_value(
+            {
+                "intent_digest": primary["intent_digest"],
+                "conversation_ref_digest": conversation["ref_digest"],
+                "conversation_generation_id": conversation["generation_id"],
+                "binding_result_digest": conversation["binding_result_digest"],
+            }
+        )
+        if primary["submission_ref_digest"] != expected_submission:
+            raise LifecycleError(
+                "captured response submission reference mismatch", EXIT_INTEGRITY
+            )
+        if wait["status"] != "generation_completed":
+            raise LifecycleError(
+                "captured response lacks completed wait authority", EXIT_INTEGRITY
+            )
+        if value["lifecycle_state"] == "response_invalidated":
+            if invalidation is None:
+                raise LifecycleError(
+                    "invalidated response lacks invalidation authority",
+                    EXIT_INTEGRITY,
+                )
+        elif invalidation is not None:
+            raise LifecycleError(
+                "captured response cannot carry invalidation authority",
+                EXIT_INTEGRITY,
+            )
+    return value
+
+
+def load_receipt(path: Path) -> dict[str, Any]:
+    value = load_json(path, "task-local receipt")
+    if not isinstance(value, dict) or value.get("schema") != SCHEMA:
+        raise LifecycleError(
+            f"unsupported Pro receipt schema; expected {SCHEMA}; "
+            "archive or manually restart stale workflow state",
+            EXIT_INTEGRITY,
+        )
+    return validate_receipt(value)
+
+
+def require_revision(state: dict[str, Any], expected: int) -> None:
+    if state["revision"] != expected:
+        raise LifecycleError(
+            f"revision mismatch: expected {expected}, found {state['revision']}",
+            EXIT_CAS,
+        )
+
+
+def bump(state: dict[str, Any]) -> None:
+    state["revision"] += 1
+    state["updated_at"] = utc_now()
+
+
+def state_result(state: dict[str, Any], **extra: Any) -> dict[str, Any]:
+    result = {
+        "schema": state["schema"],
+        "revision": state["revision"],
+        "consultation_id": state["consultation_id"],
+        "lifecycle_state": state["lifecycle_state"],
+        "automation_mode": state["automation"]["mode"],
+        "attempt_ordinal": state["identity"]["attempt_ordinal"],
+        "wait_generation": state["wait"]["generation"],
+        "wait_status": state["wait"]["status"],
+    }
+    result.update(extra)
+    return result
+
+
+def active_send_revision(state: dict[str, Any]) -> int:
+    if state["lifecycle_state"] == "primary_send_intent":
+        return 1
+    if state["lifecycle_state"] in {
+        "conversation_bound",
+        "wait_admitted",
+        "manual_resume_required",
+        "response_ready",
+    }:
+        return 2 + len(state["wait"]["consumed_result_digests"])
+    raise LifecycleError("no active primary send intent", EXIT_AUTHORITY)
+
+
+def primary_send_is_reconciled(state: dict[str, Any]) -> bool:
+    return state["revision"] == active_send_revision(state) + 1
+
+
+def require_unreconciled_primary_send(state: dict[str, Any]) -> None:
+    if state["revision"] != active_send_revision(state):
+        raise LifecycleError("primary send intent is already reconciled", EXIT_AUTHORITY)
+
+
+def require_unexpired_primary_send(state: dict[str, Any]) -> None:
+    deadline = require_string(state.get("deadline"), "deadline")
+    if parse_timestamp(deadline, "deadline") <= parse_timestamp(
+        utc_now(), "current time"
+    ):
+        raise LifecycleError("primary send intent has expired", EXIT_AUTHORITY)
+
+
+def uncertain_send_result(state: dict[str, Any]) -> dict[str, Any]:
+    return state_result(
+        state,
+        decision="block_uncertain_send",
+        blocker_code="BLK-PRO-UNCERTAIN-SEND",
+        planner_action="none",
+        parent_action="record_blocker",
+        automation_action="none",
+        browser_allowed=False,
+        prompt_send_allowed=False,
+        notification_policy="report_blocker",
+        prohibitions=[
+            "browser",
+            "send",
+            "prompt_resubmission",
+            "alternate_navigation",
+            "conversation_substitution",
+        ],
+    )
+
+
+def load_wait_result(path: Path) -> tuple[dict[str, Any], str]:
+    value = load_json(path, "task-local wait result")
+    if not isinstance(value, dict) or value.get("schema") != WAIT_RESULT_SCHEMA:
+        raise LifecycleError(
+            f"wait result schema must be {WAIT_RESULT_SCHEMA}", EXIT_INTEGRITY
+        )
+    require_exact_keys(
+        value,
+        {
+            "schema",
+            "work_id",
+            "consultation_id",
+            "attempt_ordinal",
+            "wait_generation",
+            "task_id",
+            "producer_kind",
+            "conversation_binding_digest",
+            "conversation_generation_id",
+            "observed_at",
+            "result",
+        },
+        "wait result",
+    )
+    require_string(value["work_id"], "wait result work_id")
+    require_digest(value["consultation_id"], "wait result consultation_id")
+    if (
+        type(value["attempt_ordinal"]) is not int
+        or value["attempt_ordinal"] not in {1, 2}
+    ):
+        raise LifecycleError(
+            "wait result attempt_ordinal must be one or two", EXIT_INTEGRITY
+        )
+    if type(value["wait_generation"]) is not int or value["wait_generation"] < 1:
+        raise LifecycleError(
+            "wait result wait_generation must be positive", EXIT_INTEGRITY
+        )
+    require_string(value["task_id"], "wait result task_id")
+    require_digest(
+        value["conversation_binding_digest"],
+        "wait result conversation_binding_digest",
+    )
+    require_string(
+        value["conversation_generation_id"],
+        "wait result conversation_generation_id",
+    )
+    if value["producer_kind"] not in WAIT_PRODUCERS:
+        raise LifecycleError("wait result producer_kind is invalid", EXIT_INTEGRITY)
+    observed_at = parse_timestamp(
+        require_string(value["observed_at"], "wait result observed_at"),
+        "wait result observed_at",
+    )
+    now = parse_timestamp(utc_now(), "current time")
+    age = (now - observed_at).total_seconds()
+    if age < -300 or age > WAIT_FRESHNESS_SECONDS:
+        raise LifecycleError(
+            "wait result is stale or implausibly future-dated", EXIT_AUTHORITY
+        )
+    if value["result"] not in WAIT_RESULTS:
+        raise LifecycleError("wait result result is invalid", EXIT_INTEGRITY)
+    expected_producers = {
+        "heartbeat_registered": {"same_task_heartbeat"},
+        "generation_running": {"same_task_heartbeat"},
+        "generation_completed": {"same_task_heartbeat", "manual_resume"},
+        "manual_resume_required": {"heartbeat_capability_probe"},
+        "manual_resume_observed": {"manual_resume"},
+    }
+    if value["producer_kind"] not in expected_producers[value["result"]]:
+        raise LifecycleError(
+            "wait result producer does not match its result", EXIT_INTEGRITY
+        )
+    return value, digest_value(value)
+
+
+def load_conversation_binding_result(
+    path: Path,
+) -> tuple[dict[str, Any], str]:
+    value = load_json(path, "same-send conversation observation")
+    if (
+        not isinstance(value, dict)
+        or value.get("schema") != CONVERSATION_BINDING_SCHEMA
+    ):
+        raise LifecycleError(
+            "conversation binding schema must be "
+            f"{CONVERSATION_BINDING_SCHEMA}",
+            EXIT_INTEGRITY,
+        )
+    require_exact_keys(
+        value,
+        {
+            "schema",
+            "work_id",
+            "consultation_id",
+            "attempt_ordinal",
+            "task_id",
+            "intent_digest",
+            "conversation_url",
+            "generation_id",
+            "observed_at",
+        },
+        "conversation binding",
+    )
+    require_string(value["work_id"], "conversation binding work_id")
+    require_digest(
+        value["consultation_id"], "conversation binding consultation_id"
+    )
+    if (
+        type(value["attempt_ordinal"]) is not int
+        or value["attempt_ordinal"] not in {1, 2}
+    ):
+        raise LifecycleError(
+            "conversation binding attempt_ordinal must be one or two",
+            EXIT_INTEGRITY,
+        )
+    require_string(value["task_id"], "conversation binding task_id")
+    require_digest(value["intent_digest"], "conversation binding intent_digest")
+    if not isinstance(value["conversation_url"], str):
+        raise LifecycleError(
+            "conversation binding conversation_url must be one string",
+            EXIT_INTEGRITY,
+        )
+    try:
+        canonical_url = normalized_conversation_url(value["conversation_url"])
+    except LifecycleError as error:
+        raise LifecycleError(
+            f"conversation binding URL is invalid: {error}", EXIT_INTEGRITY
+        ) from error
+    generation_id = value["generation_id"]
+    if not isinstance(generation_id, str) or not generation_id:
+        raise LifecycleError(
+            "conversation binding generation_id must be one nonempty string",
+            EXIT_INTEGRITY,
+        )
+    observed_at = parse_timestamp(
+        require_string(value["observed_at"], "conversation binding observed_at"),
+        "conversation binding observed_at",
+    )
+    now = parse_timestamp(utc_now(), "current time")
+    age = (now - observed_at).total_seconds()
+    if age < -300 or age > WAIT_FRESHNESS_SECONDS:
+        raise LifecycleError(
+            "conversation binding is stale or implausibly future-dated",
+            EXIT_INTEGRITY,
+        )
+    canonical = deepcopy(value)
+    canonical["conversation_url"] = canonical_url
+    return canonical, digest_value(canonical)
+
+
+def load_capture_result(
+    path: Path, *, require_current_freshness: bool = True
+) -> tuple[dict[str, Any], str]:
+    value = load_json(path, "same-task response capture observation")
+    if not isinstance(value, dict) or value.get("schema") != CAPTURE_RESULT_SCHEMA:
+        raise LifecycleError(
+            f"capture result schema must be {CAPTURE_RESULT_SCHEMA}", EXIT_INTEGRITY
+        )
+    require_exact_keys(
+        value,
+        {
+            "schema",
+            "work_id",
+            "consultation_id",
+            "attempt_ordinal",
+            "task_id",
+            "conversation_url",
+            "conversation_binding_digest",
+            "conversation_generation_id",
+            "response_digest",
+            "observed_at",
+        },
+        "capture result",
+    )
+    require_string(value["work_id"], "capture result work_id")
+    require_digest(value["consultation_id"], "capture result consultation_id")
+    if (
+        type(value["attempt_ordinal"]) is not int
+        or value["attempt_ordinal"] not in {1, 2}
+    ):
+        raise LifecycleError(
+            "capture result attempt_ordinal must be one or two", EXIT_INTEGRITY
+        )
+    require_string(value["task_id"], "capture result task_id")
+    canonical = deepcopy(value)
+    canonical["conversation_url"] = normalized_conversation_url(
+        value["conversation_url"]
+    )
+    require_digest(
+        value["conversation_binding_digest"],
+        "capture result conversation_binding_digest",
+    )
+    require_string(
+        value["conversation_generation_id"],
+        "capture result conversation_generation_id",
+    )
+    require_digest(value["response_digest"], "capture result response_digest")
+    observed_at = parse_timestamp(
+        require_string(value["observed_at"], "capture result observed_at"),
+        "capture result observed_at",
+    )
+    if require_current_freshness:
+        now = parse_timestamp(utc_now(), "current time")
+        age = (now - observed_at).total_seconds()
+        if age < 0 or age > WAIT_FRESHNESS_SECONDS:
+            raise LifecycleError(
+                "capture result is stale or implausibly future-dated",
+                EXIT_AUTHORITY,
+            )
+    return canonical, digest_value(canonical)
+
+
+def command_bind_conversation(args: argparse.Namespace) -> dict[str, Any]:
+    receipt_path = safe_regular_path(
+        args.receipt, "task-local receipt", required=True
+    )
+    binding_path = safe_regular_path(
+        args.binding_result, "same-send conversation observation", required=True
+    )
+    with locked_directories([receipt_path, binding_path]):
+        state = load_receipt(receipt_path)
+        require_revision(state, args.expected_revision)
+        if state["lifecycle_state"] != "primary_send_intent":
+            raise LifecycleError(
+                "conversation binding requires one unbound primary send intent",
+                EXIT_AUTHORITY,
+            )
+        primary = state["send_intents"]["primary"]
+        require_unreconciled_primary_send(state)
+        require_unexpired_primary_send(state)
+        binding, binding_digest = load_conversation_binding_result(binding_path)
+        identity = state["identity"]
+        if (
+            binding["work_id"] != identity["work_id"]
+            or binding["consultation_id"] != state["consultation_id"]
+            or binding["attempt_ordinal"] != identity["attempt_ordinal"]
+            or binding["intent_digest"] != primary["intent_digest"]
+        ):
+            raise LifecycleError(
+                "conversation binding belongs to a different send",
+                EXIT_INTEGRITY,
+            )
+        if parse_timestamp(
+            binding["observed_at"], "conversation binding observed_at"
+        ) < parse_timestamp(state["submitted_at"], "submitted_at"):
+            raise LifecycleError(
+                "conversation binding predates the primary send",
+                EXIT_INTEGRITY,
+            )
+        conversation_url = binding["conversation_url"]
+        conversation_ref_digest = digest_text(conversation_url)
+        state["conversation"] = {
+            "url": conversation_url,
+            "ref_digest": conversation_ref_digest,
+            "generation_id": binding["generation_id"],
+            "binding_task_id": binding["task_id"],
+            "binding_result_digest": binding_digest,
+            "bound_at": utc_now(),
+            "origin_anchor_digest": conversation_binding_anchor_digest(
+                state["consultation_id"],
+                conversation_ref_digest,
+                binding["generation_id"],
+                binding_digest,
+            ),
+        }
+        primary["submission_ref_digest"] = digest_value(
+            {
+                "intent_digest": primary["intent_digest"],
+                "conversation_ref_digest": conversation_ref_digest,
+                "conversation_generation_id": binding["generation_id"],
+                "binding_result_digest": binding_digest,
+            }
+        )
+        primary["committed"] = True
+        state["lifecycle_state"] = "conversation_bound"
+        bump(state)
+        validate_receipt(state)
+        atomic_write_json(receipt_path, state)
+    return state_result(
+        state,
+        conversation_url=conversation_url,
+        conversation_generation_id=binding["generation_id"],
+        conversation_binding_digest=binding_digest,
+        parent_action="register_wait",
+        browser_send_allowed=False,
+        prompt_send_allowed=False,
+    )
+
+
+def command_record_wait_result(args: argparse.Namespace) -> dict[str, Any]:
+    receipt_path = safe_regular_path(
+        args.receipt, "task-local receipt", required=True
+    )
+    wait_result_path = safe_regular_path(
+        args.wait_result, "task-local wait result", required=True
+    )
+    with locked_directories([receipt_path, wait_result_path]):
+        state = load_receipt(receipt_path)
+        require_revision(state, args.expected_revision)
+        result, result_digest = load_wait_result(wait_result_path)
+        identity = state["identity"]
+        wait = state["wait"]
+        conversation = state["conversation"]
+        if (
+            result["work_id"] != identity["work_id"]
+            or result["consultation_id"] != state["consultation_id"]
+            or result["attempt_ordinal"] != identity["attempt_ordinal"]
+        ):
+            raise LifecycleError(
+                "wait result is bound to a different planning attempt",
+                EXIT_INTEGRITY,
+            )
+        if result_digest in wait["consumed_result_digests"]:
+            raise LifecycleError("wait result was already consumed", EXIT_CAS)
+        primary = state["send_intents"]["primary"]
+        require_unreconciled_primary_send(state)
+        if (
+            conversation["url"] is None
+            or result["conversation_binding_digest"]
+            != conversation["binding_result_digest"]
+            or result["conversation_generation_id"]
+            != conversation["generation_id"]
+        ):
+            raise LifecycleError(
+                "wait result conversation binding does not match the original send",
+                EXIT_INTEGRITY,
+            )
+        if (
+            result["task_id"] != conversation["binding_task_id"]
+            or (
+                wait["task_id"] is not None
+                and result["task_id"] != wait["task_id"]
+            )
+        ):
+            raise LifecycleError(
+                "wait result is bound to a different Codex task", EXIT_INTEGRITY
+            )
+
+        result_kind = result["result"]
+        generation = result["wait_generation"]
+        if result_kind in {"heartbeat_registered", "manual_resume_required"}:
+            if generation != wait["generation"] + 1:
+                raise LifecycleError(
+                    "wait result generation is stale or noncurrent", EXIT_CAS
+                )
+        elif generation != wait["generation"]:
+            raise LifecycleError(
+                "wait result generation is stale or noncurrent", EXIT_CAS
+            )
+        if (
+            wait["observed_at"] is not None
+            and parse_timestamp(
+                result["observed_at"], "wait result observed_at"
+            )
+            < parse_timestamp(
+                wait["observed_at"], "current wait authority observed_at"
+            )
+        ):
+            raise LifecycleError(
+                "wait result observation predates current wait authority",
+                EXIT_CAS,
+            )
+        if parse_timestamp(
+            result["observed_at"], "wait result observed_at"
+        ) < parse_timestamp(conversation["bound_at"], "conversation.bound_at"):
+            raise LifecycleError(
+                "wait result observation predates conversation binding",
+                EXIT_CAS,
+            )
+
+        if result_kind == "heartbeat_registered":
+            if (
+                state["lifecycle_state"] != "conversation_bound"
+                or wait["status"] not in {"not_started", "generation_running"}
+            ):
+                raise LifecycleError(
+                    "heartbeat registration is not admissible from current wait state",
+                    EXIT_AUTHORITY,
+                )
+            state["lifecycle_state"] = "wait_admitted"
+        elif result_kind == "generation_running":
+            if (
+                state["lifecycle_state"] != "wait_admitted"
+                or wait["status"] != "heartbeat_registered"
+            ):
+                raise LifecycleError(
+                    "running observation requires an admitted heartbeat wait",
+                    EXIT_AUTHORITY,
+                )
+            state["lifecycle_state"] = "conversation_bound"
+        elif result_kind == "generation_completed":
+            if not (
+                (
+                    state["lifecycle_state"] == "wait_admitted"
+                    and wait["status"] == "heartbeat_registered"
+                    and result["producer_kind"] == "same_task_heartbeat"
+                )
+                or (
+                    state["lifecycle_state"] == "conversation_bound"
+                    and wait["status"] == "manual_resume_observed"
+                    and result["producer_kind"] == "manual_resume"
+                )
+            ):
+                raise LifecycleError(
+                    "completed generation lacks current wait admission",
+                    EXIT_AUTHORITY,
+                )
+            state["lifecycle_state"] = "response_ready"
+        elif result_kind == "manual_resume_required":
+            if (
+                state["lifecycle_state"] != "conversation_bound"
+                or wait["status"] not in {"not_started", "generation_running"}
+            ):
+                raise LifecycleError(
+                    "manual-resume requirement is not current", EXIT_AUTHORITY
+                )
+            state["lifecycle_state"] = "manual_resume_required"
+        else:
+            if (
+                state["lifecycle_state"] != "manual_resume_required"
+                or wait["status"] != "manual_resume_required"
+            ):
+                raise LifecycleError(
+                    "manual resume requires a current typed requirement",
+                    EXIT_AUTHORITY,
+                )
+            state["lifecycle_state"] = "conversation_bound"
+
+        wait["generation"] = generation
+        wait["task_id"] = result["task_id"]
+        wait["status"] = result_kind
+        wait["producer_kind"] = result["producer_kind"]
+        wait["conversation_binding_digest"] = result[
+            "conversation_binding_digest"
+        ]
+        wait["conversation_generation_id"] = result[
+            "conversation_generation_id"
+        ]
+        wait["observed_at"] = result["observed_at"]
+        wait["consumed_result_digests"].append(result_digest)
+        bump(state)
+        validate_receipt(state)
+        atomic_write_json(receipt_path, state)
+
+    return state_result(
+        state,
+        wait_result=result_kind,
+        yield_allowed=result_kind == "heartbeat_registered",
+        capture_allowed=result_kind == "generation_completed",
+        future_wake_claimed=result_kind == "heartbeat_registered",
+        parent_action={
+            "heartbeat_registered": "yield_for_heartbeat",
+            "generation_running": "register_next_wait",
+            "generation_completed": "capture_response",
+            "manual_resume_required": "report_manual_resume_required",
+            "manual_resume_observed": "inspect_current_conversation",
+        }[result_kind],
+    )
+
+
+def continuation_path_for(bundle: Path) -> Path:
+    return bundle / "discovery" / "planning-continuation.json"
+
+
+def continuation_pass_id(
+    item: dict[str, Any], work_kind: str, work_id: str
+) -> str:
+    return digest_value(
+        {
+            "work_kind": work_kind,
+            "work_id": work_id,
+            **{
+                key: item[key]
+                for key in (
+                    "repository",
+                    "consultation_id",
+                    "specification_digest",
+                    "source_branch",
+                    "source_commit",
+                    "prompt_digest",
+                    "conversation_ref_digest",
+                    "conversation_generation_id",
+                    "conversation_binding_digest",
+                    "conversation_origin_anchor_digest",
+                    "invoking_automation_ref_digest",
+                )
+            },
+        }
+    )
+
+
+def validate_continuation(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict) or value.get("schema") != CONTINUATION_SCHEMA:
+        raise LifecycleError("planning continuation schema is invalid", EXIT_INTEGRITY)
+    require_exact_keys(
+        value,
+        {
+            "schema",
+            "revision",
+            "work_kind",
+            "work_id",
+            "work_bundle",
+            "repository",
+            "current_pass_id",
+            "passes",
+            "parent_cursor",
+            "updated_at",
+        },
+        "planning continuation",
+    )
+    if type(value["revision"]) is not int or value["revision"] not in {0, 1, 2, 3}:
+        raise LifecycleError(
+            "planning continuation revision must be zero through three",
+            EXIT_INTEGRITY,
+        )
+    if value["work_kind"] not in {"feature", "bug_fix"}:
+        raise LifecycleError("planning continuation work_kind is invalid", EXIT_INTEGRITY)
+    require_string(value["work_id"], "planning continuation work_id")
+    require_string(value["work_bundle"], "planning continuation work_bundle")
+    require_string(value["repository"], "planning continuation repository")
+    require_digest(value["current_pass_id"], "planning continuation current_pass_id")
+    if not isinstance(value["passes"], list) or len(value["passes"]) > 2:
+        raise LifecycleError(
+            "planning continuation supports at most two bounded passes",
+            EXIT_INTEGRITY,
+        )
+    if value["revision"] == 0:
+        if value["passes"] or value["parent_cursor"] is not None:
+            raise LifecycleError(
+                "zero-pass continuation cannot carry response authority",
+                EXIT_INTEGRITY,
+            )
+    else:
+        expected_pass_count = 2 if value["revision"] == 3 else 1
+        if len(value["passes"]) != expected_pass_count or not isinstance(
+            value["parent_cursor"], dict
+        ):
+            raise LifecycleError(
+                "continuation revision has a contradictory pass or cursor shape",
+                EXIT_INTEGRITY,
+            )
+    for index, item in enumerate(value["passes"]):
+        if not isinstance(item, dict):
+            raise LifecycleError("continuation pass must be an object", EXIT_INTEGRITY)
+        require_exact_keys(
+            item,
+            {
+                "pass_id",
+                "consultation_id",
+                "repository",
+                "specification_digest",
+                "source_branch",
+                "source_commit",
+                "prompt_digest",
+                "conversation_ref_digest",
+                "conversation_generation_id",
+                "conversation_binding_digest",
+                "conversation_origin_anchor_digest",
+                "invoking_automation_ref_digest",
+                "response_digest",
+                "terminal_candidate_digest",
+                "response_evidence",
+                "response_evidence_digest",
+                "attempt_ordinal",
+                "invalidation",
+                "status",
+            },
+            "continuation pass",
+        )
+        for field in (
+            "pass_id",
+            "consultation_id",
+            "specification_digest",
+            "prompt_digest",
+            "conversation_ref_digest",
+            "conversation_binding_digest",
+            "conversation_origin_anchor_digest",
+            "invoking_automation_ref_digest",
+            "response_digest",
+            "terminal_candidate_digest",
+            "response_evidence_digest",
+        ):
+            require_digest(item[field], f"continuation pass {field}")
+        require_string(item["repository"], "continuation pass repository")
+        require_string(item["source_branch"], "continuation pass source_branch")
+        require_sha(item["source_commit"], "continuation pass source_commit")
+        conversation_generation_id = require_string(
+            item["conversation_generation_id"],
+            "continuation pass conversation_generation_id",
+        )
+        if item["conversation_origin_anchor_digest"] != (
+            conversation_binding_anchor_digest(
+                item["consultation_id"],
+                item["conversation_ref_digest"],
+                conversation_generation_id,
+                item["conversation_binding_digest"],
+            )
+        ):
+            raise LifecycleError(
+                "continuation pass conversation origin anchor is noncanonical",
+                EXIT_INTEGRITY,
+            )
+        evidence = Path(
+            require_string(item["response_evidence"], "continuation response evidence")
+        )
+        if evidence.is_absolute() or ".." in evidence.parts or evidence.suffix != ".md":
+            raise LifecycleError(
+                "continuation response evidence must be bundle-relative Markdown",
+                EXIT_INTEGRITY,
+            )
+        if item["response_digest"] != item["response_evidence_digest"]:
+            raise LifecycleError(
+                "continuation response evidence digest mismatch", EXIT_INTEGRITY
+            )
+        if type(item["attempt_ordinal"]) is not int or item[
+            "attempt_ordinal"
+        ] not in {1, 2}:
+            raise LifecycleError(
+                "continuation pass attempt_ordinal is invalid", EXIT_INTEGRITY
+            )
+        if item["status"] not in {"consumed", "invalidated"}:
+            raise LifecycleError(
+                "continuation pass status is invalid", EXIT_INTEGRITY
+            )
+        invalidation = item["invalidation"]
+        if item["status"] == "invalidated":
+            if not isinstance(invalidation, dict):
+                raise LifecycleError(
+                    "invalidated continuation pass lacks authority",
+                    EXIT_INTEGRITY,
+                )
+            require_exact_keys(
+                invalidation,
+                {
+                    "reason_code",
+                    "validation_digest",
+                    "successor_consultation_id",
+                },
+                "continuation pass invalidation",
+            )
+            if invalidation["reason_code"] != "semantic_response_unusable":
+                raise LifecycleError(
+                    "continuation invalidation reason is invalid", EXIT_INTEGRITY
+                )
+            require_digest(
+                invalidation["validation_digest"],
+                "continuation invalidation validation_digest",
+            )
+            require_digest(
+                invalidation["successor_consultation_id"],
+                "continuation invalidation successor_consultation_id",
+            )
+        elif invalidation is not None:
+            raise LifecycleError(
+                "consumed continuation pass cannot be invalidated", EXIT_INTEGRITY
+            )
+        if item["repository"] != value["repository"]:
+            raise LifecycleError(
+                "continuation pass repository mismatch", EXIT_INTEGRITY
+            )
+        if item["pass_id"] != continuation_pass_id(
+            item, value["work_kind"], value["work_id"]
+        ):
+            raise LifecycleError(
+                "continuation pass identity is noncanonical", EXIT_INTEGRITY
+            )
+
+    if value["revision"] != 0:
+        cursor = value["parent_cursor"]
+        require_exact_keys(
+            cursor,
+            {
+                "consultation_id",
+                "stage",
+                "candidate_plan_digest",
+                "blind_receipt_digest",
+                "bundle_revision",
+                "replacement_heartbeat",
+                "expected_successor",
+            },
+            "planning continuation parent cursor",
+        )
+        if cursor["candidate_plan_digest"] is not None or cursor[
+            "blind_receipt_digest"
+        ] is not None or cursor["replacement_heartbeat"] is not None or type(
+            cursor["bundle_revision"]
+        ) is not int or cursor[
+            "bundle_revision"
+        ] < 0:
+            raise LifecycleError(
+                "planning continuation parent cursor is invalid", EXIT_INTEGRITY
+            )
+        if value["revision"] in {1, 3}:
+            current = value["passes"][-1]
+            if (
+                current["status"] != "consumed"
+                or current["consultation_id"] != value["current_pass_id"]
+                or cursor["consultation_id"] != value["current_pass_id"]
+                or cursor["stage"] != "resolve_material_findings"
+                or cursor["expected_successor"] is not None
+            ):
+                raise LifecycleError(
+                    "consumed continuation cursor is invalid", EXIT_INTEGRITY
+                )
+            if value["revision"] == 1 and current["attempt_ordinal"] != 1:
+                raise LifecycleError(
+                    "primary continuation attempt is noncanonical", EXIT_INTEGRITY
+                )
+            if value["revision"] == 3 and (
+                value["passes"][0]["status"] != "invalidated"
+                or value["passes"][0]["attempt_ordinal"] != 1
+                or current["attempt_ordinal"] != 2
+                or value["passes"][0]["invalidation"][
+                    "successor_consultation_id"
+                ]
+                != current["consultation_id"]
+            ):
+                raise LifecycleError(
+                    "successor continuation lineage is invalid", EXIT_INTEGRITY
+                )
+        else:
+            predecessor = value["passes"][0]
+            successor = cursor["expected_successor"]
+            if not isinstance(successor, dict):
+                raise LifecycleError(
+                    "reserved successor cursor lacks successor authority",
+                    EXIT_INTEGRITY,
+                )
+            require_exact_keys(
+                successor,
+                {
+                    "attempt_ordinal",
+                    "consultation_id",
+                    "predecessor_pass_id",
+                    "receipt_locator_digest",
+                },
+                "expected successor",
+            )
+            if (
+                predecessor["status"] != "invalidated"
+                or predecessor["attempt_ordinal"] != 1
+                or successor["attempt_ordinal"] != 2
+                or successor["consultation_id"] != value["current_pass_id"]
+                or successor["predecessor_pass_id"] != predecessor["pass_id"]
+                or predecessor["invalidation"]["successor_consultation_id"]
+                != successor["consultation_id"]
+                or cursor["consultation_id"] != successor["consultation_id"]
+                or cursor["stage"] != "await_invalid_response_successor"
+            ):
+                raise LifecycleError(
+                    "reserved successor continuation is invalid", EXIT_INTEGRITY
+                )
+            require_digest(
+                successor["receipt_locator_digest"],
+                "expected successor receipt locator digest",
+            )
+    parse_timestamp(
+        require_string(value["updated_at"], "planning continuation updated_at"),
+        "planning continuation updated_at",
+    )
+    return value
+
+
+def load_continuation(path: Path) -> dict[str, Any]:
+    value = load_json(path, "planning continuation")
+    if not isinstance(value, dict) or value.get("schema") != CONTINUATION_SCHEMA:
+        raise LifecycleError(
+            f"unsupported planning continuation schema; expected "
+            f"{CONTINUATION_SCHEMA}; archive or manually restart stale workflow state",
+            EXIT_INTEGRITY,
+        )
+    return validate_continuation(value)
+
+
+def load_bundle_state(
+    path_value: str, *, expected_bundle: Path | None = None
+) -> dict[str, Any]:
+    path = canonical_bundle_state_path(path_value)
+    if path.name != "state.json":
+        raise LifecycleError("bundle state must be the canonical state.json", EXIT_INTEGRITY)
+    if expected_bundle is not None:
+        expected_bundle = canonical_bundle_path(expected_bundle)
+        if path != expected_bundle / "state.json":
+            raise LifecycleError(
+                "bundle state must be the receipt-bound state.json", EXIT_INTEGRITY
+            )
+    state = load_json(path, "bundle state.json")
+    if not isinstance(state, dict):
+        raise LifecycleError("bundle state must be an object", EXIT_INTEGRITY)
+    runtime = work_state_runtime()
+    try:
+        runtime.validate_schema(deepcopy(state))
+        if expected_bundle is not None:
+            runtime.validate_bundle_identity(expected_bundle, state)
+    except runtime.StateError as error:
+        raise LifecycleError(
+            f"work-bundle state validation failed: {error}", EXIT_INTEGRITY
+        ) from error
+    return state
+
+
+def require_shared_identity(
+    state: dict[str, Any],
+    continuation: dict[str, Any],
+    bundle: dict[str, Any],
+    bundle_root: Path,
+) -> None:
+    identity = state["identity"]
+    canonical_bundle_path(bundle_root)
+    receipt_bundle = canonical_locator(
+        identity["work_bundle"], "identity.work_bundle"
+    )
+    continuation_bundle = canonical_locator(
+        continuation["work_bundle"], "planning continuation work_bundle"
+    )
+    if bundle["work_kind"] != identity["work_kind"]:
+        raise LifecycleError(
+            "bundle work kind does not match task-local receipt", EXIT_INTEGRITY
+        )
+    if bundle["work_id"] != identity["work_id"]:
+        raise LifecycleError(
+            "bundle work ID does not match task-local receipt", EXIT_INTEGRITY
+        )
+    runtime = work_state_runtime()
+    repository = WORK_STATE_SCRIPT.parents[4]
+    try:
+        lifecycle_roots = {
+            (repository / Path(*relative.parts)).absolute()
+            for relative in runtime.bundle_repository_roots(bundle_root)
+        }
+    except runtime.StateError as error:
+        raise LifecycleError(
+            f"work-bundle lifecycle identity validation failed: {error}",
+            EXIT_INTEGRITY,
+        ) from error
+    if bundle_root not in lifecycle_roots or receipt_bundle not in lifecycle_roots:
+        raise LifecycleError(
+            "bundle path does not match task-local receipt", EXIT_INTEGRITY
+        )
+    if (
+        continuation["work_kind"] != identity["work_kind"]
+        or continuation["work_id"] != identity["work_id"]
+        or continuation["repository"] != identity["repository"]
+        or continuation_bundle != receipt_bundle
+    ):
+        raise LifecycleError(
+            "planning reservation does not match task-local receipt",
+            EXIT_INTEGRITY,
+        )
+
+
+def require_shared_authority(
+    state: dict[str, Any],
+    continuation: dict[str, Any],
+    bundle: dict[str, Any],
+    bundle_root: Path,
+    receipt_path: Path,
+) -> None:
+    require_shared_identity(state, continuation, bundle, bundle_root)
+    identity = state["identity"]
+    initial_reservation = (
+        identity["attempt_ordinal"] == 1
+        and continuation["revision"] == 0
+        and continuation["passes"] == []
+        and continuation["parent_cursor"] is None
+    )
+    cursor = continuation["parent_cursor"]
+    successor_reservation = (
+        identity["attempt_ordinal"] == 2
+        and continuation["revision"] == 2
+        and len(continuation["passes"]) == 1
+        and continuation["passes"][0]["status"] == "invalidated"
+        and isinstance(cursor, dict)
+        and isinstance(cursor["expected_successor"], dict)
+        and cursor["expected_successor"]["consultation_id"]
+        == state["consultation_id"]
+        and cursor["expected_successor"]["receipt_locator_digest"]
+        == locator_digest(receipt_path)
+    )
+    if (
+        continuation["current_pass_id"] != state["consultation_id"]
+        or not (initial_reservation or successor_reservation)
+    ):
+        raise LifecycleError(
+            "planning reservation does not match task-local receipt",
+            EXIT_INTEGRITY,
+        )
+
+
+def require_continuation_binding(
+    state: dict[str, Any],
+    continuation: dict[str, Any],
+    label: str,
+    *,
+    require_current: bool = True,
+) -> dict[str, Any]:
+    matches = [
+        item
+        for item in continuation["passes"]
+        if item["consultation_id"] == state["consultation_id"]
+    ]
+    if len(matches) != 1 or (
+        require_current
+        and continuation["current_pass_id"] != state["consultation_id"]
+    ):
+        raise LifecycleError(f"{label} continuation is stale", EXIT_INTEGRITY)
+    current = matches[0]
+    identity = state["identity"]
+    if any(
+        current[field] != identity[field]
+        for field in (
+            "repository",
+            "source_branch",
+            "source_commit",
+            "specification_digest",
+            "prompt_digest",
+            "attempt_ordinal",
+        )
+    ):
+        raise LifecycleError(
+            f"{label} source authority mismatch", EXIT_INTEGRITY
+        )
+    if not require_current:
+        invalidation = state["invalidation"]
+        attempt = state["identity"]["attempt_ordinal"]
+        predecessor_lineage = (
+            attempt == 1
+            and invalidation is not None
+            and current["status"] == "invalidated"
+            and current["invalidation"] == invalidation
+            and continuation["current_pass_id"]
+            == invalidation["successor_consultation_id"]
+        )
+        terminal_successor = (
+            attempt == 2
+            and invalidation is not None
+            and current["status"] == "consumed"
+            and continuation["current_pass_id"] == state["consultation_id"]
+            and invalidation["successor_consultation_id"]
+            == state["consultation_id"]
+        )
+        if not (predecessor_lineage or terminal_successor):
+            raise LifecycleError(f"{label} continuation is stale", EXIT_INTEGRITY)
+    conversation = state["conversation"]
+    if (
+        current["conversation_ref_digest"] != conversation["ref_digest"]
+        or current["conversation_generation_id"] != conversation["generation_id"]
+        or current["conversation_binding_digest"]
+        != conversation["binding_result_digest"]
+        or current["conversation_origin_anchor_digest"]
+        != conversation["origin_anchor_digest"]
+    ):
+        raise LifecycleError(
+            f"{label} conversation binding mismatch", EXIT_INTEGRITY
+        )
+    response = state["response"]
+    if (
+        current["response_digest"] != response["digest"]
+        or current["response_evidence"] != response["artifact"]
+    ):
+        raise LifecycleError(
+            f"{label} response identity mismatch", EXIT_INTEGRITY
+        )
+    return current
+
+
+def require_primary_send_not_closed(bundle: dict[str, Any]) -> None:
+    if UNCERTAIN_SEND_BLOCKER in bundle["blockers"]:
+        raise LifecycleError(
+            "primary send authority is closed by the canonical uncertain-send blocker",
+            EXIT_AUTHORITY,
+        )
+
+
+def require_current_planning_identity(
+    bundle: dict[str, Any], identity: dict[str, Any]
+) -> bool:
+    planning = bundle["planning"]
+    if bundle["phase"] != "plan":
+        raise LifecycleError(
+            "primary planning requires the canonical plan phase", EXIT_AUTHORITY
+        )
+    if (
+        planning["current_specification_digest"]
+        != identity["specification_digest"]
+        or planning["current_source_commit"] != identity["source_commit"]
+    ):
+        raise LifecycleError(
+            "requested planning identity does not match canonical bundle state",
+            EXIT_INTEGRITY,
+        )
+    if not planning["evidence"]:
+        return False
+    runtime = work_state_runtime()
+    if not runtime.fresh_pro_primary_required(planning):
+        raise LifecycleError(
+            "current primary planning evidence already exists", EXIT_AUTHORITY
+        )
+    return True
+
+
+def replaceable_zero_pass(
+    continuation: dict[str, Any],
+    identity: dict[str, Any],
+    bundle_root: Path,
+) -> bool:
+    return (
+        continuation["revision"] == 0
+        and continuation["passes"] == []
+        and continuation["parent_cursor"] is None
+        and continuation["work_kind"] == identity["work_kind"]
+        and continuation["work_id"] == identity["work_id"]
+        and continuation["repository"] == identity["repository"]
+        and Path(continuation["work_bundle"]).expanduser().absolute() == bundle_root
+    )
+
+
+def replaceable_consumed_primary(
+    continuation: dict[str, Any],
+    bundle: dict[str, Any],
+    identity: dict[str, Any],
+    bundle_root: Path,
+) -> bool:
+    planning = bundle["planning"]
+    passes = continuation["passes"]
+    standard_lineage = (
+        continuation["revision"] == 1
+        and len(passes) == 1
+        and passes[0]["attempt_ordinal"] == 1
+        and passes[0]["status"] == "consumed"
+    )
+    recovered_lineage = (
+        continuation["revision"] == 3
+        and len(passes) == 2
+        and [item["attempt_ordinal"] for item in passes] == [1, 2]
+        and [item["status"] for item in passes] == ["invalidated", "consumed"]
+    )
+    if (
+        not (standard_lineage or recovered_lineage)
+        or continuation["work_kind"] != identity["work_kind"]
+        or continuation["work_id"] != identity["work_id"]
+        or continuation["repository"] != identity["repository"]
+        or Path(continuation["work_bundle"]).expanduser().absolute() != bundle_root
+    ):
+        return False
+    prior_pass = passes[-1]
+    if continuation["current_pass_id"] != prior_pass["consultation_id"]:
+        return False
+    prior_evidence = planning["evidence"][-1]
+    repaired = prior_evidence["contract_disposition"] in {
+        "repaired_addendum",
+        "repaired_replacement",
+    }
+    authoritative_artifact = (
+        prior_evidence["repair_artifact"]
+        if repaired
+        else prior_evidence["answer_artifact"]
+    )
+    authoritative_digest = (
+        prior_evidence["repair_digest"]
+        if repaired
+        else prior_evidence["response_digest"]
+    )
+    if (
+        prior_pass["repository"] != prior_evidence["repository"]
+        or prior_pass["source_branch"] != prior_evidence["source_branch"]
+        or prior_pass["specification_digest"]
+        != prior_evidence["generated_for_digest"]
+        or prior_pass["source_commit"] != prior_evidence["generated_source_commit"]
+        or prior_pass["response_digest"] != authoritative_digest
+        or prior_pass["response_evidence_digest"] != authoritative_digest
+    ):
+        return False
+    runtime = work_state_runtime()
+    try:
+        lifecycle_artifact = runtime.safe_path(
+            bundle_root,
+            prior_pass["response_evidence"],
+            "planning continuation response evidence",
+            required=True,
+            markdown=True,
+        )
+        planning_artifact = runtime.safe_path(
+            bundle_root,
+            authoritative_artifact,
+            "disposition-authoritative Pro evidence",
+            required=True,
+            markdown=True,
+        )
+    except runtime.StateError:
+        return False
+    lifecycle_bytes = lifecycle_artifact.read_bytes()
+    planning_bytes = planning_artifact.read_bytes()
+    return (
+        hashlib.sha256(lifecycle_bytes).hexdigest() == authoritative_digest
+        and hashlib.sha256(planning_bytes).hexdigest() == authoritative_digest
+        and lifecycle_bytes == planning_bytes
+    )
+
+
+def current_reserved_successor(
+    receipt_path: Path,
+    continuation: dict[str, Any],
+    bundle: dict[str, Any],
+    bundle_root: Path,
+) -> tuple[dict[str, Any], Path, dict[str, Any]] | None:
+    if continuation["revision"] != 2 or not receipt_path.exists():
+        return None
+    successor = load_receipt(receipt_path)
+    try:
+        require_shared_authority(
+            successor,
+            continuation,
+            bundle,
+            bundle_root,
+            receipt_path,
+        )
+    except LifecycleError:
+        return None
+    if successor["identity"]["attempt_ordinal"] != 2:
+        return None
+
+    predecessor_id = continuation["passes"][0]["consultation_id"]
+    predecessor_candidates: list[Path] = []
+    for sibling in receipt_path.parent.iterdir():
+        if sibling.is_symlink() or not sibling.is_file() or sibling.suffix != ".json":
+            continue
+        try:
+            sibling_value = json.loads(sibling.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if (
+            isinstance(sibling_value, dict)
+            and sibling_value.get("schema") == SCHEMA
+            and sibling_value.get("consultation_id") == predecessor_id
+        ):
+            predecessor_candidates.append(sibling)
+    if len(predecessor_candidates) != 1:
+        raise LifecycleError(
+            "reserved successor predecessor receipt is missing or ambiguous",
+            EXIT_INTEGRITY,
+        )
+    predecessor_path = safe_regular_path(
+        predecessor_candidates[0],
+        "invalidated predecessor receipt",
+        required=True,
+    )
+    predecessor = load_receipt(predecessor_path)
+    require_continuation_binding(
+        predecessor,
+        continuation,
+        "reserved successor predecessor",
+        require_current=False,
+    )
+    return successor, predecessor_path, predecessor
+
+
+def is_reconciled_unsubmitted_successor(state: dict[str, Any]) -> bool:
+    primary = state["send_intents"]["primary"]
+    return (
+        state["identity"]["attempt_ordinal"] == 2
+        and state["lifecycle_state"] == "primary_send_intent"
+        and primary_send_is_reconciled(state)
+        and primary["submission_ref_digest"] is None
+        and not primary["committed"]
+        and state["conversation"]["url"] is None
+        and state["wait"] == empty_wait()
+        and state["response"] == {"artifact": None, "digest": None}
+        and state["invalidation"] is None
+    )
+
+
+def has_explicit_uncertain_send_clearance(
+    continuation: dict[str, Any], bundle: dict[str, Any]
+) -> bool:
+    cursor = continuation["parent_cursor"]
+    return bundle["revision"] == cursor["bundle_revision"] + 2
+
+
+def command_init(args: argparse.Namespace) -> dict[str, Any]:
+    receipt_path = safe_regular_path(
+        args.receipt, "task-local receipt", required=False
+    )
+    work_bundle = canonical_bundle_path(args.work_bundle)
+    if repository_root_for(receipt_path) is not None:
+        raise LifecycleError(
+            "task-local receipt must live outside the repository checkout",
+            EXIT_INTEGRITY,
+        )
+    bundle_state_path = work_bundle / "state.json"
+    prompt_path = safe_regular_path(args.prompt_file, "planning prompt", required=True)
+    identity = {
+        "work_kind": args.work_kind,
+        "work_id": args.work_id,
+        "work_bundle": str(work_bundle),
+        "repository": args.repository,
+        "source_branch": args.source_branch,
+        "source_commit": args.source_commit,
+        "specification_digest": args.specification_digest,
+        "prompt_digest": digest_file(prompt_path),
+        "attempt_ordinal": 1,
+    }
+    state = base_receipt(identity)
+    validate_receipt(state)
+    continuation_path = continuation_path_for(work_bundle)
+    idempotent = False
+    replacement: tuple[Path, dict[str, Any]] | None = None
+    with locked_directories([receipt_path, continuation_path, bundle_state_path]):
+        bundle_state = load_bundle_state(
+            str(bundle_state_path), expected_bundle=work_bundle
+        )
+        if (
+            bundle_state["work_kind"] != args.work_kind
+            or bundle_state["work_id"] != args.work_id
+        ):
+            raise LifecycleError(
+                "bundle state identity does not match requested work", EXIT_INTEGRITY
+            )
+        require_primary_send_not_closed(bundle_state)
+        successor_required = require_current_planning_identity(bundle_state, identity)
+        continuation = (
+            load_continuation(continuation_path)
+            if continuation_path.exists()
+            else None
+        )
+        reserved_successor = (
+            current_reserved_successor(
+                receipt_path,
+                continuation,
+                bundle_state,
+                work_bundle,
+            )
+            if continuation is not None
+            else None
+        )
+        if reserved_successor is not None:
+            existing, predecessor_path, predecessor = reserved_successor
+            identity["attempt_ordinal"] = 2
+            requested_successor = base_receipt(identity)
+            validate_receipt(requested_successor)
+            expected = deepcopy(requested_successor)
+            actual = deepcopy(existing)
+            for key in ("created_at", "updated_at"):
+                expected.pop(key)
+                actual.pop(key)
+            if actual == expected:
+                state = existing
+                idempotent = True
+            elif is_reconciled_unsubmitted_successor(existing):
+                if not has_explicit_uncertain_send_clearance(
+                    continuation, bundle_state
+                ):
+                    raise LifecycleError(
+                        "reconciled successor requires explicit uncertain-send "
+                        "blocker clearance",
+                        EXIT_AUTHORITY,
+                    )
+                state = requested_successor
+                replacement = predecessor_path, predecessor
+            else:
+                raise LifecycleError("task-local receipt already exists", EXIT_CAS)
+        elif receipt_path.exists():
+            existing = load_receipt(receipt_path)
+            expected = deepcopy(state)
+            actual = deepcopy(existing)
+            for key in ("created_at", "updated_at"):
+                expected.pop(key)
+                actual.pop(key)
+            if actual != expected:
+                raise LifecycleError("task-local receipt already exists", EXIT_CAS)
+            state = existing
+            idempotent = True
+        else:
+            for sibling in receipt_path.parent.iterdir():
+                if (
+                    sibling == receipt_path
+                    or sibling.is_symlink()
+                    or not sibling.is_file()
+                    or sibling.suffix != ".json"
+                ):
+                    continue
+                try:
+                    sibling_value = json.loads(sibling.read_text(encoding="utf-8"))
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if (
+                    isinstance(sibling_value, dict)
+                    and sibling_value.get("schema") == SCHEMA
+                    and sibling_value.get("consultation_id")
+                    == state["consultation_id"]
+                ):
+                    raise LifecycleError(
+                        "consultation already uses a different receipt locator",
+                        EXIT_CAS,
+                    )
+        if successor_required:
+            runtime = work_state_runtime()
+            try:
+                runtime.validate_planning_evidence(work_bundle, bundle_state)
+            except runtime.StateError as error:
+                raise LifecycleError(
+                    f"successor planning evidence validation failed: {error}",
+                    EXIT_INTEGRITY,
+                ) from error
+        if continuation is not None:
+            if replacement is not None:
+                predecessor_path, predecessor = replacement
+                invalidation = deepcopy(predecessor["invalidation"])
+                invalidation["successor_consultation_id"] = state[
+                    "consultation_id"
+                ]
+                predecessor["invalidation"] = invalidation
+                bump(predecessor)
+                validate_receipt(predecessor)
+
+                continuation["passes"][0]["invalidation"] = deepcopy(invalidation)
+                continuation["current_pass_id"] = state["consultation_id"]
+                cursor = continuation["parent_cursor"]
+                cursor["consultation_id"] = state["consultation_id"]
+                cursor["bundle_revision"] = bundle_state["revision"]
+                cursor["expected_successor"]["consultation_id"] = state[
+                    "consultation_id"
+                ]
+                cursor["expected_successor"]["receipt_locator_digest"] = (
+                    locator_digest(receipt_path)
+                )
+                continuation["updated_at"] = utc_now()
+                validate_continuation(continuation)
+                atomic_write_json(predecessor_path, predecessor)
+                atomic_write_json(continuation_path, continuation)
+            else:
+                try:
+                    require_shared_authority(
+                        state,
+                        continuation,
+                        bundle_state,
+                        work_bundle,
+                        receipt_path,
+                    )
+                except LifecycleError:
+                    replaceable = (
+                        replaceable_consumed_primary(
+                            continuation, bundle_state, identity, work_bundle
+                        )
+                        if successor_required
+                        else replaceable_zero_pass(
+                            continuation, identity, work_bundle
+                        )
+                    )
+                    if not replaceable:
+                        raise
+                    continuation = {
+                        "schema": CONTINUATION_SCHEMA,
+                        "revision": 0,
+                        "work_kind": identity["work_kind"],
+                        "work_id": identity["work_id"],
+                        "work_bundle": identity["work_bundle"],
+                        "repository": identity["repository"],
+                        "current_pass_id": state["consultation_id"],
+                        "passes": [],
+                        "parent_cursor": None,
+                        "updated_at": utc_now(),
+                    }
+                    validate_continuation(continuation)
+                    atomic_write_json(continuation_path, continuation)
+        else:
+            if successor_required:
+                raise LifecycleError(
+                    "successor primary requires prior planning continuation authority",
+                    EXIT_INTEGRITY,
+                )
+            continuation = {
+                "schema": CONTINUATION_SCHEMA,
+                "revision": 0,
+                "work_kind": identity["work_kind"],
+                "work_id": identity["work_id"],
+                "work_bundle": identity["work_bundle"],
+                "repository": identity["repository"],
+                "current_pass_id": state["consultation_id"],
+                "passes": [],
+                "parent_cursor": None,
+                "updated_at": utc_now(),
+            }
+            validate_continuation(continuation)
+            atomic_write_json(continuation_path, continuation)
+        if not idempotent:
+            atomic_write_json(receipt_path, state)
+    return state_result(
+        state,
+        receipt_locator=str(receipt_path),
+        receipt_locator_digest=locator_digest(receipt_path),
+        idempotent=idempotent,
+    )
+
+
+def command_claim_send(args: argparse.Namespace) -> dict[str, Any]:
+    path = safe_regular_path(args.receipt, "task-local receipt", required=True)
+    snapshot = load_receipt(path)
+    bundle_root = Path(snapshot["identity"]["work_bundle"]).expanduser().absolute()
+    continuation_path = continuation_path_for(bundle_root)
+    bundle_state_path = bundle_root / "state.json"
+    with locked_directories([path, continuation_path, bundle_state_path]):
+        state = load_receipt(path)
+        require_revision(state, args.expected_revision)
+        if state["lifecycle_state"] != "prepared":
+            raise LifecycleError(
+                "primary send may be claimed only from prepared", EXIT_AUTHORITY
+            )
+        continuation = load_continuation(continuation_path)
+        bundle = load_bundle_state(str(bundle_state_path), expected_bundle=bundle_root)
+        require_shared_authority(state, continuation, bundle, bundle_root, path)
+        require_primary_send_not_closed(bundle)
+        prompt_path = safe_regular_path(
+            args.prompt_file, "planning prompt", required=True
+        )
+        verified_prompt_digest = digest_file(prompt_path)
+        if verified_prompt_digest != state["identity"]["prompt_digest"]:
+            raise LifecycleError(
+                "planning prompt digest does not match initialized prompt bytes",
+                EXIT_INTEGRITY,
+            )
+        attempted_at = utc_now()
+        submitted_at = parse_timestamp(attempted_at, "claim time")
+        primary = state["send_intents"]["primary"]
+        primary["intent_digest"] = verified_prompt_digest
+        primary["attempted_at"] = attempted_at
+        state["submitted_at"] = attempted_at
+        state["deadline"] = (
+            submitted_at + timedelta(seconds=5400)
+        ).isoformat().replace("+00:00", "Z")
+        state["lifecycle_state"] = "primary_send_intent"
+        bump(state)
+        validate_receipt(state)
+        atomic_write_json(path, state)
+    return state_result(
+        state,
+        send_kind="primary",
+        intent_digest=primary["intent_digest"],
+        browser_send_allowed=True,
+    )
+
+
+def publish_captured_response(
+    *,
+    state: dict[str, Any],
+    continuation: dict[str, Any],
+    bundle: dict[str, Any],
+    receipt_path: Path,
+    continuation_path: Path,
+    immutable_evidence: Path,
+    bundle_root: Path,
+    response_bytes: bytes,
+    response_digest: str,
+    recovered_completion_result_digest: str | None = None,
+    recovered_observed_at: str | None = None,
+) -> str:
+    conversation = state["conversation"]
+    if immutable_evidence.exists():
+        if immutable_evidence.read_bytes() != response_bytes:
+            raise LifecycleError(
+                "immutable response evidence conflicts with captured response",
+                EXIT_INTEGRITY,
+            )
+    else:
+        immutable_evidence.parent.mkdir(mode=0o700, exist_ok=True)
+        atomic_write_bytes(immutable_evidence, response_bytes)
+
+    if recovered_completion_result_digest is not None:
+        if recovered_observed_at is None:
+            raise LifecycleError(
+                "recovered response lacks its capture observation time",
+                EXIT_INTEGRITY,
+            )
+        wait = state["wait"]
+        wait["status"] = "generation_completed"
+        wait["producer_kind"] = "manual_resume"
+        wait["observed_at"] = recovered_observed_at
+        wait["consumed_result_digests"].append(
+            recovered_completion_result_digest
+        )
+
+    evidence_relative = immutable_evidence.relative_to(bundle_root).as_posix()
+    state["response"] = {
+        "artifact": evidence_relative,
+        "digest": response_digest,
+    }
+    state["lifecycle_state"] = "response_captured"
+    bump(state)
+    validate_receipt(state)
+    atomic_write_json(receipt_path, state)
+
+    pass_record = {
+        "consultation_id": state["consultation_id"],
+        "repository": state["identity"]["repository"],
+        "specification_digest": state["identity"]["specification_digest"],
+        "source_branch": state["identity"]["source_branch"],
+        "source_commit": state["identity"]["source_commit"],
+        "prompt_digest": state["identity"]["prompt_digest"],
+        "conversation_ref_digest": conversation["ref_digest"],
+        "conversation_generation_id": conversation["generation_id"],
+        "conversation_binding_digest": conversation["binding_result_digest"],
+        "conversation_origin_anchor_digest": conversation["origin_anchor_digest"],
+        "invoking_automation_ref_digest": digest_text(
+            "synchronous-response-capture"
+        ),
+        "response_digest": response_digest,
+        "terminal_candidate_digest": response_digest,
+        "response_evidence": evidence_relative,
+        "response_evidence_digest": response_digest,
+        "attempt_ordinal": state["identity"]["attempt_ordinal"],
+        "invalidation": None,
+        "status": "consumed",
+    }
+    pass_record["pass_id"] = continuation_pass_id(
+        pass_record, state["identity"]["work_kind"], state["identity"]["work_id"]
+    )
+    if state["identity"]["attempt_ordinal"] == 1:
+        continuation["revision"] = 1
+        continuation["passes"] = [pass_record]
+    else:
+        continuation["revision"] = 3
+        continuation["passes"].append(pass_record)
+    continuation["parent_cursor"] = {
+        "consultation_id": state["consultation_id"],
+        "stage": "resolve_material_findings",
+        "candidate_plan_digest": None,
+        "blind_receipt_digest": None,
+        "bundle_revision": bundle["revision"],
+        "replacement_heartbeat": None,
+        "expected_successor": None,
+    }
+    continuation["updated_at"] = utc_now()
+    validate_continuation(continuation)
+    atomic_write_json(continuation_path, continuation)
+    return evidence_relative
+
+
+def command_capture_response(args: argparse.Namespace) -> dict[str, Any]:
+    receipt_path = safe_regular_path(
+        args.receipt, "task-local receipt", required=True
+    )
+    response_path = safe_regular_path(
+        args.response_file, "completed Pro response", required=True
+    )
+    response_bytes = response_path.read_bytes()
+    try:
+        response_text = response_bytes.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise LifecycleError(
+            "completed Pro response must be UTF-8 Markdown", EXIT_INTEGRITY
+        ) from error
+    if not response_text.strip():
+        raise LifecycleError(
+            "completed Pro response must not be empty", EXIT_INTEGRITY
+        )
+    capture_result_path = safe_regular_path(
+        args.capture_result,
+        "same-task response capture observation",
+        required=True,
+    )
+    bundle_state_path = canonical_bundle_state_path(args.bundle_state)
+    bundle_root = canonical_bundle_path(bundle_state_path.parent)
+    continuation_path = safe_regular_path(
+        args.planning_continuation,
+        "planning continuation",
+        required=True,
+    )
+    if continuation_path != continuation_path_for(bundle_root):
+        raise LifecycleError(
+            "planning continuation must be discovery/planning-continuation.json",
+            EXIT_INTEGRITY,
+        )
+    evidence_directory = bundle_root / "discovery" / "pro-lifecycle-evidence"
+    if evidence_directory.exists() and (
+        evidence_directory.is_symlink() or not evidence_directory.is_dir()
+    ):
+        raise LifecycleError(
+            "Pro lifecycle evidence directory is invalid", EXIT_INTEGRITY
+        )
+    response_digest = hashlib.sha256(response_bytes).hexdigest()
+    snapshot = load_receipt(receipt_path)
+    if Path(snapshot["identity"]["work_bundle"]).expanduser().absolute() != bundle_root:
+        raise LifecycleError(
+            "bundle path does not match task-local receipt", EXIT_INTEGRITY
+        )
+    immutable_evidence = (
+        evidence_directory / f"{snapshot['consultation_id']}.md"
+    )
+    with locked_directories(
+        [
+            receipt_path,
+            response_path,
+            capture_result_path,
+            bundle_state_path,
+            continuation_path,
+            immutable_evidence,
+        ]
+    ):
+        capture_result, _ = load_capture_result(capture_result_path)
+        conversation_url = capture_result["conversation_url"]
+        state = load_receipt(receipt_path)
+        require_revision(state, args.expected_revision)
+        if state["lifecycle_state"] != "response_ready":
+            raise LifecycleError(
+                "response capture requires a current completed wait result",
+                EXIT_AUTHORITY,
+            )
+        primary = state["send_intents"]["primary"]
+        require_unreconciled_primary_send(state)
+        require_unexpired_primary_send(state)
+        bundle = load_bundle_state(
+            str(bundle_state_path), expected_bundle=bundle_root
+        )
+        continuation = load_continuation(continuation_path)
+        require_shared_authority(
+            state, continuation, bundle, bundle_root, receipt_path
+        )
+        conversation = state["conversation"]
+        identity = state["identity"]
+        if (
+            capture_result["work_id"] != identity["work_id"]
+            or capture_result["consultation_id"] != state["consultation_id"]
+            or capture_result["attempt_ordinal"] != identity["attempt_ordinal"]
+            or capture_result["task_id"] != conversation["binding_task_id"]
+        ):
+            raise LifecycleError(
+                "capture result belongs to a different planning attempt",
+                EXIT_INTEGRITY,
+            )
+        if conversation["url"] != conversation_url:
+            raise LifecycleError(
+                "response capture rejects conversation substitution",
+                EXIT_INTEGRITY,
+            )
+        if (
+            capture_result["conversation_binding_digest"]
+            != conversation["binding_result_digest"]
+            or capture_result["conversation_generation_id"]
+            != conversation["generation_id"]
+            or capture_result["response_digest"] != response_digest
+        ):
+            raise LifecycleError(
+                "response capture rejects conversation generation substitution",
+                EXIT_INTEGRITY,
+            )
+        if parse_timestamp(
+            capture_result["observed_at"], "capture result observed_at"
+        ) <= parse_timestamp(
+            state["wait"]["observed_at"], "completed wait observed_at"
+        ):
+            raise LifecycleError(
+                "response capture observation must follow completed generation",
+                EXIT_CAS,
+            )
+        if (
+            state["wait"]["conversation_binding_digest"]
+            != conversation["binding_result_digest"]
+            or state["wait"]["conversation_generation_id"]
+            != conversation["generation_id"]
+        ):
+            raise LifecycleError(
+                "response capture requires completion from the bound conversation generation",
+                EXIT_INTEGRITY,
+            )
+        evidence_relative = publish_captured_response(
+            state=state,
+            continuation=continuation,
+            bundle=bundle,
+            receipt_path=receipt_path,
+            continuation_path=continuation_path,
+            immutable_evidence=immutable_evidence,
+            bundle_root=bundle_root,
+            response_bytes=response_bytes,
+            response_digest=response_digest,
+        )
+    return state_result(
+        state,
+        response_digest=response_digest,
+        response_artifact=evidence_relative,
+        conversation_url=conversation_url,
+        parent_action="record_pro_primary",
+        browser_allowed=False,
+        prompt_send_allowed=False,
+    )
+
+
+def command_recover_captured_response(args: argparse.Namespace) -> dict[str, Any]:
+    receipt_path = safe_regular_path(
+        args.receipt, "task-local receipt", required=True
+    )
+    response_path = safe_regular_path(
+        args.response_file, "recovered Pro response", required=True
+    )
+    response_bytes = response_path.read_bytes()
+    try:
+        response_text = response_bytes.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise LifecycleError(
+            "recovered Pro response must be UTF-8 Markdown", EXIT_INTEGRITY
+        ) from error
+    if not response_text.strip():
+        raise LifecycleError(
+            "recovered Pro response must not be empty", EXIT_INTEGRITY
+        )
+    capture_result_path = safe_regular_path(
+        args.capture_result,
+        "same-task recovered response capture observation",
+        required=True,
+    )
+    bundle_state_path = canonical_bundle_state_path(args.bundle_state)
+    bundle_root = canonical_bundle_path(bundle_state_path.parent)
+    continuation_path = safe_regular_path(
+        args.planning_continuation,
+        "planning continuation",
+        required=True,
+    )
+    if continuation_path != continuation_path_for(bundle_root):
+        raise LifecycleError(
+            "planning continuation must be discovery/planning-continuation.json",
+            EXIT_INTEGRITY,
+        )
+    evidence_directory = bundle_root / "discovery" / "pro-lifecycle-evidence"
+    if evidence_directory.exists() and (
+        evidence_directory.is_symlink() or not evidence_directory.is_dir()
+    ):
+        raise LifecycleError(
+            "Pro lifecycle evidence directory is invalid", EXIT_INTEGRITY
+        )
+    response_digest = hashlib.sha256(response_bytes).hexdigest()
+    snapshot = load_receipt(receipt_path)
+    if Path(snapshot["identity"]["work_bundle"]).expanduser().absolute() != bundle_root:
+        raise LifecycleError(
+            "bundle path does not match task-local receipt", EXIT_INTEGRITY
+        )
+    immutable_evidence = (
+        evidence_directory / f"{snapshot['consultation_id']}.md"
+    )
+    with locked_directories(
+        [
+            receipt_path,
+            response_path,
+            capture_result_path,
+            bundle_state_path,
+            continuation_path,
+            immutable_evidence,
+        ]
+    ):
+        capture_result, _ = load_capture_result(
+            capture_result_path, require_current_freshness=False
+        )
+        state = load_receipt(receipt_path)
+        require_revision(state, args.expected_revision)
+        if state["lifecycle_state"] not in {"wait_admitted", "response_ready"}:
+            raise LifecycleError(
+                "recovered response requires a reconciled admitted or completed wait",
+                EXIT_AUTHORITY,
+            )
+        primary = state["send_intents"]["primary"]
+        if not primary_send_is_reconciled(state):
+            raise LifecycleError(
+                "recovered response requires a reconciled send intent",
+                EXIT_AUTHORITY,
+            )
+        if not primary["committed"] or state["response"]["artifact"] is not None:
+            raise LifecycleError(
+                "recovered response requires one bound uncaptured submission",
+                EXIT_AUTHORITY,
+            )
+        wait = state["wait"]
+        if wait["status"] not in {"heartbeat_registered", "generation_completed"}:
+            raise LifecycleError(
+                "recovered response requires an admitted or completed heartbeat wait",
+                EXIT_AUTHORITY,
+            )
+        bundle = load_bundle_state(
+            str(bundle_state_path), expected_bundle=bundle_root
+        )
+        if UNCERTAIN_SEND_BLOCKER not in bundle["blockers"]:
+            raise LifecycleError(
+                "recovered response requires the canonical uncertain-send blocker",
+                EXIT_AUTHORITY,
+            )
+        continuation = load_continuation(continuation_path)
+        require_shared_authority(
+            state, continuation, bundle, bundle_root, receipt_path
+        )
+        identity = state["identity"]
+        if (
+            identity["attempt_ordinal"] != 1
+            or continuation["revision"] != 0
+            or continuation["passes"] != []
+            or continuation["parent_cursor"] is not None
+        ):
+            raise LifecycleError(
+                "recovered response requires the initial zero-pass reservation",
+                EXIT_AUTHORITY,
+            )
+        require_current_planning_identity(bundle, identity)
+        conversation = state["conversation"]
+        if (
+            capture_result["work_id"] != identity["work_id"]
+            or capture_result["consultation_id"] != state["consultation_id"]
+            or capture_result["attempt_ordinal"] != identity["attempt_ordinal"]
+            or capture_result["task_id"] != conversation["binding_task_id"]
+        ):
+            raise LifecycleError(
+                "recovered capture belongs to a different planning attempt",
+                EXIT_INTEGRITY,
+            )
+        if conversation["url"] != capture_result["conversation_url"]:
+            raise LifecycleError(
+                "recovered capture rejects conversation substitution",
+                EXIT_INTEGRITY,
+            )
+        if (
+            capture_result["conversation_binding_digest"]
+            != conversation["binding_result_digest"]
+            or capture_result["conversation_generation_id"]
+            != conversation["generation_id"]
+            or capture_result["response_digest"] != response_digest
+        ):
+            raise LifecycleError(
+                "recovered capture rejects conversation generation substitution",
+                EXIT_INTEGRITY,
+            )
+        capture_observed_at = parse_timestamp(
+            capture_result["observed_at"], "recovered capture observed_at"
+        )
+        authority_times = [
+            parse_timestamp(state["updated_at"], "receipt updated_at"),
+            parse_timestamp(bundle["updated_at"], "bundle updated_at"),
+            parse_timestamp(wait["observed_at"], "admitted wait observed_at"),
+        ]
+        if capture_observed_at <= max(authority_times):
+            raise LifecycleError(
+                "recovered capture must follow reconciliation and blocker authority",
+                EXIT_CAS,
+            )
+        if capture_observed_at > parse_timestamp(
+            state["deadline"], "primary send deadline"
+        ):
+            raise LifecycleError(
+                "recovered capture is outside the primary send deadline",
+                EXIT_AUTHORITY,
+            )
+        if capture_observed_at > parse_timestamp(utc_now(), "current time") + timedelta(
+            seconds=300
+        ):
+            raise LifecycleError(
+                "recovered capture is implausibly future-dated", EXIT_AUTHORITY
+            )
+        recovered_completion_result_digest = None
+        if wait["status"] == "heartbeat_registered":
+            recovered_completion_result = {
+                "schema": WAIT_RESULT_SCHEMA,
+                "work_id": identity["work_id"],
+                "consultation_id": state["consultation_id"],
+                "attempt_ordinal": identity["attempt_ordinal"],
+                "wait_generation": wait["generation"],
+                "task_id": capture_result["task_id"],
+                "producer_kind": "manual_resume",
+                "conversation_binding_digest": capture_result[
+                    "conversation_binding_digest"
+                ],
+                "conversation_generation_id": capture_result[
+                    "conversation_generation_id"
+                ],
+                "observed_at": capture_result["observed_at"],
+                "result": "generation_completed",
+            }
+            recovered_completion_result_digest = digest_value(
+                recovered_completion_result
+            )
+            if recovered_completion_result_digest in wait[
+                "consumed_result_digests"
+            ]:
+                raise LifecycleError(
+                    "recovered completion result is already consumed", EXIT_CAS
+                )
+        if immutable_evidence.exists() and immutable_evidence.read_bytes() != response_bytes:
+            raise LifecycleError(
+                "immutable response evidence conflicts with recovered response",
+                EXIT_INTEGRITY,
+            )
+
+        runtime = work_state_runtime()
+        updated_bundle = deepcopy(bundle)
+        try:
+            runtime.clear_blocker(updated_bundle, UNCERTAIN_SEND_BLOCKER)
+            updated_bundle["revision"] = bundle["revision"] + 1
+            updated_bundle["updated_at"] = utc_now()
+            runtime.validate_state(bundle_root, deepcopy(updated_bundle))
+        except runtime.StateError as error:
+            raise LifecycleError(
+                f"cannot clear recovered Pro blocker: {error}", EXIT_INTEGRITY
+            ) from error
+
+        evidence_relative = publish_captured_response(
+            state=state,
+            continuation=continuation,
+            bundle=updated_bundle,
+            receipt_path=receipt_path,
+            continuation_path=continuation_path,
+            immutable_evidence=immutable_evidence,
+            bundle_root=bundle_root,
+            response_bytes=response_bytes,
+            response_digest=response_digest,
+            recovered_completion_result_digest=(
+                recovered_completion_result_digest
+            ),
+            recovered_observed_at=capture_result["observed_at"],
+        )
+        try:
+            projection_warning = runtime.commit_projected_state(
+                bundle_root, updated_bundle
+            )
+        except runtime.StateError as error:
+            raise LifecycleError(
+                f"cannot clear recovered Pro blocker: {error}", EXIT_INTEGRITY
+            ) from error
+    return state_result(
+        state,
+        response_digest=response_digest,
+        response_artifact=evidence_relative,
+        conversation_url=capture_result["conversation_url"],
+        parent_action="record_pro_primary",
+        browser_allowed=False,
+        prompt_send_allowed=False,
+        blocker_cleared=UNCERTAIN_SEND_BLOCKER,
+        bundle_revision=updated_bundle["revision"],
+        projection_warning=projection_warning,
+    )
+
+
+def command_reserve_invalid_response_successor(
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    receipt_path = safe_regular_path(
+        args.receipt, "task-local receipt", required=True
+    )
+    prompt_path = safe_regular_path(args.prompt_file, "planning prompt", required=True)
+    bundle_state_path = canonical_bundle_state_path(args.bundle_state)
+    bundle_root = canonical_bundle_path(bundle_state_path.parent)
+    continuation_path = safe_regular_path(
+        args.planning_continuation,
+        "planning continuation",
+        required=True,
+    )
+    if continuation_path != continuation_path_for(bundle_root):
+        raise LifecycleError(
+            "planning continuation must be discovery/planning-continuation.json",
+            EXIT_INTEGRITY,
+        )
+    manifest_relative = Path(args.manifest_artifact)
+    if (
+        manifest_relative.is_absolute()
+        or ".." in manifest_relative.parts
+        or manifest_relative.suffix != ".json"
+    ):
+        raise LifecycleError(
+            "context manifest must be a bundle-relative JSON path", EXIT_INTEGRITY
+        )
+    manifest_path = safe_regular_path(
+        bundle_root / manifest_relative,
+        "Pro context manifest",
+        required=True,
+    )
+    manifest_artifact_digest = require_digest(
+        args.manifest_artifact_digest,
+        "Pro context manifest artifact digest",
+    )
+    manifest_digest = require_digest(args.manifest_digest, "Pro manifest digest")
+    if digest_file(manifest_path) != manifest_artifact_digest:
+        raise LifecycleError(
+            "Pro context manifest artifact digest mismatch", EXIT_INTEGRITY
+        )
+    conversation_url = normalized_conversation_url(args.conversation_url)
+    snapshot = load_receipt(receipt_path)
+    if Path(snapshot["identity"]["work_bundle"]).expanduser().absolute() != bundle_root:
+        raise LifecycleError(
+            "bundle path does not match task-local receipt", EXIT_INTEGRITY
+        )
+    if (
+        snapshot["lifecycle_state"]
+        not in {"response_captured", "response_invalidated"}
+        or snapshot["response"]["artifact"] is None
+    ):
+        raise LifecycleError(
+            "invalid-response recovery requires a captured response",
+            EXIT_AUTHORITY,
+        )
+    successor_identity = deepcopy(snapshot["identity"])
+    successor_identity["attempt_ordinal"] = 2
+    successor_preview = base_receipt(successor_identity)
+    successor_path = safe_regular_path(
+        receipt_path.parent / f"{successor_preview['consultation_id']}.json",
+        "derived successor receipt",
+        required=False,
+    )
+    evidence_path = safe_regular_path(
+        bundle_root / snapshot["response"]["artifact"],
+        "captured Pro response evidence",
+        required=True,
+    )
+    with locked_directories(
+        [
+            receipt_path,
+            successor_path,
+            prompt_path,
+            evidence_path,
+            manifest_path,
+            bundle_state_path,
+            continuation_path,
+        ]
+    ):
+        state = load_receipt(receipt_path)
+        require_revision(state, args.expected_revision)
+        if state["response"]["artifact"] != snapshot["response"]["artifact"]:
+            raise LifecycleError(
+                "captured Pro response artifact changed during recovery",
+                EXIT_INTEGRITY,
+            )
+        if digest_file(evidence_path) != state["response"]["digest"]:
+            raise LifecycleError(
+                "captured Pro response artifact digest mismatch",
+                EXIT_INTEGRITY,
+            )
+        if state["lifecycle_state"] not in {
+            "response_captured",
+            "response_invalidated",
+        }:
+            raise LifecycleError(
+                "invalid-response recovery requires a captured response",
+                EXIT_AUTHORITY,
+            )
+        if state["wait"]["status"] != "generation_completed":
+            raise LifecycleError(
+                "invalid-response recovery lacks completed wait authority",
+                EXIT_AUTHORITY,
+            )
+        if state["conversation"]["url"] != conversation_url:
+            raise LifecycleError(
+                "invalid-response recovery rejects conversation substitution",
+                EXIT_INTEGRITY,
+            )
+        if digest_file(prompt_path) != state["identity"]["prompt_digest"]:
+            raise LifecycleError(
+                "invalid-response recovery prompt identity changed", EXIT_INTEGRITY
+            )
+        bundle = load_bundle_state(
+            str(bundle_state_path), expected_bundle=bundle_root
+        )
+        if (
+            bundle["phase"] != "plan"
+            or bundle["planning"]["current_specification_digest"]
+            != state["identity"]["specification_digest"]
+            or bundle["planning"]["current_source_commit"]
+            != state["identity"]["source_commit"]
+        ):
+            raise LifecycleError(
+                "invalid-response recovery planning identity changed",
+                EXIT_INTEGRITY,
+            )
+        if any(
+            evidence["response_digest"] == state["response"]["digest"]
+            for evidence in bundle["planning"]["evidence"]
+        ):
+            raise LifecycleError(
+                "admitted planning evidence cannot be invalidated", EXIT_AUTHORITY
+            )
+        continuation = load_continuation(continuation_path)
+        current = require_continuation_binding(
+            state,
+            continuation,
+            "invalid-response recovery",
+            require_current=state["lifecycle_state"] == "response_captured",
+        )
+        if (
+            current["response_digest"] != state["response"]["digest"]
+            or current["response_evidence"] != state["response"]["artifact"]
+        ):
+            raise LifecycleError(
+                "invalid-response recovery continuation is stale", EXIT_INTEGRITY
+            )
+        if (
+            state["identity"]["attempt_ordinal"] == 2
+            and state["lifecycle_state"] == "response_invalidated"
+        ):
+            invalidation = state["invalidation"]
+            if (
+                invalidation["successor_consultation_id"]
+                != state["consultation_id"]
+            ):
+                raise LifecycleError(
+                    "terminal response invalidation has contradictory authority",
+                    EXIT_INTEGRITY,
+                )
+            return state_result(
+                state,
+                decision="block_invalid_response_exhausted",
+                blocker_code=INVALID_RESPONSE_EXHAUSTED_BLOCKER,
+                parent_action="record_blocker",
+                browser_allowed=False,
+                prompt_send_allowed=False,
+                successor_reserved=False,
+            )
+        evidence = {
+            "response_digest": state["response"]["digest"],
+            "answer_artifact": state["response"]["artifact"],
+            "generated_for_digest": state["identity"]["specification_digest"],
+            "repository": state["identity"]["repository"],
+            "source_branch": state["identity"]["source_branch"],
+            "generated_source_commit": state["identity"]["source_commit"],
+            "manifest_artifact": manifest_relative.as_posix(),
+            "manifest_artifact_digest": manifest_artifact_digest,
+            "manifest_digest": manifest_digest,
+        }
+        runtime = work_state_runtime()
+        try:
+            recovery = runtime.classify_pro_response_recovery(
+                bundle_root,
+                bundle,
+                evidence,
+                semantic_unusable=args.semantically_unusable,
+            )
+        except runtime.StateError as error:
+            raise LifecycleError(
+                f"invalid-response validation authority failed: {error}",
+                EXIT_INTEGRITY,
+            ) from error
+        if recovery["recovery_class"] == "valid":
+            return state_result(
+                state,
+                recovery_class="valid",
+                parent_action="record_pro_primary",
+                browser_allowed=False,
+                prompt_send_allowed=False,
+                successor_reserved=False,
+            )
+        reason_code = recovery["reason_code"]
+        validation_digest = digest_value(
+            {
+                "consultation_id": state["consultation_id"],
+                "response_digest": state["response"]["digest"],
+                "conversation_ref_digest": state["conversation"]["ref_digest"],
+                "prompt_digest": state["identity"]["prompt_digest"],
+                "manifest_artifact_digest": manifest_artifact_digest,
+                "manifest_digest": manifest_digest,
+                "reason_code": reason_code,
+            }
+        )
+
+        if state["identity"]["attempt_ordinal"] == 2:
+            if (
+                continuation["revision"] != 3
+                or current["attempt_ordinal"] != 2
+                or current["status"] != "consumed"
+            ):
+                raise LifecycleError(
+                    "second-attempt continuation authority is invalid",
+                    EXIT_INTEGRITY,
+                )
+            terminal_invalidation = {
+                "reason_code": reason_code,
+                "validation_digest": validation_digest,
+                "successor_consultation_id": state["consultation_id"],
+            }
+            state["invalidation"] = terminal_invalidation
+            state["lifecycle_state"] = "response_invalidated"
+            bump(state)
+            validate_receipt(state)
+            atomic_write_json(receipt_path, state)
+            return state_result(
+                state,
+                decision="block_invalid_response_exhausted",
+                blocker_code=INVALID_RESPONSE_EXHAUSTED_BLOCKER,
+                parent_action="record_blocker",
+                browser_allowed=False,
+                prompt_send_allowed=False,
+                successor_reserved=False,
+            )
+
+        if state["identity"]["attempt_ordinal"] != 1:
+            raise LifecycleError(
+                "invalid-response recovery attempt is unsupported", EXIT_INTEGRITY
+            )
+        if continuation["revision"] != 1:
+            raise LifecycleError(
+                "invalid-response successor is already reserved", EXIT_CAS
+            )
+        predecessor_pass = deepcopy(current)
+        if predecessor_pass["status"] != "consumed":
+            raise LifecycleError(
+                "invalid-response predecessor is not consumable", EXIT_AUTHORITY
+            )
+        successor_state = base_receipt(successor_identity)
+        successor_invalidation = {
+            "reason_code": reason_code,
+            "validation_digest": validation_digest,
+            "successor_consultation_id": successor_state["consultation_id"],
+        }
+        if successor_path.exists():
+            existing_successor = load_receipt(successor_path)
+            expected_successor = deepcopy(successor_state)
+            comparable_existing = deepcopy(existing_successor)
+            for value in (expected_successor, comparable_existing):
+                value.pop("created_at")
+                value.pop("updated_at")
+            if comparable_existing != expected_successor:
+                raise LifecycleError(
+                    "derived successor receipt conflicts with orphan state",
+                    EXIT_CAS,
+                )
+            successor_state = existing_successor
+        else:
+            atomic_write_json(successor_path, successor_state)
+
+        if state["lifecycle_state"] == "response_invalidated":
+            if state["invalidation"] != successor_invalidation:
+                raise LifecycleError(
+                    "invalidated predecessor conflicts with successor authority",
+                    EXIT_CAS,
+                )
+        else:
+            state["invalidation"] = successor_invalidation
+            state["lifecycle_state"] = "response_invalidated"
+            bump(state)
+            validate_receipt(state)
+            atomic_write_json(receipt_path, state)
+
+        predecessor_pass["status"] = "invalidated"
+        predecessor_pass["invalidation"] = successor_invalidation
+        continuation["revision"] = 2
+        continuation["current_pass_id"] = successor_state["consultation_id"]
+        continuation["passes"] = [predecessor_pass]
+        continuation["parent_cursor"] = {
+            "consultation_id": successor_state["consultation_id"],
+            "stage": "await_invalid_response_successor",
+            "candidate_plan_digest": None,
+            "blind_receipt_digest": None,
+            "bundle_revision": bundle["revision"],
+            "replacement_heartbeat": None,
+            "expected_successor": {
+                "attempt_ordinal": 2,
+                "consultation_id": successor_state["consultation_id"],
+                "predecessor_pass_id": predecessor_pass["pass_id"],
+                "receipt_locator_digest": locator_digest(successor_path),
+            },
+        }
+        continuation["updated_at"] = utc_now()
+        validate_continuation(continuation)
+        atomic_write_json(continuation_path, continuation)
+
+    return state_result(
+        successor_state,
+        predecessor_consultation_id=state["consultation_id"],
+        predecessor_receipt=str(receipt_path),
+        successor_consultation_id=successor_state["consultation_id"],
+        successor_receipt=str(successor_path),
+        successor_receipt_locator_digest=locator_digest(successor_path),
+        successor_reserved=True,
+        parent_action="claim_successor_send",
+    )
+
+
+def command_commit_send(args: argparse.Namespace) -> dict[str, Any]:
+    path = safe_regular_path(args.receipt, "task-local receipt", required=True)
+    with locked_directories([path]):
+        state = load_receipt(path)
+        require_revision(state, args.expected_revision)
+        if state["lifecycle_state"] not in {
+            "primary_send_intent",
+            "conversation_bound",
+            "wait_admitted",
+            "manual_resume_required",
+            "response_ready",
+        }:
+            raise LifecycleError("no primary send intent awaits commit", EXIT_AUTHORITY)
+        primary = state["send_intents"]["primary"]
+        require_unreconciled_primary_send(state)
+        if not args.identity_unavailable:
+            raise LifecycleError(
+                "primary send requires identity-unavailable fail-closed CAS",
+                EXIT_AUTHORITY,
+            )
+        bump(state)
+        validate_receipt(state)
+        atomic_write_json(path, state)
+    return uncertain_send_result(state)
+
+
+def command_reconcile_wake(args: argparse.Namespace) -> dict[str, Any]:
+    receipt_path = safe_regular_path(
+        args.receipt, "task-local receipt", required=True
+    )
+    snapshot = load_receipt(receipt_path)
+    bundle_state_path = canonical_bundle_state_path(args.bundle_state)
+    bundle_root = canonical_bundle_path(bundle_state_path.parent)
+    continuation_path = (
+        safe_regular_path(
+            args.planning_continuation,
+            "planning continuation",
+            required=True,
+        )
+        if args.planning_continuation
+        else safe_regular_path(
+            continuation_path_for(bundle_root),
+            "planning continuation",
+            required=True,
+        )
+    )
+    if continuation_path != continuation_path_for(bundle_root):
+        raise LifecycleError(
+            "planning continuation must be discovery/planning-continuation.json",
+            EXIT_INTEGRITY,
+        )
+    if Path(snapshot["identity"]["work_bundle"]).expanduser().absolute() != bundle_root:
+        raise LifecycleError(
+            "bundle path does not match task-local receipt", EXIT_INTEGRITY
+        )
+    with locked_directories([receipt_path, bundle_state_path, continuation_path]):
+        state = load_receipt(receipt_path)
+        bundle = load_bundle_state(str(bundle_state_path), expected_bundle=bundle_root)
+        continuation = load_continuation(continuation_path)
+        require_shared_authority(
+            state, continuation, bundle, bundle_root, receipt_path
+        )
+        if state["lifecycle_state"] not in {
+            "primary_send_intent",
+            "conversation_bound",
+            "wait_admitted",
+            "manual_resume_required",
+            "response_ready",
+        }:
+            raise LifecycleError(
+                "send-intent reconciliation requires an active primary send",
+                EXIT_AUTHORITY,
+            )
+        if not primary_send_is_reconciled(state):
+            require_unreconciled_primary_send(state)
+            bump(state)
+            validate_receipt(state)
+            atomic_write_json(receipt_path, state)
+    return uncertain_send_result(state)
+
+
+def command_show(args: argparse.Namespace) -> dict[str, Any]:
+    return load_receipt(
+        safe_regular_path(args.receipt, "task-local receipt", required=True)
+    )
+
+
+def command_validate_continuation(args: argparse.Namespace) -> dict[str, Any]:
+    continuation = load_continuation(
+        safe_regular_path(
+            args.planning_continuation,
+            "planning continuation",
+            required=True,
+        )
+    )
+    return {
+        "schema": continuation["schema"],
+        "valid": True,
+        "revision": continuation["revision"],
+        "current_pass_id": continuation["current_pass_id"],
+    }
+
+
+def command_validate(args: argparse.Namespace) -> dict[str, Any]:
+    receipt_path = safe_regular_path(
+        args.receipt, "task-local receipt", required=True
+    )
+    state = load_receipt(
+        receipt_path
+    )
+    result = state_result(state, valid=True)
+    if args.planning_continuation:
+        continuation_path = safe_regular_path(
+            args.planning_continuation,
+            "planning continuation",
+            required=True,
+        )
+        bundle_root = canonical_bundle_path(continuation_path.parent.parent)
+        if continuation_path != continuation_path_for(bundle_root):
+            raise LifecycleError(
+                "planning continuation must use the canonical bundle path",
+                EXIT_INTEGRITY,
+            )
+        continuation = load_continuation(continuation_path)
+        bundle = load_bundle_state(
+            str(bundle_root / "state.json"), expected_bundle=bundle_root
+        )
+        if state["lifecycle_state"] in {
+            "response_captured",
+            "response_invalidated",
+        }:
+            require_shared_identity(
+                state,
+                continuation,
+                bundle,
+                bundle_root,
+            )
+            require_continuation_binding(
+                state,
+                continuation,
+                "receipt validation",
+                require_current=state["lifecycle_state"] == "response_captured",
+            )
+        else:
+            require_shared_authority(
+                state,
+                continuation,
+                bundle,
+                bundle_root,
+                receipt_path,
+            )
+        result["planning_continuation_revision"] = continuation["revision"]
+        result["planning_continuation_schema"] = continuation["schema"]
+    return result
+
+
+def command_normalize_conversation_url(args: argparse.Namespace) -> dict[str, str]:
+    return {
+        "normalized_conversation_url": normalized_conversation_url(
+            args.conversation_url
+        )
+    }
+
+
+def add_receipt(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--receipt", required=True)
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description=__doc__)
+    commands = result.add_subparsers(dest="command", required=True)
+
+    init = commands.add_parser("init", help="Create one task-local receipt.")
+    add_receipt(init)
+    init.add_argument("--work-kind", required=True, choices=("feature", "bug_fix"))
+    init.add_argument("--work-id", required=True)
+    init.add_argument("--work-bundle", required=True)
+    init.add_argument("--repository", required=True)
+    init.add_argument("--source-branch", required=True)
+    init.add_argument("--source-commit", required=True)
+    init.add_argument("--specification-digest", required=True)
+    init.add_argument("--prompt-file", required=True)
+    init.set_defaults(handler=command_init)
+
+    claim = commands.add_parser(
+        "claim-send", help="CAS one receipt-bound primary send intent."
+    )
+    add_receipt(claim)
+    claim.add_argument("--expected-revision", required=True, type=int)
+    claim.add_argument("--kind", required=True, choices=("primary",))
+    claim.add_argument("--prompt-file", required=True)
+    claim.set_defaults(handler=command_claim_send)
+
+    bind = commands.add_parser(
+        "bind-conversation",
+        help="Commit one same-send conversation/generation observation.",
+    )
+    add_receipt(bind)
+    bind.add_argument("--expected-revision", required=True, type=int)
+    bind.add_argument("--binding-result", required=True)
+    bind.set_defaults(handler=command_bind_conversation)
+
+    capture = commands.add_parser(
+        "capture-response",
+        help="Commit one completed canonical Pro response and publish its pass.",
+    )
+    add_receipt(capture)
+    capture.add_argument("--expected-revision", required=True, type=int)
+    capture.add_argument("--capture-result", required=True)
+    capture.add_argument("--response-file", required=True)
+    capture.add_argument("--bundle-state", required=True)
+    capture.add_argument("--planning-continuation", required=True)
+    capture.set_defaults(handler=command_capture_response)
+
+    recovered_capture = commands.add_parser(
+        "recover-captured-response",
+        help=(
+            "Publish one exact same-task response captured after uncertain-send "
+            "reconciliation."
+        ),
+    )
+    add_receipt(recovered_capture)
+    recovered_capture.add_argument(
+        "--expected-revision", required=True, type=int
+    )
+    recovered_capture.add_argument("--capture-result", required=True)
+    recovered_capture.add_argument("--response-file", required=True)
+    recovered_capture.add_argument("--bundle-state", required=True)
+    recovered_capture.add_argument("--planning-continuation", required=True)
+    recovered_capture.set_defaults(handler=command_recover_captured_response)
+
+    wait_result = commands.add_parser(
+        "record-wait-result",
+        help="Consume one current task-local Pro wait result.",
+    )
+    add_receipt(wait_result)
+    wait_result.add_argument("--expected-revision", required=True, type=int)
+    wait_result.add_argument("--wait-result", required=True)
+    wait_result.set_defaults(handler=command_record_wait_result)
+
+    recover = commands.add_parser(
+        "reserve-invalid-response-successor",
+        help=(
+            "Classify one captured response and reserve a successor only for "
+            "restart_or_fail_closed."
+        ),
+    )
+    add_receipt(recover)
+    recover.add_argument("--expected-revision", required=True, type=int)
+    recover.add_argument("--conversation-url", required=True)
+    recover.add_argument("--prompt-file", required=True)
+    recover.add_argument("--bundle-state", required=True)
+    recover.add_argument("--planning-continuation", required=True)
+    recover.add_argument("--manifest-artifact", required=True)
+    recover.add_argument("--manifest-artifact-digest", required=True)
+    recover.add_argument("--manifest-digest", required=True)
+    recover.add_argument(
+        "--semantically-unusable",
+        action="store_true",
+        help=(
+            "Record the root's content-based decision that the immutable response "
+            "cannot support planning. Markdown presentation is never a reason."
+        ),
+    )
+    recover.set_defaults(handler=command_reserve_invalid_response_successor)
+
+    commit = commands.add_parser(
+        "commit-send", help="Reconcile the primary send intent and fail closed."
+    )
+    add_receipt(commit)
+    commit.add_argument("--expected-revision", required=True, type=int)
+    commit.add_argument("--identity-unavailable", action="store_true")
+    commit.set_defaults(handler=command_commit_send)
+
+    reconcile = commands.add_parser(
+        "reconcile-wake", help="Reconcile an active primary send without Browser."
+    )
+    add_receipt(reconcile)
+    reconcile.add_argument("--bundle-state", required=True)
+    reconcile.add_argument("--planning-continuation")
+    reconcile.set_defaults(handler=command_reconcile_wake)
+
+    show = commands.add_parser("show", help="Print the authoritative receipt.")
+    add_receipt(show)
+    show.set_defaults(handler=command_show)
+
+    continuation = commands.add_parser(
+        "validate-continuation",
+        help="Validate the zero-pass planning continuation.",
+    )
+    continuation.add_argument("--planning-continuation", required=True)
+    continuation.set_defaults(handler=command_validate_continuation)
+
+    validate = commands.add_parser("validate", help="Validate authoritative state.")
+    add_receipt(validate)
+    validate.add_argument("--planning-continuation")
+    validate.set_defaults(handler=command_validate)
+
+    normalize = commands.add_parser(
+        "normalize-conversation-url",
+        help="Normalize canonical ChatGPT conversation URL syntax without authority.",
+    )
+    normalize.add_argument("--conversation-url", required=True)
+    normalize.set_defaults(handler=command_normalize_conversation_url)
+    return result
+
+
+def main() -> int:
+    try:
+        arguments = parser().parse_args()
+        output_json(arguments.handler(arguments))
+        return 0
+    except LifecycleError as error:
+        print(f"pro-lifecycle: {error}", file=sys.stderr)
+        return error.exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

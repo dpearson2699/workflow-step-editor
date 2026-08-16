@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project UI Verification"
+  short_description: "Fail-closed repository UI proof"
+  default_prompt: "Use $project-ui-verification to prove this user-visible change through a repository-native UI route."

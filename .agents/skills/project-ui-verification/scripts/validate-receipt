@@ -1,0 +1,1172 @@
+#!/usr/bin/env python3
+"""Validate typed UI proof against its identity and optional spec-work bundle."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import os
+from pathlib import Path, PurePosixPath
+import re
+import subprocess
+import sys
+import tempfile
+
+
+REPO = Path(__file__).absolute().parents[4]
+WORK_STATE = REPO / ".agents/workflows/spec-work-orchestrator/scripts/work-state"
+RECEIPT_SCHEMA = "project-ui-verification"
+SNAPSHOT_SCHEMA = "project-ui-proof"
+ATTESTATION_SCHEMA = "project-ui-attestation"
+RECEIPT_FIELDS = {
+    "schema", "gatePhase", "taskStage", "workKind", "workBundle", "sliceId",
+    "finalUiSliceId", "prNumber", "headSha", "headTree", "worktreeTree", "verdict",
+    "changeKind", "acceptanceCriterion", "proofTarget", "evidenceSource", "adapterRequested",
+    "adapterActual", "proofSessionId", "builtFromCurrentWorktree",
+    "snapshotEvidence", "screenshotPaths", "testsReviewed", "automatedGates",
+    "humanConfirmation", "sessionReleased", "blocker",
+}
+SNAPSHOT_FIELDS = {"artifact", "sha256", "identityKind", "identity"}
+SNAPSHOT_ARTIFACT_FIELDS = {
+    "schema", "source", "taskStage", "sliceId", "identityKind",
+    "identity", "automatedAcceptanceId", "proofTarget", "observation",
+}
+OBSERVATION_FIELDS = {"kind", "value"}
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+SLICE_RE = re.compile(r"^PR-[0-9]{2,}$")
+AC_RE = re.compile(r"^AC-[0-9]{3}$")
+PROOF_TARGET_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+UI_CLASSIFICATIONS = {
+    "not_applicable",
+    "snapshot_required_human_deferred",
+    "final_human_required",
+}
+TERMINAL_SLICE_STATUSES = {"merged", "superseded"}
+SNAPSHOT_AUTHORIZATION_FIELDS = {
+    "sliceId", "snapshotCommit", "snapshotPath", "classification",
+    "manifestDigest",
+}
+
+
+class ReceiptError(ValueError):
+    """A typed receipt precondition failed."""
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ReceiptError(message)
+
+
+def nonempty_string(value: object, name: str) -> str:
+    require(isinstance(value, str) and bool(value), f"{name} must be a non-empty string")
+    return value
+
+
+def optional_string(value: object, name: str, pattern: re.Pattern[str] | None = None) -> str | None:
+    require(value is None or (isinstance(value, str) and bool(value)), f"{name} must be null or a non-empty string")
+    if value is not None and pattern is not None:
+        require(pattern.fullmatch(value) is not None, f"{name} has invalid format")
+    return value
+
+
+def optional_pr(value: object) -> int | None:
+    require(
+        value is None or (isinstance(value, int) and not isinstance(value, bool) and value >= 1),
+        "prNumber must be null or a positive integer",
+    )
+    return value
+
+
+def json_integer(value: object, name: str, minimum: int) -> int:
+    require(
+        type(value) is int and value >= minimum,
+        f"{name} must be an integer greater than or equal to {minimum}",
+    )
+    return value
+
+
+def string_list(value: object, name: str) -> list[str]:
+    require(isinstance(value, list), f"{name} must be an array")
+    require(all(isinstance(item, str) and bool(item) for item in value), f"{name} must contain only non-empty strings")
+    return value
+
+
+def normalized_task_stage(value: str) -> str:
+    require(
+        value in {
+            "standalone",
+            "intermediate_orchestrated_pr",
+            "final_orchestrated_pr",
+        },
+        "taskStage is invalid",
+    )
+    return value
+
+
+def validate_shape(value: object) -> dict:
+    require(isinstance(value, dict), "receipt must be an object")
+    require(
+        value.get("schema") == RECEIPT_SCHEMA,
+        "unsupported UI receipt schema; archive or manually restart stale workflow state",
+    )
+    fields = RECEIPT_FIELDS
+    missing = sorted(fields - set(value))
+    extra = sorted(set(value) - fields)
+    require(not missing, f"missing field: {missing[0] if missing else ''}")
+    require(not extra, f"unexpected field: {extra[0] if extra else ''}")
+    value = dict(value)
+    require(nonempty_string(value["gatePhase"], "gatePhase") in {"implementation_proof", "final_human_checkpoint"}, "gatePhase is invalid")
+    task_stage = normalized_task_stage(nonempty_string(value["taskStage"], "taskStage"))
+    value["taskStage"] = task_stage
+    optional_string(value["workKind"], "workKind")
+    optional_string(value["workBundle"], "workBundle")
+    optional_string(value["sliceId"], "sliceId", SLICE_RE)
+    optional_string(value["finalUiSliceId"], "finalUiSliceId", SLICE_RE)
+    optional_pr(value["prNumber"])
+    optional_string(value["headSha"], "headSha", SHA_RE)
+    optional_string(value["headTree"], "headTree", SHA_RE)
+    optional_string(value["worktreeTree"], "worktreeTree", SHA_RE)
+    for name in ("acceptanceCriterion", "proofTarget", "adapterRequested", "adapterActual", "proofSessionId"):
+        nonempty_string(value[name], name)
+    require(PROOF_TARGET_RE.fullmatch(value["proofTarget"]) is not None, "proofTarget is invalid")
+    require(
+        nonempty_string(value["changeKind"], "changeKind")
+        in {"ui", "displayed-data", "navigation-visible-value", "model-fed-ui-output", "accessibility"},
+        "changeKind is invalid",
+    )
+    require(nonempty_string(value["evidenceSource"], "evidenceSource") in {"fixture", "authenticated", "live", "local", "none"}, "evidenceSource is invalid")
+    require(nonempty_string(value["verdict"], "verdict") in {"PASS", "BLOCKED", "WAIVED", "WAITING_FOR_HUMAN", "DEFERRED_TO_PR_FINAL", "not_required"}, "verdict is invalid")
+    if value["evidenceSource"] == "none":
+        require(
+            value["verdict"] in {"BLOCKED", "not_required"},
+            "evidenceSource none is valid only for BLOCKED or not_required",
+        )
+    if value["verdict"] == "WAIVED":
+        require(
+            value["evidenceSource"] != "none",
+            "WAIVED requires current automated snapshot evidence",
+        )
+    require(nonempty_string(value["humanConfirmation"], "humanConfirmation") in {"requested", "confirmed", "waived", "deferred_to_final_ui_gate", "not_required", "blocked"}, "humanConfirmation is invalid")
+    require(type(value["builtFromCurrentWorktree"]) is bool, "builtFromCurrentWorktree must be boolean")
+    require(type(value["sessionReleased"]) is bool, "sessionReleased must be boolean")
+    string_list(value["screenshotPaths"], "screenshotPaths")
+    string_list(value["testsReviewed"], "testsReviewed")
+    snapshots = value["snapshotEvidence"]
+    require(isinstance(snapshots, list), "snapshotEvidence must be an array")
+    for index, snapshot in enumerate(snapshots):
+        require(isinstance(snapshot, dict), f"snapshotEvidence[{index}] must be an object")
+        require(set(snapshot) == SNAPSHOT_FIELDS, f"snapshotEvidence[{index}] fields are invalid")
+        nonempty_string(snapshot["artifact"], f"snapshotEvidence[{index}].artifact")
+        require(DIGEST_RE.fullmatch(nonempty_string(snapshot["sha256"], f"snapshotEvidence[{index}].sha256")) is not None, f"snapshotEvidence[{index}].sha256 is invalid")
+        require(snapshot["identityKind"] in {"worktree_tree", "head_tree"}, f"snapshotEvidence[{index}].identityKind is invalid")
+        require(SHA_RE.fullmatch(nonempty_string(snapshot["identity"], f"snapshotEvidence[{index}].identity")) is not None, f"snapshotEvidence[{index}].identity is invalid")
+    gates = value["automatedGates"]
+    require(isinstance(gates, dict) and set(gates) == {"build", "tests", "snapshot"}, "automatedGates fields are invalid")
+    require(gates["build"] in {"PASS", "not_required"}, "automatedGates.build is not clean")
+    require(gates["tests"] in {"PASS", "not_required"}, "automatedGates.tests is not clean")
+    require(gates["snapshot"] == "PASS", "automatedGates.snapshot must be PASS")
+    require(value["blocker"] is None or (isinstance(value["blocker"], str) and bool(value["blocker"])), "blocker must be null or a non-empty string")
+    if task_stage == "standalone":
+        require(value["workKind"] is None and value["workBundle"] is None and value["sliceId"] is None and value["finalUiSliceId"] is None, "standalone receipts must not invent spec-work identity")
+    else:
+        require(value["workKind"] in {"feature", "bug_fix"}, "orchestrated receipts require a valid workKind")
+        require(all(value[name] is not None for name in ("workBundle", "sliceId", "finalUiSliceId")), "orchestrated receipts require bundle and slice identity")
+    return value
+
+
+def confined_path(root: Path, relative: str, label: str) -> Path:
+    candidate = Path(relative)
+    require(not candidate.is_absolute() and ".." not in candidate.parts, f"{label} must be repository-relative")
+    resolved_root = root.resolve()
+    cursor = resolved_root
+    for part in candidate.parts:
+        cursor /= part
+        require(not cursor.is_symlink(), f"{label} must not traverse a symlink")
+    resolved = (resolved_root / candidate).resolve()
+    require(resolved == resolved_root or resolved_root in resolved.parents, f"{label} escapes the repository")
+    require(resolved.is_file(), f"{label} does not exist as a regular file: {relative}")
+    return resolved
+
+
+def confined_declared_path(root: Path, relative: str, label: str) -> Path:
+    candidate = Path(relative)
+    require(not candidate.is_absolute() and ".." not in candidate.parts, f"{label} must be repository-relative")
+    resolved_root = root.resolve()
+    cursor = resolved_root
+    for part in candidate.parts:
+        cursor /= part
+        require(not cursor.is_symlink(), f"{label} must not traverse a symlink")
+    resolved = (resolved_root / candidate).resolve()
+    require(resolved == resolved_root or resolved_root in resolved.parents, f"{label} escapes the repository")
+    return resolved
+
+
+def markdown_field(text: str, label: str) -> str:
+    match = re.search(rf"(?mi)^\s*-\s*{re.escape(label)}:\s*([^\n]+?)\s*$", text)
+    require(match is not None, f"missing {label} in bundle artifact")
+    return match.group(1).strip()
+
+
+def optional_markdown_field(text: str, label: str) -> str | None:
+    match = re.search(rf"(?mi)^\s*-\s*{re.escape(label)}:\s*([^\n]+?)\s*$", text)
+    return match.group(1).strip() if match else None
+
+
+def markdown_list_values(text: str, label: str) -> list[str]:
+    return [
+        match.strip()
+        for match in re.findall(
+            rf"(?mi)^\s*-\s*{re.escape(label)}:\s*([^\n]+?)\s*$", text
+        )
+    ]
+
+
+def current_ui_epoch_ids(
+    bundle: Path, items: dict[str, dict], final_slice: str
+) -> set[str]:
+    ordered = list(items)
+    selected_index = ordered.index(final_slice)
+    boundary = -1
+    for index in range(selected_index - 1, -1, -1):
+        identifier = ordered[index]
+        item = items[identifier]
+        if item.get("status") not in TERMINAL_SLICE_STATUSES:
+            continue
+        plan = confined_path(
+            bundle, item.get("plan", ""), f"{identifier} historical plan"
+        ).read_text(encoding="utf-8")
+        if markdown_list_values(plan, "UI gate") == ["final_human_required"]:
+            boundary = index
+            break
+    current = set(ordered[boundary + 1 :])
+    current.update(
+        identifier
+        for identifier, item in items.items()
+        if item.get("status") not in TERMINAL_SLICE_STATUSES
+    )
+    current.add(final_slice)
+    return current
+
+
+def dependency_reaches(items: dict[str, dict], source: str, target: str, seen: set[str] | None = None) -> bool:
+    visited = set() if seen is None else seen
+    if source in visited:
+        return False
+    visited.add(source)
+    for dependency in items[source].get("depends_on", []):
+        if dependency == target or (dependency in items and dependency_reaches(items, dependency, target, visited)):
+            return True
+    return False
+
+
+def load_bundle(
+    receipt: dict, mode: str, allow_archived_final_checkpoint: bool = False,
+    archived_plan_checkpoint_sha: str | None = None,
+) -> dict:
+    bundle_relative = PurePosixPath(receipt["workBundle"])
+    work_parent = (
+        PurePosixPath("docs/features")
+        if receipt["workKind"] == "feature"
+        else PurePosixPath("docs/bug_fixes")
+    )
+    expected_parent = work_parent / "in_progress"
+    require(
+        bundle_relative.parent == expected_parent,
+        "receipt workBundle is outside the lifecycle root for its workKind",
+    )
+    active = confined_declared_path(
+        REPO, (work_parent / "in_progress" / bundle_relative.name).as_posix(),
+        "active spec-work bundle",
+    )
+    completed = confined_declared_path(
+        REPO, (work_parent / "completed" / bundle_relative.name).as_posix(),
+        "completed spec-work bundle",
+    )
+    existing = [candidate for candidate in (active, completed) if candidate.is_dir()]
+    require(existing, "cannot find spec-work bundle")
+    require(len(existing) == 1, "spec-work bundle identity is ambiguous")
+    bundle = existing[0]
+    archived_checkpoint_allowed = (
+        mode == "final-checkpoint-issue" and allow_archived_final_checkpoint
+    )
+    if mode not in {"completion", "implementation-proof"} and not archived_checkpoint_allowed:
+        require(bundle == active, f"{mode} requires an active in_progress bundle")
+    try:
+        state = json.loads((bundle / "state.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ReceiptError(f"cannot read spec-work bundle state: {error}") from error
+    require(isinstance(state, dict), "spec-work bundle state must be an object")
+    require(state.get("schema") == "spec-workflow-state", "unsupported spec-work state; archive or manually restart the stale bundle")
+    state_work_kind = state.get("work_kind")
+    require(
+        receipt["workKind"] == state_work_kind,
+        "receipt workKind differs from spec-work bundle state",
+    )
+    require(
+        state.get("phase") in {"delivery", "complete"}
+        or (archived_checkpoint_allowed and state.get("phase") == "plan"),
+        "spec-work bundle is not in an archived-checkpoint validation phase",
+    )
+    if bundle == completed:
+        require(
+            state.get("phase") == "complete",
+            "completed spec-work bundle must have phase complete",
+        )
+    if mode == "final-design-acceptance":
+        require(state["phase"] == "delivery", f"{mode} requires an active delivery bundle")
+    artifacts = state.get("artifacts")
+    require(isinstance(artifacts, dict), "spec-work bundle artifacts are invalid")
+    primary_path = artifacts.get("primary", "")
+    primary = confined_path(
+        bundle, primary_path, "primary specification"
+    ).read_text(encoding="utf-8")
+    acceptance = confined_path(bundle, artifacts.get("acceptance", ""), "ACCEPTANCE.md").read_text(encoding="utf-8")
+    require(markdown_field(primary, "Policy") == "final_pr_design_gate", "bundle does not use final_pr_design_gate")
+    final_slice = markdown_field(primary, "Final UI slice")
+    require(final_slice == receipt["finalUiSliceId"], "receipt final UI slice differs from the primary specification")
+    raw_slices = state.get("slices")
+    require(isinstance(raw_slices, list), "spec-work bundle slices are invalid")
+    items = {item.get("id"): item for item in raw_slices if isinstance(item, dict) and isinstance(item.get("id"), str)}
+    require(len(items) == len(raw_slices), "spec-work bundle has invalid or duplicate slice ids")
+    require(receipt["sliceId"] in items, "sliceId is not present in spec-work bundle")
+    require(final_slice in items, "final UI slice is not present in spec-work bundle")
+    current_ids = current_ui_epoch_ids(bundle, items, final_slice)
+    require(
+        receipt["sliceId"] in current_ids,
+        "sliceId is not part of the current UI epoch",
+    )
+    classifications: dict[str, str] = {}
+    plan_texts: dict[str, str] = {}
+    automated_acceptance: dict[str, str | None] = {}
+    proof_targets: dict[str, str | None] = {}
+    for identifier in sorted(current_ids):
+        item = items[identifier]
+        expected_plan = f"pr/{identifier}/PLAN.md"
+        require(
+            item.get("plan") == expected_plan,
+            f"{identifier} plan must use canonical path {expected_plan}",
+        )
+        plan_path = confined_path(
+            bundle, item.get("plan", ""), f"{identifier} plan"
+        )
+        if archived_plan_checkpoint_sha is None:
+            plan_text = plan_path.read_text(encoding="utf-8")
+        else:
+            git_commit_and_tree(archived_plan_checkpoint_sha)
+            historical_path = (
+                active / item.get("plan", "")
+            ).relative_to(REPO).as_posix()
+            historical = subprocess.run(
+                [
+                    "git", "-C", str(REPO), "show",
+                    f"{archived_plan_checkpoint_sha}:{historical_path}",
+                ],
+                capture_output=True,
+                check=False,
+            )
+            require(
+                historical.returncode == 0,
+                f"{identifier} archived plan checkpoint does not contain the slice plan",
+            )
+            try:
+                plan_text = historical.stdout.decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise ReceiptError(
+                    f"{identifier} archived plan checkpoint is not UTF-8"
+                ) from error
+        plan_texts[identifier] = plan_text
+        classification = markdown_field(plan_text, "UI gate")
+        require(classification in UI_CLASSIFICATIONS, f"{identifier} has invalid UI gate classification")
+        classifications[identifier] = classification
+        automated = optional_markdown_field(plan_text, "Automated UI acceptance")
+        target = optional_markdown_field(plan_text, "UI proof target")
+        if classification == "not_applicable":
+            require(automated in {None, "none"} and target in {None, "none"}, f"{identifier} non-UI plan must not claim UI proof authority")
+            automated_acceptance[identifier] = None
+            proof_targets[identifier] = None
+        else:
+            require(automated is not None and AC_RE.fullmatch(automated) is not None, f"{identifier} has invalid automated UI acceptance ID")
+            require(target is not None and PROOF_TARGET_RE.fullmatch(target) is not None, f"{identifier} has invalid UI proof target")
+            require(re.search(rf"(?<![A-Z0-9-]){re.escape(automated)}(?![A-Z0-9-])", acceptance) is not None, f"{identifier} automated UI acceptance is not declared by ACCEPTANCE.md")
+            require(automated in state.get("acceptance", {}), f"{identifier} automated UI acceptance is missing from bundle state")
+            automated_acceptance[identifier] = automated
+            proof_targets[identifier] = target
+    ui_automated = [value for value in automated_acceptance.values() if value is not None]
+    require(len(ui_automated) == len(set(ui_automated)), "automated UI acceptance IDs must have one slice owner")
+    require(classifications[final_slice] == "final_human_required", "designated final UI slice must require final_human_required")
+    final_ac = markdown_field(plan_texts[final_slice], "Final design acceptance")
+    require(AC_RE.fullmatch(final_ac) is not None, "final UI slice has invalid final design acceptance ID")
+    require(re.search(rf"(?<![A-Z0-9-]){re.escape(final_ac)}(?![A-Z0-9-])", acceptance) is not None, "final design acceptance is not declared by ACCEPTANCE.md")
+    require(final_ac in state.get("acceptance", {}), "final design acceptance is missing from bundle state")
+    require(final_ac != automated_acceptance[final_slice], "final design acceptance must remain separate from automated UI acceptance")
+    for identifier, classification in classifications.items():
+        designation = optional_markdown_field(plan_texts[identifier], "Final design acceptance")
+        if identifier == final_slice:
+            continue
+        require(designation in {None, "none"}, f"{identifier} must not own final design acceptance")
+        if classification == "not_applicable":
+            continue
+        require(classification == "snapshot_required_human_deferred", f"{identifier} must use snapshot_required_human_deferred")
+        require(dependency_reaches(items, final_slice, identifier), f"final UI slice is not ordered after {identifier}")
+    selected = items[receipt["sliceId"]]
+    selected_classification = classifications[receipt["sliceId"]]
+    expected_classification = "final_human_required" if receipt["taskStage"] == "final_orchestrated_pr" else "snapshot_required_human_deferred"
+    require(selected_classification == expected_classification, f"selected slice must use {expected_classification}")
+    require(receipt["acceptanceCriterion"] == automated_acceptance[receipt["sliceId"]], "receipt acceptanceCriterion differs from plan-owned automated UI acceptance")
+    require(receipt["proofTarget"] == proof_targets[receipt["sliceId"]], "receipt proofTarget differs from plan-owned UI proof target")
+    owner_relative = PurePosixPath("pr") / receipt["sliceId"] / "evidence"
+    owner_prefix = (bundle / owner_relative).resolve()
+    return {
+        "state": state, "selected": selected, "bundle": bundle,
+        "finalAc": final_ac, "automatedAc": automated_acceptance[receipt["sliceId"]],
+        "proofTarget": proof_targets[receipt["sliceId"]], "ownerPrefix": owner_prefix,
+    }
+
+
+def validate_identity_assertions(receipt: dict, arguments: argparse.Namespace) -> tuple[str, str]:
+    if receipt["worktreeTree"] is not None:
+        require(receipt["headSha"] is None and receipt["headTree"] is None and receipt["prNumber"] is None, "worktree-tree identity cannot include committed identity")
+        require(arguments.expected_worktree_tree is not None, "worktree-tree proof requires --expected-worktree-tree")
+        require(receipt["worktreeTree"] == arguments.expected_worktree_tree, "worktreeTree does not match expected anti-stale assertion")
+        return "worktree_tree", receipt["worktreeTree"]
+    require(receipt["headSha"] is not None and receipt["headTree"] is not None and receipt["prNumber"] is not None, "committed proof requires headSha, headTree, and prNumber")
+    require(arguments.expected_head_sha is not None and arguments.expected_pr_number is not None, "committed proof requires expected head and PR assertions")
+    require(receipt["headSha"] == arguments.expected_head_sha, "headSha does not match expected anti-stale assertion")
+    require(receipt["prNumber"] == arguments.expected_pr_number, "prNumber does not match expected anti-stale assertion")
+    commit, tree = git_commit_and_tree(receipt["headSha"])
+    require(commit == receipt["headSha"], "headSha does not resolve to the exact authoritative commit")
+    require(tree == receipt["headTree"], "headTree differs from authoritative commit tree")
+    return "head_tree", tree
+
+
+def git_commit_and_tree(head_sha: object) -> tuple[str, str]:
+    require(
+        isinstance(head_sha, str) and SHA_RE.fullmatch(head_sha) is not None,
+        "published slice is missing a valid authoritative head SHA",
+    )
+    commit_process = subprocess.run(
+        ["git", "-C", str(REPO), "rev-parse", "--verify", f"{head_sha}^{{commit}}"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    commit = commit_process.stdout.strip()
+    require(
+        commit_process.returncode == 0 and SHA_RE.fullmatch(commit) is not None,
+        "cannot resolve authoritative headSha as a coordinator repository commit",
+    )
+    tree_process = subprocess.run(
+        ["git", "-C", str(REPO), "rev-parse", "--verify", f"{commit}^{{tree}}"],
+        text=True, capture_output=True, check=False,
+    )
+    tree = tree_process.stdout.strip()
+    require(
+        tree_process.returncode == 0 and SHA_RE.fullmatch(tree) is not None,
+        "cannot resolve authoritative commit tree",
+    )
+    return commit, tree
+
+
+def validate_published_implementation_tree(
+    context: dict,
+    proof_tree: str,
+    head_sha: str,
+    head_tree: str,
+) -> None:
+    if head_tree == proof_tree:
+        return
+    selected = context["selected"]
+    task = selected.get("implementation_task")
+    authorization = (
+        task.get("snapshot_authorization") if isinstance(task, dict) else None
+    )
+    require(
+        isinstance(authorization, dict)
+        and set(authorization) == SNAPSHOT_AUTHORIZATION_FIELDS,
+        "published slice Git tree differs from implementation proof tree",
+    )
+    require(
+        authorization.get("sliceId") == selected.get("id"),
+        "snapshot authorization differs from the published slice",
+    )
+    snapshot_commit = nonempty_string(
+        authorization.get("snapshotCommit"), "snapshotCommit"
+    )
+    require(
+        SHA_RE.fullmatch(snapshot_commit) is not None,
+        "snapshotCommit has invalid format",
+    )
+    manifest_digest = nonempty_string(
+        authorization.get("manifestDigest"), "manifestDigest"
+    )
+    require(
+        DIGEST_RE.fullmatch(manifest_digest) is not None,
+        "manifestDigest has invalid format",
+    )
+    classification = authorization.get("classification")
+    require(
+        classification in {"intermediate", "final"},
+        "snapshot authorization classification is invalid",
+    )
+    state = context["state"]
+    work_root = "features" if state.get("work_kind") == "feature" else "bug_fixes"
+    lifecycle = "completed" if classification == "final" else "in_progress"
+    expected_path = PurePosixPath(
+        "docs", work_root, lifecycle, nonempty_string(state.get("work_id"), "work_id")
+    )
+    snapshot_path = PurePosixPath(
+        nonempty_string(authorization.get("snapshotPath"), "snapshotPath")
+    )
+    require(
+        snapshot_path == expected_path,
+        "snapshot authorization path differs from the canonical lifecycle root",
+    )
+    verification = subprocess.run(
+        [
+            str(WORK_STATE), "verify-pr-snapshot",
+            "--work-bundle", snapshot_path.as_posix(),
+            "--snapshot-commit", snapshot_commit,
+            "--pr-head", head_sha,
+            "--slice-id", selected["id"],
+            "--manifest-digest", manifest_digest,
+        ],
+        cwd=REPO,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    require(
+        verification.returncode == 0,
+        "published slice tree mismatch lacks a valid snapshot authorization",
+    )
+    changed = subprocess.run(
+        [
+            "git", "-C", str(REPO), "diff-tree", "-r", "--no-commit-id",
+            "--name-only", "-z", "--no-renames", proof_tree, head_tree, "--",
+        ],
+        capture_output=True,
+        check=False,
+    )
+    require(
+        changed.returncode == 0,
+        "cannot compare implementation proof and published slice trees",
+    )
+    try:
+        changed_paths = [
+            path.decode("utf-8")
+            for path in changed.stdout.split(b"\0")
+            if path
+        ]
+    except UnicodeDecodeError as error:
+        raise ReceiptError("published tree contains a non-UTF-8 path") from error
+    allowed_root = snapshot_path.as_posix()
+    require(
+        bool(changed_paths)
+        and all(
+            path == allowed_root or path.startswith(allowed_root + "/")
+            for path in changed_paths
+        ),
+        "published slice Git tree differs from implementation proof tree "
+        "outside the authenticated snapshot path",
+    )
+
+
+def staged_tree_for_worktree(
+    value: Path | None, selected: dict | None = None
+) -> tuple[Path, str]:
+    require(value is not None, "tree-bound proof requires --implementation-worktree-root")
+    root = value.expanduser().resolve()
+    require(root.is_dir() and not value.is_symlink(), "implementation worktree root is unavailable")
+    top = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+        text=True, capture_output=True, check=False,
+    )
+    require(top.returncode == 0 and Path(top.stdout.strip()).resolve() == root, "implementation worktree root is not an exact Git worktree")
+    common = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        text=True, capture_output=True, check=False,
+    )
+    coordinator_common = subprocess.run(
+        ["git", "-C", str(REPO), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        text=True, capture_output=True, check=False,
+    )
+    require(
+        common.returncode == 0
+        and coordinator_common.returncode == 0
+        and Path(common.stdout.strip()).resolve()
+        == Path(coordinator_common.stdout.strip()).resolve(),
+        "implementation worktree does not share coordinator canonical Git common directory",
+    )
+    if selected is not None:
+        expected_branch = selected.get("branch")
+        require(
+            isinstance(expected_branch, str) and bool(expected_branch),
+            "selected slice is missing its authoritative branch",
+        )
+        branch = subprocess.run(
+            ["git", "-C", str(root), "symbolic-ref", "--quiet", "--short", "HEAD"],
+            text=True, capture_output=True, check=False,
+        )
+        require(
+            branch.returncode == 0 and bool(branch.stdout.strip()),
+            "implementation worktree HEAD must not be detached",
+        )
+        require(
+            branch.stdout.strip() == expected_branch,
+            "implementation worktree branch differs from selected slice authority",
+        )
+        base_sha = selected.get("base_sha")
+        require(
+            isinstance(base_sha, str) and SHA_RE.fullmatch(base_sha) is not None,
+            "selected slice is missing a valid authoritative base SHA",
+        )
+        ancestor = subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", base_sha, "HEAD"],
+            capture_output=True, check=False,
+        )
+        require(
+            ancestor.returncode == 0,
+            "selected slice base SHA is not an ancestor of implementation worktree HEAD",
+        )
+    unstaged = subprocess.run(
+        ["git", "-C", str(root), "diff", "--quiet", "--exit-code"],
+        check=False,
+    )
+    untracked = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--others", "--exclude-standard"],
+        text=True, capture_output=True, check=False,
+    )
+    require(unstaged.returncode == 0 and untracked.returncode == 0 and not untracked.stdout.strip(), "implementation worktree has unstaged or untracked changes")
+    written = subprocess.run(
+        ["git", "-C", str(root), "write-tree"],
+        text=True, capture_output=True, check=False,
+    )
+    tree = written.stdout.strip()
+    require(written.returncode == 0 and SHA_RE.fullmatch(tree) is not None, "cannot observe implementation worktree staged tree")
+    return root, tree
+
+
+def validate_snapshot_artifacts(
+    receipt: dict, identity_kind: str, identity: str,
+    owner_prefix: Path | None, candidate_snapshot: Path | None = None,
+    bundle: Path | None = None,
+) -> None:
+    require(bool(receipt["snapshotEvidence"]), "snapshotEvidence must not be empty")
+    require(bool(receipt["testsReviewed"]), "testsReviewed must not be empty")
+    require(receipt["evidenceSource"] != "none", "successful UI proof requires an evidence source")
+    if candidate_snapshot is not None:
+        require(len(receipt["snapshotEvidence"]) == 1, "candidate proof requires exactly one snapshot artifact")
+    for index, evidence in enumerate(receipt["snapshotEvidence"]):
+        require(evidence["identityKind"] == identity_kind and evidence["identity"] == identity, f"snapshotEvidence[{index}] identity does not match receipt identity")
+        declared_relative = evidence["artifact"]
+        if bundle is not None:
+            logical_bundle = PurePosixPath(receipt["workBundle"])
+            artifact_relative = PurePosixPath(declared_relative)
+            try:
+                suffix = artifact_relative.relative_to(logical_bundle)
+            except ValueError as error:
+                raise ReceiptError(
+                    f"snapshotEvidence[{index}] is outside the logical workBundle"
+                ) from error
+            declared = confined_declared_path(
+                bundle, suffix.as_posix(), f"snapshotEvidence[{index}].artifact"
+            )
+        else:
+            declared = confined_declared_path(
+                REPO, declared_relative, f"snapshotEvidence[{index}].artifact"
+            )
+        if owner_prefix is not None:
+            require(owner_prefix == declared.parent or owner_prefix in declared.parents, f"snapshotEvidence[{index}] is outside the owning slice evidence prefix")
+        artifact = (
+            candidate_snapshot
+            if candidate_snapshot is not None
+            else confined_path(
+                bundle or REPO,
+                suffix.as_posix() if bundle is not None else declared_relative,
+                f"snapshotEvidence[{index}].artifact",
+            )
+        )
+        digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        require(digest == evidence["sha256"], f"snapshotEvidence[{index}] digest does not match artifact")
+        try:
+            typed_artifact = json.loads(artifact.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ReceiptError(f"snapshotEvidence[{index}] is not typed JSON: {error}") from error
+        require(isinstance(typed_artifact, dict) and set(typed_artifact) == SNAPSHOT_ARTIFACT_FIELDS, f"snapshotEvidence[{index}] artifact fields are invalid")
+        require(
+            typed_artifact["schema"] == SNAPSHOT_SCHEMA,
+            f"snapshotEvidence[{index}] artifact schema is invalid",
+        )
+        require(typed_artifact["source"] == "project_ui_adapter", f"snapshotEvidence[{index}] artifact source must equal project_ui_adapter")
+        artifact_stage = normalized_task_stage(
+            nonempty_string(
+                typed_artifact["taskStage"],
+                f"snapshotEvidence[{index}] artifact taskStage",
+            )
+        )
+        require(artifact_stage == receipt["taskStage"] and typed_artifact["sliceId"] == receipt["sliceId"], f"snapshotEvidence[{index}] artifact task identity differs from receipt")
+        require(typed_artifact["automatedAcceptanceId"] == receipt["acceptanceCriterion"], f"snapshotEvidence[{index}] artifact automated acceptance differs from receipt")
+        require(typed_artifact["proofTarget"] == receipt["proofTarget"], f"snapshotEvidence[{index}] artifact proof target differs from receipt")
+        require(typed_artifact["identityKind"] == identity_kind and typed_artifact["identity"] == identity, f"snapshotEvidence[{index}] artifact identity does not match receipt identity")
+        observation = typed_artifact["observation"]
+        require(isinstance(observation, dict) and set(observation) == OBSERVATION_FIELDS, f"snapshotEvidence[{index}] artifact observation fields are invalid")
+        require(observation["kind"] in {"displayed_value", "control_present"}, f"snapshotEvidence[{index}] artifact observation kind is invalid")
+        observed = observation["value"]
+        if observation["kind"] == "control_present":
+            require(observed is True, f"snapshotEvidence[{index}] control_present observation must equal true")
+        else:
+            require(isinstance(observed, (str, int, float, bool)) and not isinstance(observed, type(None)), f"snapshotEvidence[{index}] displayed_value observation must be scalar")
+            require(not isinstance(observed, str) or bool(observed), f"snapshotEvidence[{index}] displayed_value string must be non-empty")
+            require(not isinstance(observed, float) or math.isfinite(observed), f"snapshotEvidence[{index}] displayed_value number must be finite")
+
+
+def require_success(receipt: dict, mode: str) -> None:
+    require(receipt["builtFromCurrentWorktree"], "builtFromCurrentWorktree must be true")
+    require(receipt["blocker"] is None, f"{mode} requires blocker null")
+    require(receipt["verdict"] in {"PASS", "WAIVED"}, f"{mode} requires PASS or WAIVED")
+    expected = "confirmed" if receipt["verdict"] == "PASS" else "waived"
+    require(receipt["humanConfirmation"] == expected, f"{mode} requires humanConfirmation {expected}")
+    require(receipt["sessionReleased"], f"{mode} requires sessionReleased true")
+
+
+def require_final_checkpoint_issue(receipt: dict) -> None:
+    mode = "final-checkpoint-issue"
+    require(receipt["builtFromCurrentWorktree"], "builtFromCurrentWorktree must be true")
+    require(receipt["verdict"] == "BLOCKED", f"{mode} requires BLOCKED")
+    require(receipt["humanConfirmation"] == "blocked", f"{mode} requires humanConfirmation blocked")
+    require(
+        isinstance(receipt["blocker"], str) and bool(receipt["blocker"].strip()),
+        f"{mode} requires a non-empty blocker",
+    )
+    require(receipt["sessionReleased"], f"{mode} requires sessionReleased true")
+    require(
+        all(receipt["automatedGates"].get(gate) == "PASS" for gate in ("build", "tests", "snapshot")),
+        f"{mode} requires clean automated gates",
+    )
+
+
+def validate_standalone(receipt: dict, arguments: argparse.Namespace) -> tuple[str | None, str, str]:
+    require(receipt["taskStage"] == "standalone", "standalone mode requires taskStage standalone")
+    require(receipt["gatePhase"] == "final_human_checkpoint", "standalone mode requires the immediate final human checkpoint")
+    require_success(receipt, "standalone")
+    identity_kind, identity = validate_identity_assertions(receipt, arguments)
+    if identity_kind == "worktree_tree":
+        _, observed_tree = staged_tree_for_worktree(arguments.implementation_worktree_root)
+        require(observed_tree == identity, "implementation worktree staged tree differs from receipt tree")
+    validate_snapshot_artifacts(receipt, identity_kind, identity, None)
+    return None, identity_kind, identity
+
+
+def validate_orchestrated(receipt: dict, mode: str, arguments: argparse.Namespace, receipt_path: Path) -> tuple[str, str, str, dict]:
+    for name in ("expected_work_bundle", "expected_slice_id", "expected_final_ui_slice_id"):
+        require(getattr(arguments, name) is not None, f"{mode} requires --{name.replace('_', '-')}")
+    require(
+        arguments.expected_work_kind is not None,
+        f"{mode} requires --expected-work-kind",
+    )
+    expected_kind = arguments.expected_work_kind
+    for field, expected in (
+        ("workKind", expected_kind),
+        ("workBundle", arguments.expected_work_bundle),
+        ("sliceId", arguments.expected_slice_id),
+        ("finalUiSliceId", arguments.expected_final_ui_slice_id),
+    ):
+        require(receipt[field] == expected, f"{field} does not match expected anti-stale assertion")
+    context = load_bundle(
+        receipt, mode, arguments.allow_archived_final_checkpoint,
+        arguments.archived_plan_checkpoint_sha,
+    )
+    selected = context["selected"]
+    identity_kind, identity = validate_identity_assertions(receipt, arguments)
+    require(not receipt_path.is_symlink() and receipt_path.is_file(), "typed receipt must be a regular non-symlink file")
+    try:
+        receipt_path.resolve().relative_to(context["ownerPrefix"])
+    except ValueError as error:
+        raise ReceiptError("typed receipt is outside the owning slice evidence prefix") from error
+    validate_snapshot_artifacts(
+        receipt, identity_kind, identity, context["ownerPrefix"],
+        arguments.candidate_snapshot, context["bundle"],
+    )
+    if mode == "implementation-proof":
+        require(receipt["gatePhase"] == "implementation_proof", "implementation-proof requires gatePhase implementation_proof")
+        require(identity_kind == "worktree_tree", "implementation-proof requires worktree-tree identity")
+        require(receipt["verdict"] == "DEFERRED_TO_PR_FINAL", "implementation-proof requires DEFERRED_TO_PR_FINAL")
+        require(receipt["humanConfirmation"] == "deferred_to_final_ui_gate", "implementation-proof requires deferred humanConfirmation")
+        require(receipt["sessionReleased"], "implementation-proof requires sessionReleased true")
+        require(receipt["blocker"] is None, "implementation-proof requires blocker null")
+        require(receipt["builtFromCurrentWorktree"], "builtFromCurrentWorktree must be true")
+        require(
+            selected.get("status") in {"in_progress", "verifying", "verified", "pr_open", "merged"},
+            "slice is not in an implementation-proof lifecycle state",
+        )
+        if selected.get("status") in {"pr_open", "merged"}:
+            head_sha, authoritative_tree = git_commit_and_tree(selected.get("head_sha"))
+            validate_published_implementation_tree(
+                context,
+                receipt["worktreeTree"],
+                head_sha,
+                authoritative_tree,
+            )
+            require(
+                isinstance(selected.get("branch"), str) and bool(selected["branch"]),
+                "published slice is missing its authoritative branch",
+            )
+            require(
+                isinstance(selected.get("base_ref"), str) and bool(selected["base_ref"]),
+                "published slice is missing its authoritative base ref",
+            )
+            base_sha = selected.get("base_sha")
+            require(
+                isinstance(base_sha, str) and SHA_RE.fullmatch(base_sha) is not None,
+                "published slice is missing its authoritative base SHA",
+            )
+            ancestor = subprocess.run(
+                ["git", "-C", str(REPO), "merge-base", "--is-ancestor", base_sha, head_sha],
+                capture_output=True, check=False,
+            )
+            require(
+                ancestor.returncode == 0,
+                "published slice base SHA is not an ancestor of current head",
+            )
+        else:
+            implementation_root, observed_tree = staged_tree_for_worktree(
+                arguments.implementation_worktree_root, selected
+            )
+            require(implementation_root != REPO.resolve(), "orchestrated implementation worktree must be separate from coordinator root")
+            require(observed_tree == receipt["worktreeTree"], "implementation worktree staged tree differs from receipt tree")
+    elif mode == "final-checkpoint-issue":
+        require(receipt["taskStage"] == "final_orchestrated_pr", f"{mode} requires final_orchestrated_pr")
+        require(receipt["gatePhase"] == "final_human_checkpoint", f"{mode} requires gatePhase final_human_checkpoint")
+        require(identity_kind == "head_tree", f"{mode} requires committed head identity")
+        require_final_checkpoint_issue(receipt)
+        if not arguments.allow_archived_final_checkpoint:
+            require(selected.get("head_sha") == receipt["headSha"], "receipt headSha differs from bundle slice head")
+            require(selected.get("pr") == receipt["prNumber"], "receipt prNumber differs from bundle slice PR")
+            require(selected.get("status") == "pr_open", f"slice lifecycle is invalid for {mode}")
+    else:
+        require(receipt["taskStage"] == "final_orchestrated_pr", f"{mode} requires final_orchestrated_pr")
+        require(receipt["gatePhase"] == "final_human_checkpoint", f"{mode} requires gatePhase final_human_checkpoint")
+        require(identity_kind == "head_tree", f"{mode} requires committed head identity")
+        require_success(receipt, mode)
+        require(selected.get("head_sha") == receipt["headSha"], "receipt headSha differs from bundle slice head")
+        require(selected.get("pr") == receipt["prNumber"], "receipt prNumber differs from bundle slice PR")
+        require(selected.get("status") in ({"pr_open"} if mode == "final-design-acceptance" else {"merged"}), f"slice lifecycle is invalid for {mode}")
+        if mode == "completion":
+            acceptance = context["state"].get("acceptance", {}).get(context["finalAc"])
+            require(isinstance(acceptance, dict), "completion final design acceptance state is missing")
+            expected_status = "passed" if receipt["verdict"] == "PASS" else "waived"
+            require(acceptance.get("status") == expected_status, "completion acceptance status differs from typed receipt")
+            relative_receipt = receipt_path.resolve().relative_to(context["bundle"].resolve()).as_posix()
+            require(relative_receipt in acceptance.get("evidence", []), "completion acceptance does not reference this typed receipt")
+    return context["finalAc"], identity_kind, identity, context
+
+
+def attestation_value(
+    context: dict, receipt_path: Path, receipt: dict, mode: str, revision: int
+) -> dict:
+    receipt_bytes = receipt_path.read_bytes()
+    relative_receipt = receipt_path.resolve().relative_to(context["bundle"].resolve()).as_posix()
+    return {
+        "schema": ATTESTATION_SCHEMA,
+        "mode": mode,
+        "receipt": relative_receipt,
+        "receiptSha256": hashlib.sha256(receipt_bytes).hexdigest(),
+        "bundleRevision": revision,
+        "finalSlice": receipt["finalUiSliceId"],
+        "acceptanceId": context["finalAc"],
+        "headSha": receipt["headSha"],
+        "headTree": receipt["headTree"],
+        "prNumber": receipt["prNumber"],
+        "verdict": receipt["verdict"],
+    }
+
+
+def verify_attestation(
+    path: Path, context: dict, receipt_path: Path, receipt: dict, mode: str,
+    *, allow_recorded_revision: bool,
+) -> str:
+    require(not path.is_symlink() and path.is_file(), "verified attestation must be a regular file")
+    resolved = path.expanduser().resolve()
+    try:
+        resolved.relative_to(context["ownerPrefix"])
+    except ValueError as error:
+        raise ReceiptError("verified attestation is outside the final slice evidence directory") from error
+    try:
+        observed = json.loads(resolved.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ReceiptError(f"cannot read verified attestation: {error}") from error
+    require(isinstance(observed, dict), "verified attestation must be an object")
+    require(
+        observed.get("schema") == ATTESTATION_SCHEMA,
+        "verified attestation schema is unsupported",
+    )
+    json_integer(
+        observed.get("bundleRevision"),
+        "verified attestation bundleRevision",
+        0,
+    )
+    json_integer(observed.get("prNumber"), "verified attestation prNumber", 1)
+    revision = observed.get("bundleRevision") if allow_recorded_revision else context["state"]["revision"]
+    json_integer(revision, "verified attestation revision", 0)
+    if allow_recorded_revision:
+        require(revision <= context["state"]["revision"], "recorded attestation revision is from the future")
+    require(
+        observed == attestation_value(context, receipt_path, receipt, mode, revision),
+        "verified attestation differs from typed validator result",
+    )
+    relative = resolved.relative_to(context["bundle"].resolve()).as_posix()
+    if allow_recorded_revision:
+        acceptance = context["state"].get("acceptance", {}).get(context["finalAc"])
+        expected_status = "passed" if receipt["verdict"] == "PASS" else "waived"
+        require(isinstance(acceptance, dict) and acceptance.get("status") == expected_status, "recorded acceptance differs from typed receipt")
+        evidence = acceptance.get("evidence", [])
+        expected_receipt = receipt_path.resolve().relative_to(context["bundle"].resolve()).as_posix()
+        require(relative in evidence and expected_receipt in evidence, "recorded acceptance does not own typed receipt and attestation")
+    return relative
+
+
+def canonical_attestation_output(output: Path) -> Path:
+    expanded = output.expanduser()
+    require(".." not in expanded.parts, "attestation output must use a canonical path")
+    lexical = Path(os.path.abspath(expanded))
+    resolved = lexical.resolve(strict=False)
+    require(resolved == lexical, "attestation output must not traverse a symlink")
+    require(
+        resolved.parent.is_dir() and not resolved.parent.is_symlink(),
+        "attestation output parent must be an existing non-symlink directory",
+    )
+    require(not resolved.is_symlink(), "attestation output must not be a symlink")
+    require(
+        not resolved.exists() or resolved.is_file(),
+        "attestation output must not overwrite a directory or special file",
+    )
+    return resolved
+
+
+def protected_attestation_paths(
+    context: dict, receipt_path: Path, receipt: dict
+) -> dict[Path, str]:
+    bundle = context["bundle"].resolve()
+    protected = {
+        receipt_path.resolve(): "typed receipt",
+        (bundle / "state.json").resolve(): "state.json",
+        (bundle / "STATUS.md").resolve(): "STATUS.md",
+    }
+    for index, evidence in enumerate(receipt["snapshotEvidence"]):
+        logical_bundle = PurePosixPath(receipt["workBundle"])
+        try:
+            relative = PurePosixPath(evidence["artifact"]).relative_to(logical_bundle)
+        except ValueError as error:
+            raise ReceiptError(
+                f"snapshotEvidence[{index}] is outside the logical workBundle"
+            ) from error
+        path = confined_declared_path(
+            bundle, relative.as_posix(), f"snapshotEvidence[{index}].artifact"
+        )
+        protected[path] = f"snapshotEvidence[{index}] artifact"
+    status = context["state"].get("artifacts", {}).get("status")
+    if status is not None:
+        require(isinstance(status, str) and bool(status), "status artifact path is invalid")
+        protected[confined_declared_path(bundle, status, "status artifact")] = "status artifact"
+    acceptance = context["state"].get("acceptance", {})
+    require(isinstance(acceptance, dict), "feature acceptance state is invalid")
+    for identifier, record in acceptance.items():
+        require(isinstance(record, dict), f"{identifier} acceptance state is invalid")
+        evidence_paths = record.get("evidence", [])
+        require(isinstance(evidence_paths, list), f"{identifier} acceptance evidence is invalid")
+        for index, relative in enumerate(evidence_paths):
+            require(
+                isinstance(relative, str) and bool(relative),
+                f"{identifier} acceptance evidence[{index}] is invalid",
+            )
+            protected[
+                confined_declared_path(
+                    bundle, relative, f"{identifier} acceptance evidence[{index}]"
+                )
+            ] = f"{identifier} acceptance evidence[{index}]"
+    binding = context["state"].get("completion_binding")
+    if binding is not None:
+        require(isinstance(binding, dict), "completion_binding is invalid")
+        for field in ("receipt", "attestation"):
+            relative = binding.get(field)
+            require(
+                isinstance(relative, str) and bool(relative),
+                f"completion_binding {field} path is invalid",
+            )
+            protected[
+                confined_declared_path(
+                    bundle, relative, f"completion_binding {field}"
+                )
+            ] = f"completion_binding {field}"
+    return protected
+
+
+def require_identical_attestation(output: Path, payload: bytes) -> None:
+    require(not output.is_symlink(), "attestation output must not be a symlink")
+    require(
+        output.is_file(),
+        "attestation output must not overwrite a directory or special file",
+    )
+    try:
+        observed = output.read_bytes()
+    except OSError as error:
+        raise ReceiptError(f"cannot read existing attestation output: {error}") from error
+    require(
+        observed == payload,
+        "attestation output already exists with different bytes; use a distinct identity-keyed path",
+    )
+
+
+def publish_attestation_no_clobber(output: Path, payload: bytes) -> None:
+    if output.exists() or output.is_symlink():
+        require_identical_attestation(output, payload)
+        return
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{output.name}.", dir=output.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb", closefd=True) as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(temporary, output, follow_symlinks=False)
+        except FileExistsError:
+            require_identical_attestation(output, payload)
+        except OSError as error:
+            raise ReceiptError(
+                f"cannot publish attestation output without clobbering: {error}"
+            ) from error
+    finally:
+        temporary.unlink(missing_ok=True)
+    directory = os.open(output.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def write_attestation(output: Path, context: dict, receipt_path: Path, receipt: dict, mode: str) -> str:
+    require(mode in {"final-design-acceptance", "completion"}, "attestation mode is invalid")
+    resolved = canonical_attestation_output(output)
+    collision = protected_attestation_paths(context, receipt_path, receipt).get(resolved)
+    require(collision is None, f"attestation output collides with {collision}")
+    try:
+        resolved.relative_to(context["ownerPrefix"])
+    except ValueError as error:
+        raise ReceiptError(
+            "attestation output is outside the final slice evidence directory"
+        ) from error
+    attestation = attestation_value(
+        context, receipt_path, receipt, mode, context["state"]["revision"]
+    )
+    payload = json.dumps(attestation, indent=2, sort_keys=True).encode() + b"\n"
+    publish_attestation_no_clobber(resolved, payload)
+    return resolved.relative_to(context["bundle"].resolve()).as_posix()
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description="Validate the canonical project UI proof receipt.")
+    result.add_argument("--receipt", required=True, type=Path)
+    result.add_argument("--mode", required=True, choices=["standalone", "implementation-proof", "final-checkpoint-issue", "final-design-acceptance", "completion"])
+    result.add_argument("--expected-work-bundle")
+    result.add_argument("--expected-work-kind", choices=["feature", "bug_fix"])
+    result.add_argument("--expected-slice-id")
+    result.add_argument("--expected-final-ui-slice-id")
+    result.add_argument("--expected-worktree-tree")
+    result.add_argument("--expected-head-sha")
+    result.add_argument("--expected-pr-number", type=int)
+    result.add_argument("--implementation-worktree-root", type=Path)
+    result.add_argument("--candidate-snapshot", type=Path)
+    result.add_argument("--attestation-output", type=Path)
+    result.add_argument("--verify-attestation", type=Path)
+    result.add_argument("--allow-recorded-revision", action="store_true")
+    result.add_argument("--allow-archived-final-checkpoint", action="store_true")
+    result.add_argument("--archived-plan-checkpoint-sha")
+    return result
+
+
+def main() -> int:
+    try:
+        arguments = parser().parse_args()
+        if arguments.candidate_snapshot is not None:
+            require(arguments.mode == "implementation-proof", "--candidate-snapshot requires implementation-proof mode")
+            candidate = arguments.candidate_snapshot.expanduser().resolve()
+            require(
+                candidate.is_file() and not arguments.candidate_snapshot.is_symlink()
+                and candidate.name == "snapshot.json"
+                and candidate.parent == arguments.receipt.expanduser().resolve().parent,
+                "candidate snapshot must be a regular sibling snapshot.json",
+            )
+            arguments.candidate_snapshot = candidate
+        try:
+            receipt = validate_shape(json.loads(arguments.receipt.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ReceiptError(f"cannot read receipt JSON: {error}") from error
+        if arguments.mode == "standalone":
+            acceptance_id, identity_kind, identity = validate_standalone(receipt, arguments)
+            context = None
+        else:
+            require(receipt["taskStage"] != "standalone", f"{arguments.mode} requires an orchestrated receipt")
+            acceptance_id, identity_kind, identity, context = validate_orchestrated(receipt, arguments.mode, arguments, arguments.receipt)
+        attestation = None
+        if arguments.mode in {"final-design-acceptance", "completion"}:
+            assert context is not None
+            require(
+                (arguments.attestation_output is None)
+                != (arguments.verify_attestation is None),
+                f"{arguments.mode} requires exactly one attestation output or verification path",
+            )
+            if arguments.attestation_output is not None:
+                require(not arguments.allow_recorded_revision, "recorded revision applies only to attestation verification")
+                attestation = write_attestation(arguments.attestation_output, context, arguments.receipt, receipt, arguments.mode)
+            else:
+                assert arguments.verify_attestation is not None
+                attestation = verify_attestation(
+                    arguments.verify_attestation, context, arguments.receipt,
+                    receipt, arguments.mode,
+                    allow_recorded_revision=arguments.allow_recorded_revision,
+                )
+        else:
+            require(arguments.attestation_output is None and arguments.verify_attestation is None, f"{arguments.mode} cannot use an attestation")
+            require(not arguments.allow_recorded_revision, f"{arguments.mode} cannot allow a recorded revision")
+        require(
+            not arguments.allow_archived_final_checkpoint
+            or arguments.mode == "final-checkpoint-issue",
+            "archived final checkpoint applies only to final-checkpoint-issue",
+        )
+        require(
+            (arguments.archived_plan_checkpoint_sha is not None)
+            == arguments.allow_archived_final_checkpoint,
+            "archived final checkpoint requires exactly one historical plan checkpoint",
+        )
+        json.dump(
+            {
+                "acceptanceId": acceptance_id,
+                "attestation": attestation,
+                "gatePhase": receipt["gatePhase"],
+                "identity": identity,
+                "identityKind": identity_kind,
+                "mode": arguments.mode,
+                "ok": True,
+                "prNumber": receipt["prNumber"],
+                "sliceId": receipt["sliceId"],
+                "verdict": receipt["verdict"],
+            },
+            sys.stdout,
+            indent=2,
+            sort_keys=True,
+        )
+        sys.stdout.write("\n")
+        return 0
+    except ReceiptError as error:
+        print(f"validate-receipt: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

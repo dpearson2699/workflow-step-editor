@@ -1,0 +1,484 @@
+#!/usr/bin/env python3
+"""Execute one receipt-bound merge with provider-native commit identity CAS."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+from typing import BinaryIO
+
+
+if sys.version_info < (3, 11):
+    found = ".".join(str(value) for value in sys.version_info[:3])
+    print(
+        f"merge-pr requires Python 3.11 or newer; found {found}",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
+
+SHA_RE = re.compile(r"[0-9a-f]{40}")
+DIGEST_RE = re.compile(r"[0-9a-f]{64}")
+REQUEST_FIELDS = {
+    "schema",
+    "workKind",
+    "workId",
+    "sliceId",
+    "expectedPrNumber",
+    "expectedHeadSha",
+    "expectedBaseRef",
+    "expectedBaseSha",
+    "mergeMethod",
+    "policyPreconditionDigest",
+    "observationEpoch",
+}
+PROVIDER_FIELDS = {
+    "provider",
+    "providerStatus",
+    "atomicCommitIdentityEnforced",
+    "observedPrNumber",
+    "observedHeadSha",
+    "observedBaseSha",
+    "result",
+    "mergeCommitSha",
+    "mergeCommitParents",
+}
+RECONCILIATION_FIELDS = PROVIDER_FIELDS | {"providerOperationQuiescent"}
+RESULTS = {
+    "MERGED",
+    "PR_NUMBER_DRIFT",
+    "HEAD_DRIFT",
+    "BASE_DRIFT_AFTER_CONSUMED_FRESHNESS",
+    "PR_LIFECYCLE_DRIFT",
+    "ATOMIC_PRECONDITION_UNAVAILABLE",
+    "PROVIDER_REFUSAL",
+}
+
+
+class MergeError(ValueError):
+    """One typed request, provider result, or receipt invariant failed."""
+
+
+def exact_object(value: object, fields: set[str], label: str) -> dict:
+    if not isinstance(value, dict):
+        raise MergeError(f"{label} must be a JSON object")
+    missing = sorted(fields - set(value))
+    extra = sorted(set(value) - fields)
+    if missing:
+        raise MergeError(f"{label} missing required property: {missing[0]}")
+    if extra:
+        raise MergeError(f"{label} has unexpected property: {extra[0]}")
+    return value
+
+
+def load_json(path: Path, label: str) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise MergeError(f"invalid {label}: {error}") from error
+
+
+def canonical_bytes(value: object) -> bytes:
+    return (
+        json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+
+
+def validate_request(raw: object) -> dict:
+    value = exact_object(raw, REQUEST_FIELDS, "merge request")
+    if value["schema"] != "spec-work-premerge-operation":
+        raise MergeError("merge request has an unsupported schema")
+    if value["workKind"] not in {"feature", "bug_fix"}:
+        raise MergeError("merge request workKind is invalid")
+    for field in ("workId", "sliceId", "expectedBaseRef"):
+        if not isinstance(value[field], str) or not value[field].strip():
+            raise MergeError(f"merge request {field} must be a non-empty string")
+    if (
+        type(value["expectedPrNumber"]) is not int
+        or value["expectedPrNumber"] < 1
+    ):
+        raise MergeError("merge request expectedPrNumber must be positive")
+    for field in ("expectedHeadSha", "expectedBaseSha"):
+        if not isinstance(value[field], str) or SHA_RE.fullmatch(value[field]) is None:
+            raise MergeError(f"merge request {field} must be a lowercase SHA")
+    if value["mergeMethod"] != "merge":
+        raise MergeError("merge request mergeMethod must be merge")
+    digest = value["policyPreconditionDigest"]
+    if not isinstance(digest, str) or DIGEST_RE.fullmatch(digest) is None:
+        raise MergeError(
+            "merge request policyPreconditionDigest must be a lowercase digest"
+        )
+    if type(value["observationEpoch"]) is not int or value["observationEpoch"] < 1:
+        raise MergeError("merge request observationEpoch must be positive")
+    return value
+
+
+def optional_sha(value: object, field: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or SHA_RE.fullmatch(value) is None:
+        raise MergeError(f"provider result {field} must be null or a lowercase SHA")
+    return value
+
+
+def validate_provider(raw: object, request: dict) -> dict:
+    value = exact_object(raw, PROVIDER_FIELDS, "provider result")
+    if not isinstance(value["provider"], str) or not value["provider"]:
+        raise MergeError("provider result provider must be a non-empty string")
+    if type(value["providerStatus"]) is not int:
+        raise MergeError("provider result providerStatus must be an integer")
+    if type(value["atomicCommitIdentityEnforced"]) is not bool:
+        raise MergeError(
+            "provider result atomicCommitIdentityEnforced must be a boolean"
+        )
+    if value["result"] not in RESULTS:
+        raise MergeError("provider result has an unsupported result")
+    if (
+        value["observedPrNumber"] is not None
+        and (
+            type(value["observedPrNumber"]) is not int
+            or value["observedPrNumber"] < 1
+        )
+    ):
+        raise MergeError("provider result observedPrNumber is invalid")
+    optional_sha(value["observedHeadSha"], "observedHeadSha")
+    optional_sha(value["observedBaseSha"], "observedBaseSha")
+    optional_sha(value["mergeCommitSha"], "mergeCommitSha")
+    parents = value["mergeCommitParents"]
+    if not isinstance(parents, list) or any(
+        not isinstance(parent, str) or SHA_RE.fullmatch(parent) is None
+        for parent in parents
+    ):
+        raise MergeError("provider result mergeCommitParents is invalid")
+
+    result = value["result"]
+    if result == "MERGED":
+        if not value["atomicCommitIdentityEnforced"]:
+            raise MergeError("provider merged without atomic commit identity")
+        if (
+            value["observedPrNumber"] != request["expectedPrNumber"]
+            or value["observedHeadSha"] != request["expectedHeadSha"]
+            or value["observedBaseSha"] != request["expectedBaseSha"]
+        ):
+            raise MergeError("provider merged a drifted PR identity")
+        if value["mergeCommitSha"] is None or parents != [
+            request["expectedBaseSha"],
+            request["expectedHeadSha"],
+        ]:
+            raise MergeError("provider merge commit does not bind expected parents")
+    else:
+        if value["mergeCommitSha"] is not None or parents:
+            raise MergeError("provider no-merge result contains merge evidence")
+        if result == "PR_NUMBER_DRIFT" and (
+            value["observedPrNumber"] == request["expectedPrNumber"]
+        ):
+            raise MergeError("provider PR drift result has no PR drift")
+        if result == "HEAD_DRIFT" and (
+            value["observedHeadSha"] == request["expectedHeadSha"]
+        ):
+            raise MergeError("provider head drift result has no head drift")
+        if result == "BASE_DRIFT_AFTER_CONSUMED_FRESHNESS" and (
+            value["observedBaseSha"] == request["expectedBaseSha"]
+        ):
+            raise MergeError("provider base drift result has no base drift")
+        if result == "ATOMIC_PRECONDITION_UNAVAILABLE" and value[
+            "atomicCommitIdentityEnforced"
+        ]:
+            raise MergeError(
+                "provider commit-identity refusal claims atomic enforcement"
+            )
+    return value
+
+
+def invoke_provider(command: Path, request: dict) -> dict:
+    if not command.is_file() or not os.access(command, os.X_OK):
+        raise MergeError("provider command must be an executable regular file")
+    try:
+        result = subprocess.run(
+            [str(command)],
+            input=canonical_bytes(request).decode("utf-8"),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise MergeError(f"provider command failed: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"exit {result.returncode}"
+        raise MergeError(f"provider command refused execution: {detail}")
+    try:
+        raw = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise MergeError(f"provider command returned invalid JSON: {error}") from error
+    return validate_provider(raw, request)
+
+
+def invoke_reconciliation(
+    command: Path,
+    request: dict,
+    reservation: dict,
+) -> dict | None:
+    if not command.is_file() or not os.access(command, os.X_OK):
+        raise MergeError("reconciliation command must be an executable regular file")
+    recovery_request = {
+        "schema": "spec-work-premerge-reconciliation",
+        "reservation": reservation,
+        "reservationDigest": hashlib.sha256(canonical_bytes(reservation)).hexdigest(),
+    }
+    try:
+        result = subprocess.run(
+            [str(command)],
+            input=canonical_bytes(recovery_request).decode("utf-8"),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise MergeError(f"reconciliation command failed: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"exit {result.returncode}"
+        raise MergeError(f"reconciliation command refused execution: {detail}")
+    try:
+        raw = exact_object(
+            json.loads(result.stdout),
+            RECONCILIATION_FIELDS,
+            "reconciliation result",
+        )
+    except json.JSONDecodeError as error:
+        raise MergeError(
+            f"reconciliation command returned invalid JSON: {error}"
+        ) from error
+    if raw["providerOperationQuiescent"] is not True:
+        raise MergeError("reconciliation did not prove provider-operation quiescence")
+    provider_result = {
+        field: raw[field]
+        for field in PROVIDER_FIELDS
+    }
+    if raw["result"] != "NO_MERGE_SIDE_EFFECT":
+        return validate_provider(provider_result, request)
+    if (
+        not isinstance(raw["provider"], str)
+        or not raw["provider"]
+        or type(raw["providerStatus"]) is not int
+        or raw["atomicCommitIdentityEnforced"] is not True
+        or raw["observedPrNumber"] != request["expectedPrNumber"]
+        or raw["observedHeadSha"] != request["expectedHeadSha"]
+        or raw["observedBaseSha"] != request["expectedBaseSha"]
+        or raw["mergeCommitSha"] is not None
+        or raw["mergeCommitParents"] != []
+    ):
+        raise MergeError(
+            "reconciliation no-side-effect result is not bound to the reserved identity"
+        )
+    return None
+
+
+def fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def executable_digest(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as error:
+        raise MergeError(f"provider command cannot be authenticated: {error}") from error
+
+
+def reservation_value(request: dict, provider_command: Path) -> dict:
+    return {
+        "schema": "spec-work-premerge-reservation",
+        "requestDigest": hashlib.sha256(canonical_bytes(request)).hexdigest(),
+        "workKind": request["workKind"],
+        "workId": request["workId"],
+        "sliceId": request["sliceId"],
+        "expectedPrNumber": request["expectedPrNumber"],
+        "expectedHeadSha": request["expectedHeadSha"],
+        "expectedBaseRef": request["expectedBaseRef"],
+        "expectedBaseSha": request["expectedBaseSha"],
+        "mergeMethod": request["mergeMethod"],
+        "policyPreconditionDigest": request["policyPreconditionDigest"],
+        "observationEpoch": request["observationEpoch"],
+        "providerCommandDigest": executable_digest(provider_command),
+        "result": "PROVIDER_OUTCOME_UNKNOWN",
+    }
+
+
+def reserve_create_only(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise MergeError("merge receipt path already exists") from None
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        fsync_directory(path.parent)
+    except BaseException:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def finalize_reserved(path: Path, reservation: bytes, payload: bytes) -> None:
+    temporary: Path | None = None
+    try:
+        if path.read_bytes() != reservation:
+            raise MergeError("merge reservation changed before finalization")
+        descriptor, raw_temporary = tempfile.mkstemp(
+            dir=path.parent,
+            prefix=f".{path.name}.",
+        )
+        temporary = Path(raw_temporary)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if path.read_bytes() != reservation:
+            raise MergeError("merge reservation changed before finalization")
+        os.replace(temporary, path)
+        temporary = None
+        fsync_directory(path.parent)
+    except OSError as error:
+        raise MergeError(f"merge receipt finalization failed: {error}") from error
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def claim_recovery(path: Path, reservation: bytes) -> BinaryIO:
+    try:
+        stream = path.open("rb")
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        if path.read_bytes() != reservation:
+            stream.close()
+            raise MergeError("merge reservation does not match the recovery request")
+        return stream
+    except OSError as error:
+        raise MergeError(f"merge recovery claim failed: {error}") from error
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(
+        description=(
+            "Use the expected PR to preflight an exact-parent candidate, then "
+            "atomically compare-and-swap the expected base and head; write one "
+            "typed create-only receipt."
+        )
+    )
+    result.add_argument("--request", required=True, type=Path)
+    result.add_argument("--receipt", required=True, type=Path)
+    result.add_argument("--provider-command", required=True, type=Path)
+    result.add_argument("--reconcile-command", type=Path)
+    return result
+
+
+def main() -> int:
+    arguments = parser().parse_args()
+    recovery_stream = None
+    try:
+        request = validate_request(load_json(arguments.request, "merge request"))
+        if (
+            not arguments.provider_command.is_file()
+            or not os.access(arguments.provider_command, os.X_OK)
+        ):
+            raise MergeError("provider command must be an executable regular file")
+        reservation_record = reservation_value(request, arguments.provider_command)
+        provider_command_digest = reservation_record["providerCommandDigest"]
+        reservation = canonical_bytes(reservation_record)
+        reconciliation_command_digest = None
+        if arguments.receipt.exists():
+            if arguments.reconcile_command is None:
+                raise MergeError("merge receipt path already exists")
+            recovery_stream = claim_recovery(arguments.receipt, reservation)
+            reconciliation_command_digest = executable_digest(
+                arguments.reconcile_command
+            )
+            provider = invoke_reconciliation(
+                arguments.reconcile_command,
+                request,
+                reservation_record,
+            )
+            if (
+                executable_digest(arguments.reconcile_command)
+                != reconciliation_command_digest
+            ):
+                raise MergeError("reconciliation command changed during invocation")
+            if provider is None:
+                provider = invoke_provider(arguments.provider_command, request)
+        else:
+            if arguments.reconcile_command is not None:
+                raise MergeError(
+                    "reconciliation requires an existing unknown-outcome reservation"
+                )
+            reserve_create_only(arguments.receipt, reservation)
+            provider = invoke_provider(arguments.provider_command, request)
+        if executable_digest(arguments.provider_command) != provider_command_digest:
+            raise MergeError("provider command changed during invocation")
+        receipt = {
+            "schema": "spec-work-premerge-result",
+            "requestDigest": hashlib.sha256(canonical_bytes(request)).hexdigest(),
+            "workKind": request["workKind"],
+            "workId": request["workId"],
+            "sliceId": request["sliceId"],
+            "operationDigest": hashlib.sha256(
+                canonical_bytes({
+                    "request": request,
+                    "provider": provider["provider"],
+                    "providerCommandDigest": provider_command_digest,
+                    "reconciliationCommandDigest": reconciliation_command_digest,
+                })
+            ).hexdigest(),
+            "providerCommandDigest": provider_command_digest,
+            "reconciliationCommandDigest": reconciliation_command_digest,
+            "expectedPrNumber": request["expectedPrNumber"],
+            "expectedHeadSha": request["expectedHeadSha"],
+            "expectedBaseRef": request["expectedBaseRef"],
+            "expectedBaseSha": request["expectedBaseSha"],
+            "observedPrNumber": provider["observedPrNumber"],
+            "observedHeadSha": provider["observedHeadSha"],
+            "observedBaseSha": provider["observedBaseSha"],
+            "result": provider["result"],
+            "mergeMethod": request["mergeMethod"],
+            "merged": provider["result"] == "MERGED",
+            "mergeCommitSha": provider["mergeCommitSha"],
+            "mergeCommitParents": provider["mergeCommitParents"],
+            "provider": provider["provider"],
+            "providerStatus": provider["providerStatus"],
+            "atomicCommitIdentityEnforced": provider[
+                "atomicCommitIdentityEnforced"
+            ],
+            "policyPreconditionDigest": request["policyPreconditionDigest"],
+            "observationEpoch": request["observationEpoch"],
+        }
+        payload = canonical_bytes(receipt)
+        finalize_reserved(arguments.receipt, reservation, payload)
+        sys.stdout.buffer.write(payload)
+        return 0 if receipt["merged"] else 3
+    except MergeError as error:
+        print(f"merge-pr: {error}", file=sys.stderr)
+        return 2
+    finally:
+        if recovery_stream is not None:
+            recovery_stream.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,310 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "planning-continuation.schema.json",
+  "title": "Spec-work planning continuation receipt",
+  "$comment": "The planner reserves one zero-pass consultation, then may publish one immutable consumed response pass or invalidate it while reserving exactly one derived attempt-2 successor. Revision 3 records the bounded successor response without deleting predecessor evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "revision",
+    "work_kind",
+    "work_id",
+    "work_bundle",
+    "repository",
+    "current_pass_id",
+    "passes",
+    "parent_cursor",
+    "updated_at"
+  ],
+  "properties": {
+    "schema": {"const": "planning-continuation"},
+    "revision": {"enum": [0, 1, 2, 3]},
+    "work_kind": {"enum": ["feature", "bug_fix"]},
+    "work_id": {"type": "string", "minLength": 1},
+    "work_bundle": {"type": "string", "minLength": 1},
+    "repository": {"type": "string", "minLength": 1},
+    "current_pass_id": {"$ref": "#/$defs/digest"},
+    "passes": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/pass"}
+    },
+    "parent_cursor": {
+      "anyOf": [{"type": "null"}, {"$ref": "#/$defs/cursor"}]
+    },
+    "updated_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "gitSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "pass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pass_id",
+        "consultation_id",
+        "repository",
+        "specification_digest",
+        "source_branch",
+        "source_commit",
+        "prompt_digest",
+        "conversation_ref_digest",
+        "conversation_generation_id",
+        "conversation_binding_digest",
+        "conversation_origin_anchor_digest",
+        "invoking_automation_ref_digest",
+        "response_digest",
+        "terminal_candidate_digest",
+        "response_evidence",
+        "response_evidence_digest",
+        "attempt_ordinal",
+        "invalidation",
+        "status"
+      ],
+      "properties": {
+        "pass_id": {"$ref": "#/$defs/digest"},
+        "consultation_id": {"$ref": "#/$defs/digest"},
+        "repository": {"type": "string", "minLength": 1},
+        "specification_digest": {"$ref": "#/$defs/digest"},
+        "source_branch": {"type": "string", "minLength": 1},
+        "source_commit": {"$ref": "#/$defs/gitSha"},
+        "prompt_digest": {"$ref": "#/$defs/digest"},
+        "conversation_ref_digest": {"$ref": "#/$defs/digest"},
+        "conversation_generation_id": {"type": "string", "minLength": 1},
+        "conversation_binding_digest": {"$ref": "#/$defs/digest"},
+        "conversation_origin_anchor_digest": {"$ref": "#/$defs/digest"},
+        "invoking_automation_ref_digest": {"$ref": "#/$defs/digest"},
+        "response_digest": {"$ref": "#/$defs/digest"},
+        "terminal_candidate_digest": {"$ref": "#/$defs/digest"},
+        "response_evidence": {"type": "string", "minLength": 1},
+        "response_evidence_digest": {"$ref": "#/$defs/digest"},
+        "attempt_ordinal": {"enum": [1, 2]},
+        "invalidation": {
+          "anyOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/invalidation"}
+          ]
+        },
+        "status": {"enum": ["consumed", "invalidated"]}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"const": "consumed"}},
+            "required": ["status"]
+          },
+          "then": {"properties": {"invalidation": {"type": "null"}}}
+        },
+        {
+          "if": {
+            "properties": {"status": {"const": "invalidated"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "invalidation": {"$ref": "#/$defs/invalidation"}
+            }
+          }
+        }
+      ]
+    },
+    "invalidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason_code",
+        "validation_digest",
+        "successor_consultation_id"
+      ],
+      "properties": {
+        "reason_code": {
+          "enum": ["semantic_response_unusable"]
+        },
+        "validation_digest": {"$ref": "#/$defs/digest"},
+        "successor_consultation_id": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "expectedSuccessor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempt_ordinal",
+        "consultation_id",
+        "predecessor_pass_id",
+        "receipt_locator_digest"
+      ],
+      "properties": {
+        "attempt_ordinal": {"const": 2},
+        "consultation_id": {"$ref": "#/$defs/digest"},
+        "predecessor_pass_id": {"$ref": "#/$defs/digest"},
+        "receipt_locator_digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "cursor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consultation_id",
+        "stage",
+        "candidate_plan_digest",
+        "blind_receipt_digest",
+        "bundle_revision",
+        "replacement_heartbeat",
+        "expected_successor"
+      ],
+      "properties": {
+        "consultation_id": {"$ref": "#/$defs/digest"},
+        "stage": {
+          "enum": [
+            "resolve_material_findings",
+            "await_invalid_response_successor"
+          ]
+        },
+        "candidate_plan_digest": {"type": "null"},
+        "blind_receipt_digest": {"type": "null"},
+        "bundle_revision": {"type": "integer", "minimum": 0},
+        "replacement_heartbeat": {"type": "null"},
+        "expected_successor": {
+          "anyOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/expectedSuccessor"}
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"revision": {"const": 0}}},
+      "then": {
+        "properties": {
+          "passes": {"maxItems": 0},
+          "parent_cursor": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"revision": {"const": 1}}},
+      "then": {
+        "properties": {
+          "passes": {
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [
+              {
+                "allOf": [
+                  {"$ref": "#/$defs/pass"},
+                  {
+                    "properties": {
+                      "attempt_ordinal": {"const": 1},
+                      "status": {"const": "consumed"},
+                      "invalidation": {"type": "null"}
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "parent_cursor": {
+            "allOf": [
+              {"$ref": "#/$defs/cursor"},
+              {
+                "properties": {
+                  "stage": {"const": "resolve_material_findings"},
+                  "expected_successor": {"type": "null"}
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"revision": {"const": 2}}},
+      "then": {
+        "properties": {
+          "passes": {
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [
+              {
+                "allOf": [
+                  {"$ref": "#/$defs/pass"},
+                  {
+                    "properties": {
+                      "attempt_ordinal": {"const": 1},
+                      "status": {"const": "invalidated"},
+                      "invalidation": {"$ref": "#/$defs/invalidation"}
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "parent_cursor": {
+            "allOf": [
+              {"$ref": "#/$defs/cursor"},
+              {
+                "properties": {
+                  "stage": {"const": "await_invalid_response_successor"},
+                  "expected_successor": {
+                    "$ref": "#/$defs/expectedSuccessor"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"revision": {"const": 3}}},
+      "then": {
+        "properties": {
+          "passes": {
+            "minItems": 2,
+            "maxItems": 2,
+            "prefixItems": [
+              {
+                "allOf": [
+                  {"$ref": "#/$defs/pass"},
+                  {
+                    "properties": {
+                      "attempt_ordinal": {"const": 1},
+                      "status": {"const": "invalidated"},
+                      "invalidation": {"$ref": "#/$defs/invalidation"}
+                    }
+                  }
+                ]
+              },
+              {
+                "allOf": [
+                  {"$ref": "#/$defs/pass"},
+                  {
+                    "properties": {
+                      "attempt_ordinal": {"const": 2},
+                      "status": {"const": "consumed"},
+                      "invalidation": {"type": "null"}
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "parent_cursor": {
+            "allOf": [
+              {"$ref": "#/$defs/cursor"},
+              {
+                "properties": {
+                  "stage": {"const": "resolve_material_findings"},
+                  "expected_successor": {"type": "null"}
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

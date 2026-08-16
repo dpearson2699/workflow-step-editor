@@ -1,0 +1,4 @@
+interface:
+  display_name: "ChatGPT Pro Work Planner"
+  short_description: "Plan work with ChatGPT Pro and GitHub"
+  default_prompt: "Use $chatgpt-pro-feature-planner to plan this work from the active pushed branch and spec-work bundle."

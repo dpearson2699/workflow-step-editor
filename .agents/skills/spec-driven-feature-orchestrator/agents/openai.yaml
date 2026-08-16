@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spec-Driven Feature Orchestrator"
+  short_description: "Plan and ship repository features"
+  default_prompt: "Use $spec-driven-feature-orchestrator to research, specify, plan, implement, review, and deliver this repository feature."

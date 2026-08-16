@@ -1,0 +1,587 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pro-lifecycle.schema.json",
+  "title": "Digest-bound ChatGPT Pro response lifecycle",
+  "$comment": "The runtime additionally proves consultation_id from identity, primary.intent_digest from identity.prompt_digest, one same-send conversation/generation correlation under the receipt revision before wait admission, one fresh task-local wait result per generation carrying that binding, exact captured response bytes, and a deadline exactly 5,400 seconds after submitted_at. The current Browser API supplies no attested receipt that this runtime can authenticate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "revision",
+    "identity",
+    "consultation_id",
+    "lifecycle_state",
+    "automation",
+    "conversation",
+    "send_intents",
+    "response",
+    "wait",
+    "invalidation",
+    "submitted_at",
+    "deadline",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema": {"const": "pro-lifecycle"},
+    "revision": {"type": "integer", "minimum": 0},
+    "identity": {"$ref": "#/$defs/identity"},
+    "consultation_id": {"$ref": "#/$defs/digest"},
+    "lifecycle_state": {
+      "enum": [
+        "prepared",
+        "primary_send_intent",
+        "conversation_bound",
+        "wait_admitted",
+        "manual_resume_required",
+        "response_ready",
+        "response_captured",
+        "response_invalidated"
+      ]
+    },
+    "automation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "mode", "status"],
+      "properties": {
+        "id": {"type": "null"},
+        "mode": {"const": "none"},
+        "status": {"const": "absent"}
+      }
+    },
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "ref_digest",
+        "generation_id",
+        "binding_task_id",
+        "binding_result_digest",
+        "bound_at",
+        "origin_anchor_digest"
+      ],
+      "properties": {
+        "url": {"type": ["string", "null"]},
+        "ref_digest": {
+          "anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]
+        },
+        "generation_id": {"type": ["string", "null"]},
+        "binding_task_id": {"type": ["string", "null"]},
+        "binding_result_digest": {
+          "anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]
+        },
+        "bound_at": {"type": ["string", "null"], "format": "date-time"},
+        "origin_anchor_digest": {
+          "anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]
+        }
+      }
+    },
+    "send_intents": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary"],
+      "properties": {
+        "primary": {"$ref": "#/$defs/primaryIntent"}
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "digest"],
+      "properties": {
+        "artifact": {"type": ["string", "null"]},
+        "digest": {
+          "anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]
+        }
+      }
+    },
+    "wait": {"$ref": "#/$defs/wait"},
+    "invalidation": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/invalidation"}
+      ]
+    },
+    "submitted_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "deadline": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "wait": {
+            "properties": {"generation": {"const": 0}},
+            "required": ["generation"]
+          }
+        },
+        "required": ["wait"]
+      },
+      "then": {
+        "properties": {
+          "wait": {
+            "properties": {
+              "generation": {"const": 0},
+              "task_id": {"type": "null"},
+              "status": {"const": "not_started"},
+              "producer_kind": {"type": "null"},
+              "conversation_binding_digest": {"type": "null"},
+              "conversation_generation_id": {"type": "null"},
+              "observed_at": {"type": "null"},
+              "consumed_result_digests": {"maxItems": 0}
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "wait": {
+            "properties": {
+              "generation": {"type": "integer", "minimum": 1},
+              "task_id": {"type": "string", "minLength": 1},
+              "producer_kind": {
+                "enum": [
+                  "same_task_heartbeat",
+                  "heartbeat_capability_probe",
+                  "manual_resume"
+                ]
+              },
+              "conversation_binding_digest": {"$ref": "#/$defs/digest"},
+              "conversation_generation_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "observed_at": {"type": "string", "format": "date-time"},
+              "consumed_result_digests": {"minItems": 1}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"lifecycle_state": {"const": "prepared"}},
+        "required": ["lifecycle_state"]
+      },
+      "then": {
+        "properties": {
+          "send_intents": {
+            "properties": {
+              "primary": {
+                "properties": {
+                  "intent_digest": {"type": "null"},
+                  "attempted_at": {"type": "null"},
+                  "submission_ref_digest": {"type": "null"},
+                  "committed": {"const": false}
+                }
+              }
+            }
+          },
+          "conversation": {
+            "properties": {
+              "url": {"type": "null"},
+              "ref_digest": {"type": "null"},
+              "generation_id": {"type": "null"},
+              "binding_task_id": {"type": "null"},
+              "binding_result_digest": {"type": "null"},
+              "bound_at": {"type": "null"},
+              "origin_anchor_digest": {"type": "null"}
+            }
+          },
+          "response": {
+            "properties": {
+              "artifact": {"type": "null"},
+              "digest": {"type": "null"}
+            }
+          },
+          "wait": {
+            "properties": {
+              "generation": {"const": 0},
+              "task_id": {"type": "null"},
+              "status": {"const": "not_started"},
+              "producer_kind": {"type": "null"},
+              "conversation_binding_digest": {"type": "null"},
+              "conversation_generation_id": {"type": "null"},
+              "observed_at": {"type": "null"},
+              "consumed_result_digests": {"maxItems": 0}
+            }
+          },
+          "invalidation": {"type": "null"},
+          "submitted_at": {"type": "null"},
+          "deadline": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"lifecycle_state": {"const": "primary_send_intent"}},
+        "required": ["lifecycle_state"]
+      },
+      "then": {
+        "properties": {
+          "send_intents": {
+            "properties": {
+              "primary": {
+                "properties": {
+                  "intent_digest": {"$ref": "#/$defs/digest"},
+                  "attempted_at": {"type": "string", "format": "date-time"},
+                  "submission_ref_digest": {"type": "null"},
+                  "committed": {"const": false}
+                }
+              }
+            }
+          },
+          "conversation": {
+            "properties": {
+              "url": {"type": "null"},
+              "ref_digest": {"type": "null"},
+              "generation_id": {"type": "null"},
+              "binding_task_id": {"type": "null"},
+              "binding_result_digest": {"type": "null"},
+              "bound_at": {"type": "null"},
+              "origin_anchor_digest": {"type": "null"}
+            }
+          },
+          "response": {
+            "properties": {
+              "artifact": {"type": "null"},
+              "digest": {"type": "null"}
+            }
+          },
+          "wait": {
+            "properties": {
+              "generation": {"const": 0},
+              "task_id": {"type": "null"},
+              "status": {"const": "not_started"},
+              "producer_kind": {"type": "null"},
+              "conversation_binding_digest": {"type": "null"},
+              "conversation_generation_id": {"type": "null"},
+              "observed_at": {"type": "null"},
+              "consumed_result_digests": {"maxItems": 0}
+            }
+          },
+          "invalidation": {"type": "null"},
+          "submitted_at": {"type": "string", "format": "date-time"},
+          "deadline": {"type": "string", "format": "date-time"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "lifecycle_state": {
+            "enum": [
+              "conversation_bound",
+              "wait_admitted",
+              "manual_resume_required",
+              "response_ready"
+            ]
+          }
+        },
+        "required": ["lifecycle_state"]
+      },
+      "then": {
+        "properties": {
+          "send_intents": {
+            "properties": {
+              "primary": {
+                "properties": {
+                  "intent_digest": {"$ref": "#/$defs/digest"},
+                  "attempted_at": {"type": "string", "format": "date-time"},
+                  "submission_ref_digest": {"$ref": "#/$defs/digest"},
+                  "committed": {"const": true}
+                }
+              }
+            }
+          },
+          "conversation": {
+            "properties": {
+              "url": {"type": "string", "minLength": 1},
+              "ref_digest": {"$ref": "#/$defs/digest"},
+              "generation_id": {"type": "string", "minLength": 1},
+              "binding_task_id": {"type": "string", "minLength": 1},
+              "binding_result_digest": {"$ref": "#/$defs/digest"},
+              "bound_at": {"type": "string", "format": "date-time"},
+              "origin_anchor_digest": {"$ref": "#/$defs/digest"}
+            }
+          },
+          "response": {
+            "properties": {
+              "artifact": {"type": "null"},
+              "digest": {"type": "null"}
+            }
+          },
+          "invalidation": {"type": "null"},
+          "submitted_at": {"type": "string", "format": "date-time"},
+          "deadline": {"type": "string", "format": "date-time"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"lifecycle_state": {"const": "conversation_bound"}},
+        "required": ["lifecycle_state"]
+      },
+      "then": {
+        "properties": {
+          "wait": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "not_started",
+                  "generation_running",
+                  "manual_resume_observed"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"lifecycle_state": {"const": "wait_admitted"}},
+        "required": ["lifecycle_state"]
+      },
+      "then": {
+        "properties": {
+          "wait": {
+            "properties": {"status": {"const": "heartbeat_registered"}}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"lifecycle_state": {"const": "manual_resume_required"}},
+        "required": ["lifecycle_state"]
+      },
+      "then": {
+        "properties": {
+          "wait": {
+            "properties": {"status": {"const": "manual_resume_required"}}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"lifecycle_state": {"const": "response_ready"}},
+        "required": ["lifecycle_state"]
+      },
+      "then": {
+        "properties": {
+          "wait": {
+            "properties": {"status": {"const": "generation_completed"}}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "lifecycle_state": {
+            "enum": ["response_captured", "response_invalidated"]
+          }
+        },
+        "required": ["lifecycle_state"]
+      },
+      "then": {
+        "properties": {
+          "send_intents": {
+            "properties": {
+              "primary": {
+                "properties": {
+                  "intent_digest": {"$ref": "#/$defs/digest"},
+                  "attempted_at": {"type": "string", "format": "date-time"},
+                  "submission_ref_digest": {"$ref": "#/$defs/digest"},
+                  "committed": {"const": true}
+                }
+              }
+            }
+          },
+          "conversation": {
+            "properties": {
+              "url": {"type": "string", "minLength": 1},
+              "ref_digest": {"$ref": "#/$defs/digest"},
+              "generation_id": {"type": "string", "minLength": 1},
+              "binding_task_id": {"type": "string", "minLength": 1},
+              "binding_result_digest": {"$ref": "#/$defs/digest"},
+              "bound_at": {"type": "string", "format": "date-time"},
+              "origin_anchor_digest": {"$ref": "#/$defs/digest"}
+            }
+          },
+          "response": {
+            "properties": {
+              "artifact": {"type": "string", "minLength": 1},
+              "digest": {"$ref": "#/$defs/digest"}
+            }
+          },
+          "wait": {
+            "properties": {
+              "status": {"const": "generation_completed"}
+            }
+          },
+          "submitted_at": {"type": "string", "format": "date-time"},
+          "deadline": {"type": "string", "format": "date-time"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"lifecycle_state": {"const": "response_captured"}},
+        "required": ["lifecycle_state"]
+      },
+      "then": {"properties": {"invalidation": {"type": "null"}}}
+    },
+    {
+      "if": {
+        "properties": {"lifecycle_state": {"const": "response_invalidated"}},
+        "required": ["lifecycle_state"]
+      },
+      "then": {
+        "properties": {
+          "invalidation": {"$ref": "#/$defs/invalidation"}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "work_kind",
+        "work_id",
+        "work_bundle",
+        "repository",
+        "source_branch",
+        "source_commit",
+        "specification_digest",
+        "prompt_digest",
+        "attempt_ordinal"
+      ],
+      "properties": {
+        "work_kind": {"enum": ["feature", "bug_fix"]},
+        "work_id": {"type": "string", "minLength": 1},
+        "work_bundle": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1},
+        "source_branch": {"type": "string", "minLength": 1},
+        "source_commit": {"$ref": "#/$defs/gitSha"},
+        "specification_digest": {"$ref": "#/$defs/digest"},
+        "prompt_digest": {"$ref": "#/$defs/digest"},
+        "attempt_ordinal": {"enum": [1, 2]}
+      }
+    },
+    "primaryIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_digest",
+        "attempted_at",
+        "submission_ref_digest",
+        "committed"
+      ],
+      "properties": {
+        "intent_digest": {
+          "anyOf": [
+            {"$ref": "#/$defs/digest"},
+            {"type": "null"}
+          ]
+        },
+        "attempted_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "submission_ref_digest": {
+          "anyOf": [
+            {"$ref": "#/$defs/digest"},
+            {"type": "null"}
+          ]
+        },
+        "committed": {"type": "boolean"}
+      }
+    },
+    "wait": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generation",
+        "task_id",
+        "status",
+        "producer_kind",
+        "conversation_binding_digest",
+        "conversation_generation_id",
+        "observed_at",
+        "consumed_result_digests"
+      ],
+      "properties": {
+        "generation": {"type": "integer", "minimum": 0},
+        "task_id": {"type": ["string", "null"]},
+        "status": {
+          "enum": [
+            "not_started",
+            "heartbeat_registered",
+            "generation_running",
+            "generation_completed",
+            "manual_resume_required",
+            "manual_resume_observed"
+          ]
+        },
+        "producer_kind": {
+          "enum": [
+            null,
+            "same_task_heartbeat",
+            "heartbeat_capability_probe",
+            "manual_resume"
+          ]
+        },
+        "conversation_binding_digest": {
+          "anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]
+        },
+        "conversation_generation_id": {"type": ["string", "null"]},
+        "observed_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "consumed_result_digests": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/digest"}
+        }
+      }
+    },
+    "invalidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason_code",
+        "validation_digest",
+        "successor_consultation_id"
+      ],
+      "properties": {
+        "reason_code": {
+          "enum": ["semantic_response_unusable"]
+        },
+        "validation_digest": {"$ref": "#/$defs/digest"},
+        "successor_consultation_id": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

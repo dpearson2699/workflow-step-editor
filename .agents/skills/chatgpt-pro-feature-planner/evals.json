@@ -1,0 +1,233 @@
+{
+  "version": "2.0",
+  "skill": "chatgpt-pro-feature-planner",
+  "content_evals": [
+    {
+      "id": "pushed-feature-branch",
+      "prompt": "Prepare the digest-bound ChatGPT Pro primary from the active feature's pushed branch and semantic bundle.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "runs the deterministic context manifest with live remote verification",
+        "names the exact repository, branch, commit, and required relative paths",
+        "keeps clean committed sources on GitHub rather than uploading duplicates",
+        "prepares one exact prompt whose completed response can be captured only through its receipt-bound lifecycle"
+      ],
+      "anti_behaviors": [
+        "silently queries the default branch",
+        "claims that literal plugin connector text invokes GitHub",
+        "pushes a branch itself or uploads standalone files without an action-time checkpoint"
+      ]
+    },
+    {
+      "id": "orchestrated-autonomous-primary",
+      "prompt": "The spec-feature root pushed its decision-complete checkpoint. Run the digest-bound Pro primary under standing authority.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "requires spec_workflow and digest_bound_standing plus complete generic work and source bindings",
+        "claims one receipt-bound primary send intent without creating a bearer, capability reference, lease digest, or sidecar",
+        "submits exactly once in a verified Pro conversation",
+        "binds the exact same-send conversation and opaque generation under the unreconciled receipt revision before registering any wait, while stating that the Browser exposes no attested receipt the bridge can authenticate",
+        "registers a same-task heartbeat and consumes fresh task-local typed wait results for the current consultation, attempt, generation, and task",
+        "yields only after heartbeat_registered and captures only after generation_completed",
+        "captures the full response Markdown with a same-task typed result binding its digest to the canonical current conversation, committed binding digest, observed generation ID, and unreconciled receipt revision, rejecting a different capture generation or payload without claiming Browser attestation",
+        "publishes one immutable consumed continuation pass and returns record_pro_primary to the parent"
+      ],
+      "anti_behaviors": [
+        "opens Finder, Chrome, or Computer Use",
+        "polls the Browser from the root while generation is running",
+        "presses Answer now, Stop answering, or an equivalent early-stop control without exact user authorization for the current conversation",
+        "claims receipt revision CAS is a coordinator-only or model-inaccessible capability boundary",
+        "stores a conversation URL without the live capture CAS",
+        "falls back to another primary planner"
+      ]
+    },
+    {
+      "id": "typed-manual-resume",
+      "prompt": "The Pro prompt was sent, but the current task cannot register its heartbeat. Resume safely when the operator returns.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "consumes a typed manual_resume_required capability-probe result and claims neither yield nor future wake",
+        "reports manual_resume_required without Browser polling or capture",
+        "requires manual_resume_observed from the same task and current attempt and generation",
+        "requires a subsequent current manual generation_completed result before one inspection and capture"
+      ],
+      "anti_behaviors": [
+        "treats a later root turn as completed-generation evidence",
+        "manufactures a heartbeat receipt",
+        "captures directly from manual_resume_required",
+        "reopens a reconciled send intent"
+      ]
+    },
+    {
+      "id": "missing-bound-tab-recovery",
+      "prompt": "The admitted Pro heartbeat woke this same task, but Browser cleanup removed the bound tab and the Browser now lists zero tabs. Continue the exact planning generation.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "keeps the persistent in-app Browser binding and discards only the missing tab binding",
+        "reopens the exact receipt-bound canonical conversation URL",
+        "verifies the committed conversation and generation before continuing the same generation",
+        "treats exact-conversation reopening as producer reacquisition rather than conversation substitution",
+        "continues automatically without manual recovery"
+      ],
+      "anti_behaviors": [
+        "reports manual_resume_required solely because the tab handle disappeared",
+        "records BLK-PRO-UNCERTAIN-SEND or reconcile-wake solely for tab cleanup",
+        "resends the planning prompt or opens a different conversation",
+        "asks the user to reopen the planning tab"
+      ]
+    },
+    {
+      "id": "completed-heartbeat-parent-handoff",
+      "prompt": "The current Pro heartbeat reports generation_completed. Reconcile the canonical continuation and keep the active spec-work job moving.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "treats generation completion as the end of waiting rather than whole-workflow completion",
+        "reloads canonical state and the continuation cursor in the same root trajectory",
+        "captures and classifies current unconsumed evidence, then executes the returned parent_action",
+        "runs claim_successor_send for a prepared attempt 2 or record_pro_primary for a valid response before the final heartbeat envelope",
+        "yields when a prepared successor records a fresh heartbeat_registered result",
+        "executes a pending canonical parent_action or continuation cursor after stale or duplicate terminal evidence",
+        "continues until a genuine user, blocker, manual-resume, or workflow-terminal boundary"
+      ],
+      "anti_behaviors": [
+        "returns a quiet terminal response merely because the wait generation completed",
+        "claims the workflow is complete while canonical state remains nonterminal",
+        "requires another user message to begin an already prepared successor"
+      ]
+    },
+    {
+      "id": "invalid-response-successor",
+      "prompt": "The captured attempt-1 Pro response contains useful repository-grounded planning with an introductory paragraph, tables, and noncanonical heading organization. Recover proportionally; also explain what happens when the root determines a response has no substantive planning analysis, and when its derived attempt-2 successor is claimed but reconciled before any submission is committed.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "classifies useful planning content as valid regardless of presentation and returns parent_action record_pro_primary",
+        "preserves the immutable original response and unchanged consumed continuation pass",
+        "records ordinary clean evidence from the original artifact and digest without a derived view, correction receipt, or normalization annotation",
+        "creates no successor, send intent, Browser send, resend, or stage restart for valid",
+        "uses --semantically-unusable only after a root-owned content decision and reserves one derived attempt-2 consultation for restart_or_fail_closed",
+        "claims, waits for, and captures an authorized attempt 2 through the ordinary public commands",
+        "after explicit BLK-PRO-UNCERTAIN-SEND clearance, replaces only the same-locator reconciled unbound successor as attempt 2 while preserving attempt-1 evidence",
+        "returns BLK-PRO-INVALID-RESPONSE-EXHAUSTED without a third attempt when attempt 2 is invalid"
+      ],
+      "anti_behaviors": [
+        "overwrites or deletes attempt-1 evidence",
+        "reuses the reconciled attempt-1 send intent",
+        "invalidates a presentation variant or advances its continuation",
+        "accepts a caller-selected successor locator or substituted conversation",
+        "replaces a live, bound, committed, captured, or uncleared attempt-2 successor",
+        "creates an unbounded attempt array"
+      ]
+    },
+    {
+      "id": "response-contract-admission",
+      "prompt": "Admit a useful completed Pro response with a preamble, extra headings, and a table, then continue planning even though it also contains a GitHub-access statement.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "treats requested headings as readability guidance rather than an admission protocol",
+        "accepts preambles, epilogues, extra or mixed-depth headings, tables, and equivalent organization when the root judges the content useful",
+        "preserves the immutable response while allowing the root to synthesize its content into canonical planning artifacts",
+        "validates the original immutable response, digest, manifest, repository, branch, and source-commit identity before disposition",
+        "treats source-access prose as planning input rather than automatic retry authority",
+        "verifies material cited paths and repository claims against the exact checkout and source commit before plan adoption",
+        "excludes or explicitly annotates unsupported claims and uses semantic_response_unusable only when the verified remainder cannot support planning"
+      ],
+      "anti_behaviors": [
+        "uses Markdown presentation to reserve a retry or create presentation-correction state",
+        "matches natural-language source-access phrases to invalidate the response or reserve attempt 2",
+        "adopts a material repository claim without exact-checkout verification",
+        "changes the immutable producer response while reconciling unsupported claims",
+        "treats provenance bookkeeping alone as semantic_response_unusable"
+      ]
+    },
+    {
+      "id": "source-access-coordinator-recovery",
+      "prompt": "The captured Pro primary was invalidated because it could not retrieve the required source files. The exact local source inventory, specification digest, source commit, and planning scope are verified. Continue without another Pro send.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "preserves the immutable invalidated primary and exact revision-2 continuation",
+        "does not claim or send the reserved successor",
+        "has the coordinator synthesize the exact locally verified Plan",
+        "requires a fresh CLEAN blind-completeness receipt",
+        "uses source_access_recovery so adopt-plan records the canonical coordinator exception without renewed user authorization"
+      ],
+      "anti_behaviors": [
+        "resends the primary or claims the reserved successor",
+        "requires a new user authorization for source_access_recovery",
+        "uses captureless_pro_recovery for the invalidated-primary trajectory",
+        "manufactures active response evidence or bypasses the blind audit"
+      ]
+    },
+    {
+      "id": "applicability-target-reconciliation",
+      "prompt": "The typed applicability receipt is otherwise exact, but toSourceCommit is stale. A fresh source observation says local HEAD and the live verified remote branch head are one commit. Continue proportionally.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "strictly validates every original receipt field and considers reconciliation only when changing toSourceCommit alone produces a valid receipt",
+        "requires active immutable evidence, checked-out HEAD, one live verified remote branch head, current approved source bytes, recomputed changed paths, evidence anchors, and a monotonic assessment epoch to prove one candidate",
+        "preserves the original typed receipt and every semantic field while publishing a distinct canonical effective receipt plus spec-work-artifact-correction lineage",
+        "treats equal immutable publication as idempotent and conflicting or unbound artifacts as non-authoritative",
+        "avoids one fresh Pro primary and one blind audit without sending, resending, replacing a task, or restarting a stage"
+      ],
+      "anti_behaviors": [
+        "reconciles another applicability field or chooses among multiple candidates",
+        "trusts a remote-tracking ref or a manifest that is not live verified",
+        "rewrites the original receipt",
+        "starts another Pro consultation or blind audit"
+      ]
+    },
+    {
+      "id": "transient-to-canonical-primary-binding",
+      "prompt": "The digest-bound Pro prompt was submitted once, but exact response identity is unavailable before capture. Reconcile safely without sending again.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "uses the stateless normalize-conversation-url oracle only to distinguish canonical ChatGPT URL syntax from malformed or spoofed input",
+        "treats unavailable exact response identity as fail-closed even though the receipt retains the send intent",
+        "uses wake-free reconciliation with the exact receipt, bundle state, and continuation",
+        "atomically reconciles the active send revision once and returns BLK-PRO-UNCERTAIN-SEND",
+        "returns Browser, send, resend, navigation, automation, and conversation-substitution authority false",
+        "repeated wake-free reconciliation is byte-stable and does not advance revision"
+      ],
+      "anti_behaviors": [
+        "persists or consumes a normalized URL as lifecycle or planning evidence",
+        "fabricates response identity from consultation, prompt digest, or attempted time",
+        "uses a fixed delay or searches for a replacement conversation",
+        "resubmits the prompt or binds any transient or canonical candidate"
+      ]
+    }
+  ],
+  "trigger_evals": {
+    "train": {
+      "should_trigger": [
+        "Use ChatGPT Pro to prepare the active feature plan from its pushed branch.",
+        "Run the digest-bound Pro primary for this accepted specification.",
+        "The Pro wait heartbeat is unavailable; record a typed manual resume.",
+        "The captured Pro answer is missing a canonical planning section; reserve its bounded successor.",
+        "Use the integrated Browser for the one authorized primary send.",
+        "Capture the completed Pro planning response into the canonical continuation."
+      ],
+      "should_not_trigger": [
+        "Implement PR-01 from its approved slice plan.",
+        "Debug the malformed integration value at runtime.",
+        "Review this open pull request for merge readiness.",
+        "Push my current branch to GitHub.",
+        "Upload these screenshots to an issue.",
+        "Explain what ChatGPT Pro is."
+      ]
+    },
+    "validation": {
+      "should_trigger": [
+        "Prepare a branch-grounded ChatGPT prompt without installing Chrome.",
+        "One Pro prompt was sent but exact response identity is unavailable; reconcile it.",
+        "Reject this Pro response because its required H2 contract is incomplete.",
+        "Resume Pro planning only after a current typed wait result.",
+        "Capture the completed response from the same canonical Pro conversation."
+      ],
+      "should_not_trigger": [
+        "Search GitHub locally for the owner of this symbol.",
+        "Run the spec-driven feature workflow from Discuss through shipping.",
+        "Fix failing CI checks on PR 203.",
+        "Use Chrome to open ChatGPT."
+      ]
+    }
+  }
+}

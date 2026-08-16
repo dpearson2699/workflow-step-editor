@@ -1,0 +1,1743 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "spec-workflow-state.schema.json",
+  "$comment": "Mandatory maintainer parity interprets integer as a JSON-decoded Python value whose exact type is int; floats such as 1.0 and booleans are rejected before runtime mutations. The only helper-only structural exceptions are authorization composite uniqueness, canonical replacement-predicate order, parallel-pair strict sortedness, parallel-pair composite uniqueness, task_worktree canonical/symlink-resolved path validation, slice revision-history contiguity, and revision-history length equality with revision_epoch - 1; each has an explicit schema-parity counterexample.",
+  "title": "Spec-work workflow state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "work_kind",
+    "work_id",
+    "phase",
+    "revision",
+    "observation_epoch_high_water",
+    "artifacts",
+    "planning",
+    "observed_main_sha",
+    "task_authorization",
+    "parallel_assessments",
+    "slices",
+    "acceptance",
+    "completion_binding",
+    "completion_specification_digest",
+    "blockers",
+    "updated_at"
+  ],
+  "properties": {
+    "schema": {
+      "const": "spec-workflow-state"
+    },
+    "work_kind": {
+      "enum": ["feature", "bug_fix"]
+    },
+    "work_id": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "phase": {
+      "enum": ["discuss", "plan", "delivery", "complete"]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "observation_epoch_high_water": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "observed_main_sha": {"$ref": "#/$defs/optionalSha"},
+    "planning": {"$ref": "#/$defs/planning"},
+    "task_authorization": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["primary_digest", "entries"],
+          "properties": {
+            "primary_digest": {"$ref": "#/$defs/digest"},
+            "entries": {
+              "$comment": "helper-only exception 1 of 7: the runtime enforces unique composite (slice_id, role) authorization keys; Draft 2020-12 uniqueItems cannot express projected-key uniqueness without changing this compact representation.",
+              "type": "array",
+              "minItems": 1,
+              "items": {"$ref": "#/$defs/taskAuthorizationEntry"}
+            }
+          }
+        }
+      ]
+    },
+    "parallel_assessments": {
+      "$comment": "Helper-only exceptions 3 and 4 of 7: the runtime requires strict left_slice < right_slice ordering and unique composite (left_slice, right_slice) keys; Draft 2020-12 cannot express those cross-field/order constraints in this compact representation.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/parallelAssessment"}
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "interview", "decisions", "acceptance", "status"],
+      "properties": {
+        "primary": {"$ref": "#/$defs/markdownPath"},
+        "interview": {"$ref": "#/$defs/markdownPath"},
+        "decisions": {"$ref": "#/$defs/markdownPath"},
+        "acceptance": {"$ref": "#/$defs/markdownPath"},
+        "status": {"$ref": "#/$defs/markdownPath"}
+      }
+    },
+    "slices": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/slice"}
+    },
+    "acceptance": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/acceptanceId"},
+      "additionalProperties": {"$ref": "#/$defs/acceptanceState"}
+    },
+    "completion_binding": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/completionBinding"}
+      ]
+    },
+    "completion_specification_digest": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/digest"}
+      ]
+    },
+    "blockers": {
+      "$comment": "Canonical blockers use BLK-NNN except for the two closed semantic Pro handoffs BLK-PRO-UNCERTAIN-SEND and BLK-PRO-INVALID-RESPONSE-EXHAUSTED. No generic BLK-PRO namespace is admitted.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {"type": "string", "pattern": "^BLK-[0-9]{3}$"},
+          {
+            "enum": [
+              "BLK-PRO-UNCERTAIN-SEND",
+              "BLK-PRO-INVALID-RESPONSE-EXHAUSTED"
+            ]
+          }
+        ]
+      },
+      "uniqueItems": true
+    },
+    "updated_at": {
+      "$comment": "The schema carries lexical and date-time annotations. Mandatory maintainer parity reuses the runtime's explicit RFC3339 predicate: Gregorian year 0001-9999, hour 00-23, minute/second 00-59, offset hour 00-23 and minute 00-59, lowercase t/z and fractional seconds accepted, leap seconds rejected. Arbitrary external validators may treat format as annotation-only or vary by interpreter.",
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:[Zz]|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        {"type": "null"}
+      ]
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*\\u0000)(?!.*//)(?!\\.{1,2}(?:/|$))(?!.*\\/\\.{1,2}(?:/|$))(?!.*\\/$).+$"
+    },
+    "repoPath": {
+      "allOf": [
+        {"$ref": "#/$defs/relativePath"},
+        {"pattern": "^(?!.*[\\\\*?\\[\\]{}!]).+$"}
+      ]
+    },
+    "markdownPath": {
+      "allOf": [
+        {"$ref": "#/$defs/relativePath"},
+        {"pattern": "\\.md$"}
+      ]
+    },
+    "jsonPath": {
+      "allOf": [
+        {"$ref": "#/$defs/relativePath"},
+        {"pattern": "\\.json$"}
+      ]
+    },
+    "sliceId": {
+      "type": "string",
+      "pattern": "^PR-[0-9]{2,}$"
+    },
+    "snapshotAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sliceId", "snapshotCommit", "snapshotPath", "classification",
+        "manifestDigest"
+      ],
+      "properties": {
+        "sliceId": {"$ref": "#/$defs/sliceId"},
+        "snapshotCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "snapshotPath": {"$ref": "#/$defs/repoPath"},
+        "classification": {"enum": ["intermediate", "final"]},
+        "manifestDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "acceptanceId": {
+      "type": "string",
+      "pattern": "^AC-[0-9]{3}$"
+    },
+    "optionalString": {
+      "oneOf": [
+        {"type": "string", "minLength": 1, "maxLength": 240},
+        {"type": "null"}
+      ]
+    },
+    "optionalSha": {
+      "oneOf": [
+        {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        {"type": "null"}
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "optionalDigest": {
+      "oneOf": [
+        {"$ref": "#/$defs/digest"},
+        {"type": "null"}
+      ]
+    },
+    "optionalPath": {
+      "oneOf": [
+        {"$ref": "#/$defs/relativePath"},
+        {"type": "null"}
+      ]
+    },
+    "optionalJsonPath": {
+      "oneOf": [
+        {"$ref": "#/$defs/jsonPath"},
+        {"type": "null"}
+      ]
+    },
+    "optionalMarkdownPath": {
+      "oneOf": [
+        {"$ref": "#/$defs/markdownPath"},
+        {"type": "null"}
+      ]
+    },
+    "planning": {
+      "$comment": "The runtime additionally enforces latest-response selection, digest/commit chain continuity, globally monotonic unique epochs, and accepted binding equality after replaying applicability history.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "current_plan_digest", "current_specification_digest", "current_source_commit",
+        "active_response_digest", "pro_primary_waiver", "blind_requirement",
+        "blind_completeness", "evidence"
+      ],
+      "properties": {
+        "current_plan_digest": {"$ref": "#/$defs/optionalDigest"},
+        "current_specification_digest": {"$ref": "#/$defs/optionalDigest"},
+        "current_source_commit": {"$ref": "#/$defs/optionalSha"},
+        "active_response_digest": {"$ref": "#/$defs/optionalDigest"},
+        "pro_primary_waiver": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {"disposition": {"const": "fresh_primary"}},
+                    "required": ["disposition"]
+                  },
+                  "then": {
+                    "properties": {
+                      "active_response_digest": {"$ref": "#/$defs/digest"},
+                      "continuation_digest": {"type": "null"}
+                    }
+                  },
+                  "else": {
+                    "properties": {
+                      "active_response_digest": {"type": "null"},
+                      "continuation_digest": {"$ref": "#/$defs/digest"}
+                    }
+                  }
+                }
+              ],
+              "required": [
+                "reason", "disposition", "active_response_digest",
+                "specification_digest", "source_commit", "plan_digest",
+                "blind_receipt_digest", "continuation_digest"
+              ],
+              "properties": {
+                "reason": {
+                  "type": "string", "minLength": 1, "maxLength": 500,
+                  "pattern": "\\S"
+                },
+                "disposition": {
+                  "enum": [
+                    "fresh_primary", "captureless_pro_recovery",
+                    "source_access_recovery"
+                  ]
+                },
+                "active_response_digest": {"$ref": "#/$defs/optionalDigest"},
+                "specification_digest": {"$ref": "#/$defs/digest"},
+                "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                "plan_digest": {"$ref": "#/$defs/digest"},
+                "blind_receipt_digest": {"$ref": "#/$defs/digest"},
+                "continuation_digest": {"$ref": "#/$defs/optionalDigest"}
+              }
+            }
+          ]
+        },
+        "blind_requirement": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["requirement", "plan_digest"],
+              "properties": {
+                "requirement": {
+                  "enum": [
+                    "not_required_exact_pro_plan",
+                    "required_missing_plan_fields",
+                    "required_unresolved_pro_ambiguity",
+                    "required_multi_slice_reconciliation",
+                    "required_local_plan_recovery",
+                    "required_user_requested"
+                  ]
+                },
+                "plan_digest": {"$ref": "#/$defs/digest"}
+              }
+            },
+            {"type": "null"}
+          ]
+        },
+        "blind_completeness": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "allOf": [
+                {"$ref": "#/$defs/proofBinding"},
+                {
+                  "properties": {
+                    "receipt": {"$ref": "#/$defs/jsonPath"}
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/proEvidence"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"current_specification_digest": {"type": "null"}}
+          },
+          "then": {
+            "properties": {
+              "current_source_commit": {"type": "null"},
+              "evidence": {"maxItems": 0}
+            }
+          },
+          "else": {
+            "properties": {
+              "current_source_commit": {"type": "string"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"evidence": {"maxItems": 0}}},
+          "then": {"properties": {"active_response_digest": {"type": "null"}}},
+          "else": {
+            "properties": {
+              "active_response_digest": {"$ref": "#/$defs/digest"}
+            }
+          }
+        }
+      ]
+    },
+    "proEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "response_digest", "answer_artifact", "generated_for_digest",
+        "accepted_for_digest", "repository", "source_branch",
+        "generated_source_commit", "accepted_source_commit", "manifest_artifact",
+        "manifest_artifact_digest", "manifest_digest",
+        "contract_disposition", "annotations", "repair_artifact",
+        "repair_digest", "applicability"
+      ],
+      "properties": {
+        "response_digest": {
+          "$ref": "#/$defs/digest",
+          "description": "Exact response-byte hash; values may repeat because evidence array order identifies occurrences."
+        },
+        "answer_artifact": {"$ref": "#/$defs/markdownPath"},
+        "generated_for_digest": {"$ref": "#/$defs/digest"},
+        "accepted_for_digest": {"$ref": "#/$defs/digest"},
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "source_branch": {"type": "string", "minLength": 1, "maxLength": 240},
+        "generated_source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "accepted_source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "manifest_artifact": {"$ref": "#/$defs/jsonPath"},
+        "manifest_artifact_digest": {"$ref": "#/$defs/digest"},
+        "manifest_digest": {"$ref": "#/$defs/digest"},
+        "contract_disposition": {
+          "enum": [
+            "clean", "accepted_with_annotations", "repaired_addendum",
+            "repaired_replacement"
+          ]
+        },
+        "annotations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 500}
+        },
+        "repair_artifact": {"$ref": "#/$defs/optionalMarkdownPath"},
+        "repair_digest": {"$ref": "#/$defs/optionalDigest"},
+        "applicability": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/proApplicability"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"contract_disposition": {"const": "clean"}}},
+          "then": {
+            "properties": {
+              "annotations": {"maxItems": 0},
+              "repair_artifact": {"type": "null"},
+              "repair_digest": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "contract_disposition": {"const": "accepted_with_annotations"}
+            }
+          },
+          "then": {
+            "properties": {
+              "annotations": {"minItems": 1},
+              "repair_artifact": {"type": "null"},
+              "repair_digest": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "contract_disposition": {
+                "enum": ["repaired_addendum", "repaired_replacement"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "annotations": {"minItems": 1},
+              "repair_artifact": {"$ref": "#/$defs/markdownPath"},
+              "repair_digest": {"$ref": "#/$defs/digest"}
+            }
+          }
+        }
+      ]
+    },
+    "proApplicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from_digest", "to_digest", "from_source_commit", "to_source_commit",
+        "classification", "changed_paths", "recommendations_changed",
+        "implementation_slices_changed", "validation_result", "evidence_anchors",
+        "receipt", "receipt_digest", "original_receipt",
+        "original_receipt_digest", "correction_receipt",
+        "correction_receipt_digest", "epoch"
+      ],
+      "properties": {
+        "from_digest": {"$ref": "#/$defs/digest"},
+        "to_digest": {"$ref": "#/$defs/digest"},
+        "from_source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "to_source_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "classification": {
+          "enum": ["material", "non_material", "uncertain"]
+        },
+        "changed_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/repoPath"}
+        },
+        "recommendations_changed": {"type": "boolean"},
+        "implementation_slices_changed": {"type": "boolean"},
+        "validation_result": {
+          "enum": ["prior_evidence_applicable", "fresh_primary_required"]
+        },
+        "evidence_anchors": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/repoPath"}
+        },
+        "receipt": {"$ref": "#/$defs/jsonPath"},
+        "receipt_digest": {"$ref": "#/$defs/digest"},
+        "original_receipt": {
+          "oneOf": [
+            {"$ref": "#/$defs/jsonPath"},
+            {"type": "null"}
+          ]
+        },
+        "original_receipt_digest": {"$ref": "#/$defs/optionalDigest"},
+        "correction_receipt": {
+          "oneOf": [
+            {"$ref": "#/$defs/jsonPath"},
+            {"type": "null"}
+          ]
+        },
+        "correction_receipt_digest": {"$ref": "#/$defs/optionalDigest"},
+        "epoch": {"type": "integer", "minimum": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"classification": {"const": "non_material"}}},
+          "then": {
+            "properties": {
+              "recommendations_changed": {"const": false},
+              "implementation_slices_changed": {"const": false},
+              "validation_result": {"const": "prior_evidence_applicable"}
+            }
+          },
+          "else": {
+            "properties": {
+              "validation_result": {"const": "fresh_primary_required"}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "correction_receipt": {"type": "string"}
+            }
+          },
+          "then": {
+            "properties": {
+              "original_receipt": {"$ref": "#/$defs/jsonPath"},
+              "original_receipt_digest": {"$ref": "#/$defs/digest"},
+              "correction_receipt_digest": {"$ref": "#/$defs/digest"}
+            }
+          },
+          "else": {
+            "properties": {
+              "original_receipt": {"type": "null"},
+              "original_receipt_digest": {"type": "null"},
+              "correction_receipt_digest": {"type": "null"}
+            }
+          }
+        }
+      ]
+    },
+    "proofBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "receipt_digest", "epoch"],
+      "properties": {
+        "receipt": {"$ref": "#/$defs/relativePath"},
+        "receipt_digest": {"$ref": "#/$defs/digest"},
+        "epoch": {"type": "integer", "minimum": 1}
+      }
+    },
+    "terminalFreshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt", "digest", "epoch", "review_receipt", "observed_main_sha"
+      ],
+      "properties": {
+        "receipt": {"$ref": "#/$defs/jsonPath"},
+        "digest": {"$ref": "#/$defs/digest"},
+        "epoch": {"type": "integer", "minimum": 1},
+        "review_receipt": {"$ref": "#/$defs/relativePath"},
+        "observed_main_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "premergeDriftBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "digest", "epoch"],
+      "properties": {
+        "receipt": {"$ref": "#/$defs/jsonPath"},
+        "digest": {"$ref": "#/$defs/digest"},
+        "epoch": {"type": "integer", "minimum": 1}
+      }
+    },
+    "optionalPositiveInteger": {
+      "oneOf": [
+        {"type": "integer", "minimum": 1},
+        {"type": "null"}
+      ]
+    },
+    "replacementLineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pr", "start_sha"],
+      "properties": {
+        "pr": {"type": "integer", "minimum": 1},
+        "start_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "headAdoptionTerminalLineageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "digest", "epoch", "result", "review_receipt"],
+      "properties": {
+        "receipt": {"$ref": "#/$defs/jsonPath"},
+        "digest": {"$ref": "#/$defs/digest"},
+        "epoch": {"type": "integer", "minimum": 1},
+        "result": {"enum": ["BLOCKED", "CLEAN"]},
+        "review_receipt": {"$ref": "#/$defs/optionalPath"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"result": {"const": "CLEAN"}}},
+          "then": {"properties": {"review_receipt": {"$ref": "#/$defs/relativePath"}}},
+          "else": {"properties": {"review_receipt": {"type": "null"}}}
+        }
+      ]
+    },
+    "sliceRevision": {
+      "oneOf": [
+        {"$ref": "#/$defs/postPrSliceRevision"},
+        {"$ref": "#/$defs/prePrSliceRevision"},
+        {"$ref": "#/$defs/prePrPrerequisiteResumeRevision"}
+      ]
+    },
+    "postPrSliceRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision_epoch", "plan_checkpoint_sha", "authorization_digest",
+        "pr", "head_sha", "base_ref", "base_sha",
+        "implementation_receipt_digest", "review_receipt_digest",
+        "review_terminal_receipt", "review_terminal_digest",
+        "head_adoption_receipt", "head_adoption_digest", "head_adoption_epoch",
+        "head_adoption_terminal_lineage",
+        "final_ui_issue_receipt", "final_ui_issue_receipt_digest",
+        "final_ui_review_receipt",
+        "owned_paths",
+        "reauthorization_disposition", "specification_digest",
+        "acceptance_digest", "added_owned_paths",
+        "required_by_intent_acceptance_id", "reauthorization_digest"
+      ],
+      "properties": {
+        "revision_epoch": {"type": "integer", "minimum": 1},
+        "plan_checkpoint_sha": {"$ref": "#/$defs/optionalSha"},
+        "authorization_digest": {"$ref": "#/$defs/optionalDigest"},
+        "pr": {
+          "oneOf": [
+            {"type": "integer", "minimum": 1},
+            {"type": "null"}
+          ]
+        },
+        "head_sha": {"$ref": "#/$defs/optionalSha"},
+        "base_ref": {"$ref": "#/$defs/optionalString"},
+        "base_sha": {"$ref": "#/$defs/optionalSha"},
+        "implementation_receipt_digest": {"$ref": "#/$defs/optionalDigest"},
+        "review_receipt_digest": {"$ref": "#/$defs/optionalDigest"},
+        "review_terminal_receipt": {
+          "oneOf": [
+            {"$ref": "#/$defs/jsonPath"},
+            {"type": "null"}
+          ]
+        },
+        "review_terminal_digest": {"$ref": "#/$defs/optionalDigest"},
+        "head_adoption_receipt": {"$ref": "#/$defs/optionalPath"},
+        "head_adoption_digest": {"$ref": "#/$defs/optionalDigest"},
+        "head_adoption_epoch": {"$ref": "#/$defs/optionalPositiveInteger"},
+        "head_adoption_terminal_lineage": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/headAdoptionTerminalLineageEntry"}
+        },
+        "final_ui_issue_receipt": {"$ref": "#/$defs/optionalPath"},
+        "final_ui_issue_receipt_digest": {"$ref": "#/$defs/optionalDigest"},
+        "final_ui_review_receipt": {"$ref": "#/$defs/optionalPath"},
+        "owned_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/repoPath"},
+          "uniqueItems": true
+        },
+        "reauthorization_disposition": {
+          "enum": [
+            "fresh_pro_plan",
+            "required_by_intent_scope_expansion",
+            "final_ui_checkpoint_issue"
+          ]
+        },
+        "specification_digest": {"$ref": "#/$defs/digest"},
+        "acceptance_digest": {"$ref": "#/$defs/digest"},
+        "added_owned_paths": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/repoPath"},
+          "uniqueItems": true
+        },
+        "required_by_intent_acceptance_id": {
+          "oneOf": [
+            {"$ref": "#/$defs/acceptanceId"},
+            {"type": "null"}
+          ]
+        },
+        "reauthorization_digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "prePrSliceRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision_epoch", "plan_checkpoint_sha", "authorization_digest",
+        "pr", "head_sha", "base_ref", "base_sha",
+        "implementation_receipt_digest", "implementation_terminal_receipt",
+        "implementation_terminal_digest", "pre_pr_observation_receipt",
+        "pre_pr_observation_digest", "pre_pr_observation_epoch", "owned_paths",
+        "reauthorization_disposition", "specification_digest",
+        "acceptance_digest", "added_owned_paths",
+        "scope_expansion_acceptance_id", "reauthorization_digest"
+      ],
+      "properties": {
+        "revision_epoch": {"type": "integer", "minimum": 1},
+        "plan_checkpoint_sha": {"$ref": "#/$defs/optionalSha"},
+        "authorization_digest": {"$ref": "#/$defs/optionalDigest"},
+        "pr": {"type": "null"},
+        "head_sha": {"type": "null"},
+        "base_ref": {"$ref": "#/$defs/optionalString"},
+        "base_sha": {"$ref": "#/$defs/optionalSha"},
+        "implementation_receipt_digest": {"$ref": "#/$defs/digest"},
+        "implementation_terminal_receipt": {"$ref": "#/$defs/jsonPath"},
+        "implementation_terminal_digest": {"$ref": "#/$defs/digest"},
+        "pre_pr_observation_receipt": {"$ref": "#/$defs/jsonPath"},
+        "pre_pr_observation_digest": {"$ref": "#/$defs/digest"},
+        "pre_pr_observation_epoch": {"type": "integer", "minimum": 1},
+        "owned_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/repoPath"},
+          "uniqueItems": true
+        },
+        "reauthorization_disposition": {
+          "enum": [
+            "coordinator_scope_expansion",
+            "pre_pr_scope_expansion"
+          ]
+        },
+        "specification_digest": {"$ref": "#/$defs/digest"},
+        "acceptance_digest": {"$ref": "#/$defs/digest"},
+        "added_owned_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/repoPath"},
+          "uniqueItems": true
+        },
+        "scope_expansion_acceptance_id": {"$ref": "#/$defs/acceptanceId"},
+        "reauthorization_digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "prePrPrerequisiteResumeRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision_epoch", "plan_checkpoint_sha", "plan_digest",
+        "authorization_digest", "pr", "head_sha", "base_ref", "base_sha",
+        "required_base_sha", "implementation_receipt_digest",
+        "implementation_terminal_receipt", "implementation_terminal_digest",
+        "pre_pr_observation_receipt", "pre_pr_observation_digest",
+        "pre_pr_observation_epoch", "owned_paths",
+        "reauthorization_disposition", "specification_digest",
+        "acceptance_digest", "prerequisite_fingerprint",
+        "prerequisite_delivery_receipt", "prerequisite_delivery_digest",
+        "prerequisite_merge_sha", "reauthorization_digest"
+      ],
+      "properties": {
+        "revision_epoch": {"type": "integer", "minimum": 1},
+        "plan_checkpoint_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "plan_digest": {"$ref": "#/$defs/digest"},
+        "authorization_digest": {"$ref": "#/$defs/digest"},
+        "pr": {"type": "null"},
+        "head_sha": {"type": "null"},
+        "base_ref": {"type": "string", "minLength": 1},
+        "base_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "required_base_sha": {
+          "$comment": "Runtime validation requires required_base_sha to differ from base_sha; Draft 2020-12 cannot compare sibling string values.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "implementation_receipt_digest": {"$ref": "#/$defs/digest"},
+        "implementation_terminal_receipt": {"$ref": "#/$defs/jsonPath"},
+        "implementation_terminal_digest": {"$ref": "#/$defs/digest"},
+        "pre_pr_observation_receipt": {"$ref": "#/$defs/jsonPath"},
+        "pre_pr_observation_digest": {"$ref": "#/$defs/digest"},
+        "pre_pr_observation_epoch": {"type": "integer", "minimum": 1},
+        "owned_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/repoPath"},
+          "uniqueItems": true
+        },
+        "reauthorization_disposition": {"const": "satisfied_prerequisite"},
+        "specification_digest": {"$ref": "#/$defs/digest"},
+        "acceptance_digest": {"$ref": "#/$defs/digest"},
+        "prerequisite_fingerprint": {"$ref": "#/$defs/digest"},
+        "prerequisite_delivery_receipt": {"$ref": "#/$defs/jsonPath"},
+        "prerequisite_delivery_digest": {"$ref": "#/$defs/digest"},
+        "prerequisite_merge_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "reauthorization_digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "taskAuthorizationEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slice_id", "role", "route", "replacement_predicates", "entry_digest"
+      ],
+      "properties": {
+        "slice_id": {"$ref": "#/$defs/sliceId"},
+        "role": {"enum": ["implementation", "review"]},
+        "route": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "replacement_predicates": {
+          "$comment": "Helper-only exception 2 of 7: runtime validation requires the canonical subsequence order of the supported predicate vocabulary; Draft 2020-12 cannot express arbitrary ordered subsets without duplicating every accepted combination.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "pr_identity_unrecoverable",
+              "repository_identity_mismatch",
+              "separate_deliverable_user_decision",
+              "unrecoverable_task_runtime",
+              "unrecoverable_worktree"
+            ]
+          }
+        },
+        "entry_digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "parallelAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "left_slice", "right_slice", "left_plan_digest", "right_plan_digest",
+        "assessment_digest", "verdict"
+      ],
+      "properties": {
+        "left_slice": {"$ref": "#/$defs/sliceId"},
+        "right_slice": {"$ref": "#/$defs/sliceId"},
+        "left_plan_digest": {"$ref": "#/$defs/digest"},
+        "right_plan_digest": {"$ref": "#/$defs/digest"},
+        "assessment_digest": {"$ref": "#/$defs/digest"},
+        "verdict": {"enum": ["independent", "coupled"]}
+      }
+    },
+    "taskBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempt", "state", "launch_marker", "thread_id", "client_thread_id",
+        "task_worktree", "bound_sha", "adoption_start_sha", "authorization_digest",
+        "companion_probe_digest", "stop_proof_digest", "branch_release_digest",
+        "branch_attachment_digest", "head_adoption_digest",
+        "head_adoption_terminal_lineage",
+        "replacement_predicate_digest", "replacement_observation_digest",
+        "review_receipt", "review_receipt_digest", "review_epoch",
+        "review_disposition_digest", "review_task_quiescence_digest",
+        "review_dependency_quiescence_digest", "companion_probe_receipt",
+        "companion_probe_epoch", "stop_proof_receipt", "stop_proof_epoch",
+        "branch_release_receipt", "branch_release_epoch",
+        "branch_attachment_receipt", "branch_attachment_epoch",
+        "head_adoption_receipt", "head_adoption_epoch",
+        "replacement_observation_receipt", "replacement_observation_epoch",
+        "implementation_receipt", "implementation_receipt_digest",
+        "terminal_result", "verification_verdict", "output_head_sha", "output_pr",
+        "verification_digest",
+        "changed_paths_digest", "descendant_quiescence_digest",
+        "snapshot_authorization"
+      ],
+      "properties": {
+        "attempt": {"type": "integer", "minimum": 0},
+        "state": {"type": "string"},
+        "launch_marker": {"$ref": "#/$defs/optionalString"},
+        "thread_id": {"$ref": "#/$defs/optionalString"},
+        "client_thread_id": {"$ref": "#/$defs/optionalString"},
+        "task_worktree": {
+          "$comment": "Helper-only exception 5 of 7: JSON Schema requires only an absolute-looking task_worktree path. Runtime validation remains authoritative for canonical and symlink-resolved filesystem identity because Draft 2020-12 cannot resolve host paths.",
+          "oneOf": [
+            {"type": "string", "minLength": 1, "pattern": "^/"},
+            {"type": "null"}
+          ]
+        },
+        "bound_sha": {"$ref": "#/$defs/optionalSha"},
+        "adoption_start_sha": {"$ref": "#/$defs/optionalSha"},
+        "authorization_digest": {"$ref": "#/$defs/optionalDigest"},
+        "companion_probe_digest": {"$ref": "#/$defs/optionalDigest"},
+        "stop_proof_digest": {"$ref": "#/$defs/optionalDigest"},
+        "branch_release_digest": {"$ref": "#/$defs/optionalDigest"},
+        "branch_attachment_digest": {"$ref": "#/$defs/optionalDigest"},
+        "head_adoption_digest": {"$ref": "#/$defs/optionalDigest"},
+        "head_adoption_terminal_lineage": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/headAdoptionTerminalLineageEntry"}
+        },
+        "replacement_predicate_digest": {"$ref": "#/$defs/optionalDigest"},
+        "replacement_observation_digest": {"$ref": "#/$defs/optionalDigest"},
+        "review_receipt": {
+          "oneOf": [
+            {"$ref": "#/$defs/relativePath"},
+            {"type": "null"}
+          ]
+        },
+        "review_receipt_digest": {"$ref": "#/$defs/optionalDigest"},
+        "review_epoch": {
+          "oneOf": [
+            {"type": "integer", "minimum": 1},
+            {"type": "null"}
+          ]
+        },
+        "review_disposition_digest": {"$ref": "#/$defs/optionalDigest"},
+        "review_task_quiescence_digest": {"$ref": "#/$defs/optionalDigest"},
+        "review_dependency_quiescence_digest": {"$ref": "#/$defs/optionalDigest"},
+        "companion_probe_receipt": {"$ref": "#/$defs/optionalPath"},
+        "companion_probe_epoch": {"$ref": "#/$defs/optionalPositiveInteger"},
+        "stop_proof_receipt": {"$ref": "#/$defs/optionalPath"},
+        "stop_proof_epoch": {"$ref": "#/$defs/optionalPositiveInteger"},
+        "branch_release_receipt": {"$ref": "#/$defs/optionalPath"},
+        "branch_release_epoch": {"$ref": "#/$defs/optionalPositiveInteger"},
+        "branch_attachment_receipt": {"$ref": "#/$defs/optionalPath"},
+        "branch_attachment_epoch": {"$ref": "#/$defs/optionalPositiveInteger"},
+        "head_adoption_receipt": {"$ref": "#/$defs/optionalPath"},
+        "head_adoption_epoch": {"$ref": "#/$defs/optionalPositiveInteger"},
+        "replacement_observation_receipt": {"$ref": "#/$defs/optionalPath"},
+        "replacement_observation_epoch": {"$ref": "#/$defs/optionalPositiveInteger"},
+        "implementation_receipt": {"$ref": "#/$defs/optionalPath"},
+        "implementation_receipt_digest": {"$ref": "#/$defs/optionalDigest"},
+        "terminal_result": {
+          "oneOf": [
+            {"enum": ["SUCCEEDED", "FAILED", "SCOPE_EXPANSION_REQUIRED", "ACTIVATION_ABORTED"]},
+            {"type": "null"}
+          ]
+        },
+        "verification_verdict": {
+          "oneOf": [
+            {"enum": ["PASS", "FAIL", "NOT_RUN"]},
+            {"type": "null"}
+          ]
+        },
+        "output_head_sha": {"$ref": "#/$defs/optionalSha"},
+        "output_pr": {
+          "oneOf": [
+            {"type": "integer", "minimum": 1},
+            {"type": "null"}
+          ]
+        },
+        "verification_digest": {"$ref": "#/$defs/optionalDigest"},
+        "changed_paths_digest": {"$ref": "#/$defs/optionalDigest"},
+        "descendant_quiescence_digest": {"$ref": "#/$defs/optionalDigest"},
+        "snapshot_authorization": {
+          "oneOf": [
+            {"$ref": "#/$defs/snapshotAuthorization"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"const": "unbound"}}},
+          "then": {
+            "properties": {
+              "attempt": {"const": 0},
+              "launch_marker": {"type": "null"},
+              "thread_id": {"type": "null"},
+              "client_thread_id": {"type": "null"},
+              "task_worktree": {"type": "null"},
+              "bound_sha": {"type": "null"},
+              "adoption_start_sha": {"type": "null"},
+              "authorization_digest": {"type": "null"},
+              "companion_probe_digest": {"type": "null"},
+              "stop_proof_digest": {"type": "null"},
+              "branch_release_digest": {"type": "null"},
+              "branch_attachment_digest": {"type": "null"},
+              "head_adoption_digest": {"type": "null"},
+              "head_adoption_terminal_lineage": {"maxItems": 0},
+              "replacement_predicate_digest": {"type": "null"},
+              "replacement_observation_digest": {"type": "null"},
+              "review_receipt": {"type": "null"},
+              "review_receipt_digest": {"type": "null"},
+              "review_epoch": {"type": "null"},
+              "review_disposition_digest": {"type": "null"},
+              "review_task_quiescence_digest": {"type": "null"},
+              "review_dependency_quiescence_digest": {"type": "null"},
+              "companion_probe_receipt": {"type": "null"},
+              "companion_probe_epoch": {"type": "null"},
+              "stop_proof_receipt": {"type": "null"},
+              "stop_proof_epoch": {"type": "null"},
+              "branch_release_receipt": {"type": "null"},
+              "branch_release_epoch": {"type": "null"},
+              "branch_attachment_receipt": {"type": "null"},
+              "branch_attachment_epoch": {"type": "null"},
+              "head_adoption_receipt": {"type": "null"},
+              "head_adoption_epoch": {"type": "null"},
+              "replacement_observation_receipt": {"type": "null"},
+              "replacement_observation_epoch": {"type": "null"},
+              "implementation_receipt": {"type": "null"},
+              "implementation_receipt_digest": {"type": "null"},
+              "terminal_result": {"type": "null"},
+              "verification_verdict": {"type": "null"},
+              "output_head_sha": {"type": "null"},
+              "output_pr": {"type": "null"},
+              "verification_digest": {"type": "null"},
+              "changed_paths_digest": {"type": "null"},
+              "descendant_quiescence_digest": {"type": "null"},
+              "snapshot_authorization": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "attempt": {"type": "integer", "minimum": 1},
+              "launch_marker": {"type": "string", "minLength": 1},
+              "authorization_digest": {"$ref": "#/$defs/digest"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"attempt": {"const": 1}}},
+          "then": {
+            "properties": {
+              "replacement_predicate_digest": {"type": "null"},
+              "replacement_observation_receipt": {"type": "null"},
+              "replacement_observation_digest": {"type": "null"},
+              "replacement_observation_epoch": {"type": "null"}
+            }
+          },
+          "else": {
+            "if": {"properties": {"attempt": {"type": "integer", "minimum": 2}}},
+            "then": {
+              "properties": {
+                "replacement_predicate_digest": {"$ref": "#/$defs/digest"},
+                "replacement_observation_receipt": {"$ref": "#/$defs/relativePath"},
+                "replacement_observation_digest": {"$ref": "#/$defs/digest"},
+                "replacement_observation_epoch": {"type": "integer", "minimum": 1}
+              }
+            }
+          }
+        },
+        {
+          "if": {"properties": {"state": {"const": "superseded"}}},
+          "then": {
+            "properties": {
+              "stop_proof_receipt": {"$ref": "#/$defs/relativePath"},
+              "stop_proof_digest": {"$ref": "#/$defs/digest"},
+              "stop_proof_epoch": {"type": "integer", "minimum": 1}
+            }
+          },
+          "else": {
+            "properties": {
+              "stop_proof_digest": {"type": "null"},
+              "stop_proof_receipt": {"type": "null"},
+              "stop_proof_epoch": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {
+            "anyOf": [
+              {"properties": {"branch_release_receipt": {"type": "string"}}},
+              {"properties": {"branch_release_digest": {"type": "string"}}},
+              {"properties": {"branch_release_epoch": {"type": "integer"}}}
+            ]
+          },
+          "then": {
+            "properties": {
+              "branch_release_receipt": {"$ref": "#/$defs/relativePath"},
+              "branch_release_digest": {"$ref": "#/$defs/digest"},
+              "branch_release_epoch": {"type": "integer", "minimum": 1}
+            }
+          },
+          "else": {
+            "properties": {
+              "branch_release_receipt": {"type": "null"},
+              "branch_release_digest": {"type": "null"},
+              "branch_release_epoch": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {
+            "allOf": [
+              {"properties": {"state": {"const": "superseded"}}},
+              {
+                "anyOf": [
+                  {"properties": {"thread_id": {"type": "string"}}},
+                  {"properties": {"client_thread_id": {"type": "string"}}}
+                ]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "branch_release_receipt": {"$ref": "#/$defs/relativePath"},
+              "branch_release_digest": {"$ref": "#/$defs/digest"},
+              "branch_release_epoch": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        {
+          "if": {
+            "anyOf": [
+              {"properties": {"branch_attachment_receipt": {"type": "string"}}},
+              {"properties": {"branch_attachment_digest": {"type": "string"}}},
+              {"properties": {"branch_attachment_epoch": {"type": "integer"}}}
+            ]
+          },
+          "then": {
+            "properties": {
+              "branch_attachment_receipt": {"$ref": "#/$defs/relativePath"},
+              "branch_attachment_digest": {"$ref": "#/$defs/digest"},
+              "branch_attachment_epoch": {"type": "integer", "minimum": 1}
+            }
+          },
+          "else": {
+            "properties": {
+              "branch_attachment_receipt": {"type": "null"},
+              "branch_attachment_digest": {"type": "null"},
+              "branch_attachment_epoch": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {
+            "anyOf": [
+              {"properties": {"head_adoption_receipt": {"type": "string"}}},
+              {"properties": {"head_adoption_digest": {"type": "string"}}},
+              {"properties": {"head_adoption_epoch": {"type": "integer"}}}
+            ]
+          },
+          "then": {
+            "properties": {
+              "head_adoption_receipt": {"$ref": "#/$defs/relativePath"},
+              "head_adoption_digest": {"$ref": "#/$defs/digest"},
+              "head_adoption_epoch": {"type": "integer", "minimum": 1}
+            }
+          },
+          "else": {
+            "properties": {
+              "head_adoption_receipt": {"type": "null"},
+              "head_adoption_digest": {"type": "null"},
+              "head_adoption_epoch": {"type": "null"},
+              "head_adoption_terminal_lineage": {"maxItems": 0}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {"not": {"enum": ["unbound", "creating", "superseded"]}}
+            }
+          },
+          "then": {
+            "properties": {
+              "thread_id": {"type": "string", "minLength": 1},
+              "task_worktree": {"type": "string", "minLength": 1, "pattern": "^/"},
+              "bound_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+            }
+          }
+        }
+      ]
+    },
+    "implementationTask": {
+      "allOf": [
+        {"$ref": "#/$defs/taskBinding"},
+        {
+          "properties": {
+            "review_receipt": {"type": "null"},
+            "review_receipt_digest": {"type": "null"},
+            "review_epoch": {"type": "null"},
+            "review_disposition_digest": {"type": "null"},
+            "review_task_quiescence_digest": {"type": "null"},
+            "review_dependency_quiescence_digest": {"type": "null"},
+            "companion_probe_receipt": {"type": "null"},
+            "companion_probe_digest": {"type": "null"},
+            "companion_probe_epoch": {"type": "null"},
+            "head_adoption_receipt": {"type": "null"},
+            "head_adoption_digest": {"type": "null"},
+            "head_adoption_epoch": {"type": "null"},
+            "head_adoption_terminal_lineage": {"maxItems": 0},
+            "state": {
+              "enum": [
+                "unbound", "creating", "prepared", "authorized", "active",
+                "quiescent", "superseded"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {"attempt": {"const": 1}},
+            "required": ["attempt"]
+          },
+          "then": {
+            "properties": {
+              "adoption_start_sha": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            }
+          },
+          "else": {
+            "properties": {"adoption_start_sha": {"type": "null"}}
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "state": {"enum": ["active", "authorized"]}
+                  },
+                  "required": ["state"]
+                },
+                {
+                  "properties": {
+                    "state": {"const": "quiescent"},
+                    "terminal_result": {"const": "SCOPE_EXPANSION_REQUIRED"}
+                  },
+                  "required": ["state", "terminal_result"]
+                }
+              ]
+            }
+          },
+          "then": {
+            "properties": {
+              "branch_attachment_receipt": {"type": "null"},
+              "branch_attachment_digest": {"type": "null"},
+              "branch_attachment_epoch": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {"not": {"enum": ["quiescent", "superseded"]}}
+            }
+          },
+          "then": {
+            "properties": {
+              "branch_release_receipt": {"type": "null"},
+              "branch_release_digest": {"type": "null"},
+              "branch_release_epoch": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {"const": "quiescent"},
+              "output_pr": {"type": "integer"}
+            }
+          },
+          "then": {
+            "properties": {
+              "branch_release_receipt": {"$ref": "#/$defs/relativePath"},
+              "branch_release_digest": {"$ref": "#/$defs/digest"},
+              "branch_release_epoch": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"state": {"const": "quiescent"}}},
+          "then": {
+            "properties": {
+              "implementation_receipt": {"$ref": "#/$defs/relativePath"},
+              "implementation_receipt_digest": {"$ref": "#/$defs/digest"},
+              "terminal_result": {
+                "enum": ["SUCCEEDED", "FAILED", "SCOPE_EXPANSION_REQUIRED", "ACTIVATION_ABORTED"]
+              },
+              "verification_verdict": {"enum": ["PASS", "FAIL", "NOT_RUN"]},
+              "output_head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+              "verification_digest": {"$ref": "#/$defs/digest"},
+              "changed_paths_digest": {"$ref": "#/$defs/digest"},
+              "descendant_quiescence_digest": {"$ref": "#/$defs/digest"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"terminal_result": {"const": "SUCCEEDED"}}},
+          "then": {"properties": {"verification_verdict": {"const": "PASS"}}}
+        },
+        {
+          "if": {
+            "properties": {
+              "terminal_result": {
+                "enum": ["FAILED", "SCOPE_EXPANSION_REQUIRED", "ACTIVATION_ABORTED"]
+              }
+            }
+          },
+          "then": {
+            "properties": {"verification_verdict": {"enum": ["FAIL", "NOT_RUN"]}}
+          }
+        }
+      ]
+    },
+    "reviewTask": {
+      "allOf": [
+        {"$ref": "#/$defs/taskBinding"},
+        {
+          "properties": {
+            "adoption_start_sha": {"type": "null"},
+            "implementation_receipt": {"type": "null"},
+            "implementation_receipt_digest": {"type": "null"},
+            "terminal_result": {"type": "null"},
+            "verification_verdict": {"type": "null"},
+            "output_head_sha": {"type": "null"},
+            "output_pr": {"type": "null"},
+            "verification_digest": {"type": "null"},
+            "changed_paths_digest": {"type": "null"},
+            "descendant_quiescence_digest": {"type": "null"},
+            "state": {
+              "enum": [
+                "unbound", "creating", "active", "clean",
+                "blocked", "superseded"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {"not": {"enum": ["active", "blocked", "superseded"]}}
+            }
+          },
+          "then": {
+            "properties": {
+              "branch_release_receipt": {"type": "null"},
+              "branch_release_digest": {"type": "null"},
+              "branch_release_epoch": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"state": {"not": {"const": "unbound"}}}},
+          "then": {
+            "properties": {
+              "companion_probe_receipt": {"$ref": "#/$defs/relativePath"},
+              "companion_probe_digest": {"$ref": "#/$defs/digest"},
+              "companion_probe_epoch": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {"enum": ["active", "clean"]}
+            }
+          },
+          "then": {
+            "properties": {
+              "branch_attachment_receipt": {"$ref": "#/$defs/relativePath"},
+              "branch_attachment_digest": {"$ref": "#/$defs/digest"},
+              "branch_attachment_epoch": {"type": "integer", "minimum": 1}
+            }
+          },
+          "else": {
+            "if": {
+              "properties": {
+                "state": {"enum": ["unbound", "creating"]}
+              }
+            },
+            "then": {
+              "properties": {
+                "branch_attachment_receipt": {"type": "null"},
+                "branch_attachment_digest": {"type": "null"},
+                "branch_attachment_epoch": {"type": "null"}
+              }
+            }
+          }
+        },
+        {
+          "if": {"properties": {"state": {"const": "clean"}}},
+          "then": {
+            "properties": {
+              "review_receipt": {"$ref": "#/$defs/relativePath"},
+              "review_receipt_digest": {"$ref": "#/$defs/digest"},
+              "review_epoch": {"type": "integer", "minimum": 1},
+              "review_disposition_digest": {"$ref": "#/$defs/digest"},
+              "review_task_quiescence_digest": {"$ref": "#/$defs/digest"},
+              "review_dependency_quiescence_digest": {"$ref": "#/$defs/digest"}
+            }
+          }
+        }
+      ]
+    },
+    "taskHistoryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "task"],
+      "properties": {
+        "role": {"enum": ["implementation", "review"]},
+        "task": {"$ref": "#/$defs/taskBinding"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"role": {"const": "implementation"}}},
+          "then": {
+            "properties": {
+              "task": {
+                "allOf": [
+                  {"$ref": "#/$defs/implementationTask"},
+                  {"properties": {"state": {"const": "superseded"}}}
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "task": {
+                "allOf": [
+                  {"$ref": "#/$defs/reviewTask"},
+                  {"properties": {"state": {"const": "superseded"}}}
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "slice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "status",
+        "depends_on",
+        "wave",
+        "execution_mode",
+        "owned_paths",
+        "plan",
+        "plan_digest",
+        "receipt",
+        "branch",
+        "base_ref",
+        "base_sha",
+        "head_sha",
+        "pr",
+        "plan_checkpoint_sha",
+        "revision_epoch",
+        "revision_history",
+        "replacement_lineage",
+        "implementation_task",
+        "review_task",
+        "task_history",
+        "merge_receipt",
+        "merge_receipt_digest",
+        "merge_epoch",
+        "merge_main_sha",
+        "terminal_freshness",
+        "premerge_drift"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/sliceId"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 160},
+        "status": {
+          "enum": [
+            "pending",
+            "in_progress",
+            "verifying",
+            "verified",
+            "pr_open",
+            "merged",
+            "blocked",
+            "superseded"
+          ]
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/sliceId"},
+          "uniqueItems": true
+        },
+        "wave": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "execution_mode": {
+          "enum": ["serial", "parallel"]
+        },
+        "owned_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/repoPath"},
+          "uniqueItems": true
+        },
+        "plan": {"$ref": "#/$defs/markdownPath"},
+        "plan_digest": {"$ref": "#/$defs/digest"},
+        "receipt": {
+          "oneOf": [
+            {"$ref": "#/$defs/markdownPath"},
+            {"type": "null"}
+          ]
+        },
+        "branch": {"$ref": "#/$defs/optionalString"},
+        "base_ref": {"$ref": "#/$defs/optionalString"},
+        "base_sha": {"$ref": "#/$defs/optionalSha"},
+        "head_sha": {"$ref": "#/$defs/optionalSha"},
+        "plan_checkpoint_sha": {"$ref": "#/$defs/optionalSha"},
+        "revision_epoch": {"type": "integer", "minimum": 0},
+        "revision_history": {
+          "$comment": "Helper-only exceptions 6 and 7 of 7: runtime validation requires one-based contiguous revision_epoch values and exactly revision_epoch - 1 archived entries. Draft 2020-12 cannot compare sibling numeric values with array item values or array length.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/sliceRevision"}
+        },
+        "replacement_lineage": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/replacementLineage"}
+          ]
+        },
+        "implementation_task": {"$ref": "#/$defs/implementationTask"},
+        "review_task": {"$ref": "#/$defs/reviewTask"},
+        "task_history": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/taskHistoryEntry"}
+        },
+        "merge_receipt": {"$ref": "#/$defs/optionalPath"},
+        "merge_receipt_digest": {"$ref": "#/$defs/optionalDigest"},
+        "merge_epoch": {"$ref": "#/$defs/optionalPositiveInteger"},
+        "merge_main_sha": {"$ref": "#/$defs/optionalSha"},
+        "terminal_freshness": {
+          "oneOf": [
+            {"$ref": "#/$defs/terminalFreshness"},
+            {"type": "null"}
+          ]
+        },
+        "premerge_drift": {
+          "oneOf": [
+            {"$ref": "#/$defs/premergeDriftBinding"},
+            {"type": "null"}
+          ]
+        },
+        "pr": {
+          "oneOf": [
+            {"type": "integer", "minimum": 1},
+            {"type": "null"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": ["pending", "blocked", "in_progress", "verifying"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "receipt": {"type": "null"},
+              "head_sha": {"type": "null"},
+              "pr": {"type": "null"},
+              "merge_receipt": {"type": "null"},
+              "merge_receipt_digest": {"type": "null"},
+              "merge_epoch": {"type": "null"},
+              "merge_main_sha": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "verified"}}},
+          "then": {
+            "properties": {
+              "receipt": {"$ref": "#/$defs/markdownPath"},
+              "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+              "pr": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {"status": {"enum": ["pr_open", "merged"]}}
+          },
+          "then": {
+            "properties": {
+              "receipt": {"$ref": "#/$defs/markdownPath"},
+              "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+              "pr": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "merged"}}},
+          "then": {
+            "properties": {
+              "merge_receipt": {"$ref": "#/$defs/relativePath"},
+              "merge_receipt_digest": {"$ref": "#/$defs/digest"},
+              "merge_epoch": {"type": "integer", "minimum": 1},
+              "merge_main_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+            }
+          },
+          "else": {
+            "properties": {
+              "merge_receipt": {"type": "null"},
+              "merge_receipt_digest": {"type": "null"},
+              "merge_epoch": {"type": "null"},
+              "merge_main_sha": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "not": {
+                  "enum": ["blocked", "pending", "in_progress", "verifying", "verified"]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {"replacement_lineage": {"type": "null"}}
+          }
+        }
+      ]
+    },
+    "acceptanceState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status", "evidence", "evidence_digests", "criterion_digest", "scope",
+        "producer_slice", "producer_head_sha", "assignment_digest", "locked"
+      ],
+      "properties": {
+        "status": {"enum": ["pending", "passed", "failed", "waived"]},
+        "locked": {"type": "boolean"},
+        "criterion_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "scope": {
+          "oneOf": [
+            {"enum": ["feature", "slice"]},
+            {"type": "null"}
+          ]
+        },
+        "producer_slice": {
+          "oneOf": [
+            {"$ref": "#/$defs/sliceId"},
+            {"type": "null"}
+          ]
+        },
+        "producer_head_sha": {"$ref": "#/$defs/optionalSha"},
+        "assignment_digest": {"$ref": "#/$defs/optionalDigest"},
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/relativePath"},
+          "uniqueItems": true
+        },
+        "evidence_digests": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/relativePath"},
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "pending"}}},
+          "then": {
+            "properties": {
+              "evidence": {"maxItems": 0},
+              "evidence_digests": {"maxProperties": 0},
+              "scope": {"type": "null"},
+              "producer_slice": {"type": "null"},
+              "producer_head_sha": {"type": "null"},
+              "assignment_digest": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "evidence": {"minItems": 1},
+              "evidence_digests": {"minProperties": 1},
+              "scope": {"enum": ["feature", "slice"]},
+              "assignment_digest": {"$ref": "#/$defs/digest"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"scope": {"const": "slice"}}},
+          "then": {
+            "properties": {
+              "producer_slice": {"$ref": "#/$defs/sliceId"},
+              "producer_head_sha": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            }
+          },
+          "else": {
+            "if": {"properties": {"scope": {"const": "feature"}}},
+            "then": {
+              "properties": {
+                "producer_slice": {"type": "null"},
+                "producer_head_sha": {"type": "null"}
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["locked"],
+            "properties": {"locked": {"const": true}}
+          },
+          "then": {"properties": {"status": {"enum": ["passed", "waived"]}}}
+        }
+      ]
+    },
+    "completionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt", "receipt_digest", "attestation", "attestation_digest",
+        "head_sha", "head_tree", "pr", "final_slice", "acceptance_id", "verdict"
+      ],
+      "properties": {
+        "receipt": {"$ref": "#/$defs/relativePath"},
+        "receipt_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "attestation": {"$ref": "#/$defs/relativePath"},
+        "attestation_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "head_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "pr": {"type": "integer", "minimum": 1},
+        "final_slice": {"$ref": "#/$defs/sliceId"},
+        "acceptance_id": {"$ref": "#/$defs/acceptanceId"},
+        "verdict": {"enum": ["PASS", "WAIVED"]}
+      }
+    }
+  }
+}

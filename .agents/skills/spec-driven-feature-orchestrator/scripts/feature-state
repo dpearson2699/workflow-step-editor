@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""Feature command alias for the canonical shared spec-work state bridge."""
+
+import sys
+
+if sys.version_info < (3, 11):
+    discovered = ".".join(str(value) for value in sys.version_info[:3])
+    print(
+        f"feature-state requires Python 3.11 or newer; found {discovered}",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
+import os
+from pathlib import Path
+
+TARGET = (
+    Path(__file__).absolute().parents[3]
+    / "workflows/spec-work-orchestrator/scripts/work-state"
+)
+arguments = [
+    "--work-id" if value == "--feature-id" else
+    "--work-bundle" if value == "--bundle" else value
+    for value in sys.argv[1:]
+]
+if arguments and arguments[0] == "init" and "--work-kind" not in arguments:
+    arguments.extend(["--work-kind", "feature"])
+os.execv(TARGET, [str(TARGET), *arguments])

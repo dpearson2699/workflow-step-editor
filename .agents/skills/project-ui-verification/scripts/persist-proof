@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""Atomically persist worker-supplied UI proof in a root-owned spec-work bundle."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+REPO = Path(__file__).absolute().parents[4]
+VALIDATOR = Path(__file__).resolve().with_name("validate-receipt")
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+RECEIPT_SCHEMA = "project-ui-verification"
+SNAPSHOT_SCHEMA = "project-ui-proof"
+
+
+class PersistError(ValueError):
+    pass
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise PersistError(message)
+
+
+def regular_bytes(path: Path, label: str) -> bytes:
+    require(path.is_file() and not path.is_symlink(), f"{label} must be a regular non-symlink file")
+    return path.read_bytes()
+
+
+def confined(root: Path, relative: str, label: str) -> Path:
+    value = PurePosixPath(relative)
+    require(not value.is_absolute() and ".." not in value.parts, f"{label} must be relative and confined")
+    cursor = root.resolve()
+    for part in value.parts:
+        cursor /= part
+        require(not cursor.is_symlink(), f"{label} must not traverse a symlink")
+    resolved = (root / value).resolve()
+    require(resolved == root.resolve() or root.resolve() in resolved.parents, f"{label} escapes its root")
+    return resolved
+
+
+def write_synced(path: Path, payload: bytes) -> None:
+    with path.open("xb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def persist(arguments: argparse.Namespace) -> dict:
+    bundle = arguments.bundle.expanduser().resolve()
+    require(bundle.is_dir() and not arguments.bundle.is_symlink(), "bundle must be a regular directory")
+    require(REPO.resolve() in bundle.parents, "bundle must be inside the coordinator repository")
+    state = json.loads(regular_bytes(bundle / "state.json", "state.json"))
+    require(state.get("schema") == "spec-workflow-state", "unsupported spec-work state; archive or manually restart the stale bundle")
+    slices = {item.get("id"): item for item in state.get("slices", []) if isinstance(item, dict)}
+    require(arguments.slice in slices, "slice is not present in spec-work bundle")
+    item = slices[arguments.slice]
+    plan = confined(bundle, item.get("plan", ""), "slice plan")
+    require(plan.is_file() and not plan.is_symlink(), "slice plan must be a regular file")
+    owner = plan.parent
+
+    receipt_bytes = regular_bytes(arguments.receipt_payload, "receipt payload")
+    snapshot_bytes = regular_bytes(arguments.snapshot_payload, "snapshot payload")
+    try:
+        receipt = json.loads(receipt_bytes)
+        snapshot = json.loads(snapshot_bytes)
+    except json.JSONDecodeError as error:
+        raise PersistError(f"proof payload is not valid JSON: {error}") from error
+    identity = receipt.get("worktreeTree")
+    require(isinstance(identity, str) and SHA_RE.fullmatch(identity) is not None, "receipt payload lacks worktree tree identity")
+    require(receipt.get("sliceId") == arguments.slice, "receipt payload slice differs from requested slice")
+    bundle_relative = bundle.relative_to(REPO.resolve()).as_posix()
+    require(
+        receipt.get("schema") == RECEIPT_SCHEMA,
+        "unsupported UI receipt schema; archive or manually restart stale workflow state",
+    )
+    require(
+        snapshot.get("schema") == SNAPSHOT_SCHEMA,
+        "unsupported UI snapshot schema; archive or manually restart stale workflow state",
+    )
+    work_kind = state.get("work_kind")
+    receipt_bundle = receipt.get("workBundle")
+    receipt_kind = receipt.get("workKind")
+    require(receipt_bundle == bundle_relative, "receipt payload bundle differs from coordinator bundle")
+    require(receipt_kind == work_kind, "receipt payload work kind differs from coordinator bundle")
+    require(snapshot.get("identityKind") == "worktree_tree" and snapshot.get("identity") == identity, "snapshot payload identity differs from receipt")
+
+    destination = owner / "evidence" / "ui-proof" / identity
+    receipt_destination = destination / "ui-receipt.json"
+    snapshot_destination = destination / "snapshot.json"
+    expected_artifact = snapshot_destination.relative_to(REPO.resolve()).as_posix()
+    evidence = receipt.get("snapshotEvidence")
+    require(isinstance(evidence, list) and len(evidence) == 1, "receipt payload must name exactly one snapshot artifact")
+    entry = evidence[0]
+    snapshot_digest = hashlib.sha256(snapshot_bytes).hexdigest()
+    require(
+        isinstance(entry, dict)
+        and entry.get("artifact") == expected_artifact
+        and entry.get("sha256") == snapshot_digest
+        and entry.get("identityKind") == "worktree_tree"
+        and entry.get("identity") == identity,
+        "receipt snapshot binding does not match root-owned destination payload",
+    )
+
+    cursor = owner
+    for part in ("evidence", "ui-proof"):
+        cursor /= part
+        require(not cursor.is_symlink(), "proof destination must not traverse a symlink")
+        cursor.mkdir(exist_ok=True)
+        require(cursor.is_dir(), "proof destination parent must be a directory")
+    temporary = Path(tempfile.mkdtemp(prefix=f".{identity}.", dir=destination.parent))
+    try:
+        candidate_receipt = temporary / "ui-receipt.json"
+        candidate_snapshot = temporary / "snapshot.json"
+        write_synced(candidate_receipt, receipt_bytes)
+        write_synced(candidate_snapshot, snapshot_bytes)
+        validation = subprocess.run(
+            [
+                sys.executable, str(VALIDATOR),
+                "--receipt", str(candidate_receipt),
+                "--mode", "implementation-proof",
+                "--expected-work-kind", work_kind,
+                "--expected-work-bundle", bundle_relative,
+                "--expected-slice-id", arguments.slice,
+                "--expected-final-ui-slice-id", receipt.get("finalUiSliceId", ""),
+                "--expected-worktree-tree", identity,
+                "--implementation-worktree-root", str(arguments.implementation_worktree_root),
+                "--candidate-snapshot", str(candidate_snapshot),
+            ],
+            cwd=REPO,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        require(
+            validation.returncode == 0,
+            "candidate proof validation failed: " + validation.stderr.strip(),
+        )
+        if destination.exists():
+            require(destination.is_dir() and not destination.is_symlink(), "proof destination is not a regular directory")
+            require(regular_bytes(receipt_destination, "persisted receipt") == receipt_bytes, "proof identity already exists with different receipt payload")
+            require(regular_bytes(snapshot_destination, "persisted snapshot") == snapshot_bytes, "proof identity already exists with different snapshot payload")
+        else:
+            directory = os.open(temporary, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+            os.rename(temporary, destination)
+            parent = os.open(destination.parent, os.O_RDONLY)
+            try:
+                os.fsync(parent)
+            finally:
+                os.close(parent)
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+
+    return {
+        "identity": identity,
+        "receipt": receipt_destination.relative_to(bundle).as_posix(),
+        "receiptSha256": hashlib.sha256(receipt_bytes).hexdigest(),
+        "snapshot": snapshot_destination.relative_to(bundle).as_posix(),
+        "snapshotSha256": snapshot_digest,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Persist one root-owned UI proof generation.")
+    parser.add_argument("--bundle", required=True, type=Path)
+    parser.add_argument("--slice", required=True)
+    parser.add_argument("--receipt-payload", required=True, type=Path)
+    parser.add_argument("--snapshot-payload", required=True, type=Path)
+    parser.add_argument("--implementation-worktree-root", required=True, type=Path)
+    try:
+        result = persist(parser.parse_args())
+        json.dump(result, sys.stdout, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+        return 0
+    except (OSError, PersistError, json.JSONDecodeError) as error:
+        print(f"persist-proof: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,128 @@
+{
+  "schema": "github-issue-label-policy",
+  "issue_types": [
+    "bug",
+    "documentation",
+    "enhancement",
+    "harness",
+    "duplicate"
+  ],
+  "creation_issue_types": [
+    "bug",
+    "documentation",
+    "enhancement",
+    "harness"
+  ],
+  "severities": [
+    "P1",
+    "P2",
+    "P3"
+  ],
+  "label_metadata": {
+    "bug": {
+      "color": "d73a4a",
+      "description": "Something in the product isn't working"
+    },
+    "documentation": {
+      "color": "0075ca",
+      "description": "Improvements or additions to documentation"
+    },
+    "enhancement": {
+      "color": "a2eeef",
+      "description": "New feature or request"
+    },
+    "harness": {
+      "color": "5319e7",
+      "description": "Issues with the Codex or custom agent harness"
+    },
+    "duplicate": {
+      "color": "cfd3d7",
+      "description": "This issue or pull request already exists"
+    },
+    "P1": {
+      "color": "b60205",
+      "description": "Immediate: release or CI blocker, or security, data-integrity, or severe user-impact risk"
+    },
+    "P2": {
+      "color": "fbca04",
+      "description": "Important: material work to schedule next, but not an immediate blocker"
+    },
+    "P3": {
+      "color": "0e8a16",
+      "description": "Backlog: low-risk hardening, cleanup, investigation, or optional improvement"
+    }
+  },
+  "wayfinder": {
+    "labels": [
+      "wayfinder:map",
+      "wayfinder:grilling",
+      "wayfinder:research",
+      "wayfinder:prototype",
+      "wayfinder:task"
+    ],
+    "label_metadata": {
+      "wayfinder:map": {
+        "color": "1d76db",
+        "description": "Wayfinder map: the canonical index of one fog-wrapped effort's decisions"
+      },
+      "wayfinder:grilling": {
+        "color": "c5def5",
+        "description": "Wayfinder decision ticket resolved through live conversation"
+      },
+      "wayfinder:research": {
+        "color": "bfdadc",
+        "description": "Wayfinder decision ticket resolved by an AFK research sub-agent"
+      },
+      "wayfinder:prototype": {
+        "color": "d4c5f9",
+        "description": "Wayfinder decision ticket resolved by reacting to a cheap concrete artifact"
+      },
+      "wayfinder:task": {
+        "color": "e4e669",
+        "description": "Wayfinder ticket for manual work that unblocks a decision"
+      }
+    },
+    "contract": "Wayfinder-labeled issues are planning artifacts owned by the wayfinder skill. A map carries wayfinder:map; each child ticket carries exactly one wayfinder type label. They never carry a creation issue type or severity, are exempt from the defect fingerprint contract, and defect-lifecycle discovery and reuse must ignore them."
+  },
+  "deprecated_labels": [
+    "good first issue",
+    "help wanted",
+    "invalid",
+    "question",
+    "wontfix"
+  ],
+  "issue_reuse_contract": {
+    "candidate_selection": "Only an exact canonical fingerprint match can suppress issue creation; title, body, or search-term similarity without that exact match is related non-owning evidence",
+    "state_verification": "Treat search-result state as discovery metadata only. Before reuse or creation, directly fetch every exact-fingerprint candidate from the owning repository and verify its authoritative current state; missing or failed authoritative state verification fails closed",
+    "open_exact_owner": "Reuse only when exactly one authoritatively verified open exact-fingerprint candidate remains and it is not labeled duplicate",
+    "direct_scope_owner": "An open issue explicitly supplied by the user or selected by the active route is the in-scope owner only after an authoritative fetch verifies its repository, open state, and defect identity and the all-state exact-fingerprint inventory establishes that no different open exact-fingerprint owner exists. If a different unique open exact-fingerprint owner exists, select that existing owner and do not mutate the supplied issue. A supplied closed issue follows closed-history handling. Maintaining and terminally closing the verified owner requires no separate user authorization",
+    "open_owner_maintenance": "For the unique open owner, preserve existing prose, append only verified evidence absent from its body, add the canonical fingerprint marker when missing, reconcile exact labels, and continue on that issue instead of creating another",
+    "terminal_closure": "When the accepted fix is terminally complete and durably effective in the authoritative owning system, append any missing completion evidence and close the owning issue without separate user authorization. A committed active local installation qualifies when it is the system of record; an uncommitted, inactive, or unverified fix remains open",
+    "closed_history": "Treat closed exact-fingerprint candidates as historical evidence. For a newly observed actionable regression after resolution, create a new issue and link the closed history",
+    "ambiguous_or_duplicate": "Multiple open exact-fingerprint candidates or a selected open candidate labeled duplicate fail closed",
+    "receipt_fields": [
+      "issue_url",
+      "verified_state",
+      "fingerprint",
+      "fingerprint_comparison",
+      "issue_type",
+      "severity",
+      "expected_labels",
+      "disposition",
+      "label_verification_status"
+    ]
+  },
+  "fingerprint_contract": {
+    "basis_keys": [
+      "failed_invariant",
+      "affected_surfaces"
+    ],
+    "unicode_domain": "Inputs must be Unicode scalar-value sequences; reject unpaired UTF-16 surrogate code units",
+    "failed_invariant_normalization": "Unicode casefold, trim, split on Unicode whitespace, then join tokens with one ASCII space; require at least one non-whitespace token after normalization",
+    "affected_surface_normalization": "Require affected_surfaces to contain at least one normalized typed surface. For each non-empty string, trim, split on Unicode whitespace, join with one ASCII space, and require a path:, symbol:, or process: prefix with a non-empty suffix. For path: suffixes, require repository-relative POSIX form: reject absolute paths, drive-qualified paths, backslashes, empty segments, parent-traversal .. segments, and trailing separators; remove every . segment so path:./Foo.swift canonicalizes to path:Foo.swift. Preserve case and symbol:/process: suffix semantics, reject duplicates after normalization, then sort the normalized strings by ascending lexicographic Unicode scalar-value sequence",
+    "serialization": "JSON object containing exactly failed_invariant and affected_surfaces, object keys sorted by ascending lexicographic Unicode scalar-value sequence, compact separators comma and colon, non-ASCII scalar values emitted literally without Unicode escape sequences, required JSON quotation-mark, reverse-solidus, and control-character escaping only, no trailing newline included in the hashed bytes",
+    "encoding": "UTF-8",
+    "digest": "SHA-256 lowercase hexadecimal"
+  },
+  "fingerprint_marker": "spec-work-follow-up"
+}

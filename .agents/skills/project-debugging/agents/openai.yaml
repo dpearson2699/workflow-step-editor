@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Debugging"
+  short_description: "Project-wide root-cause debugging"
+  default_prompt: "Use $project-debugging to diagnose this defect and choose the correct fix lifecycle."

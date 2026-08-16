@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Classify an evidence-complete bug request into the fast or full lifecycle."""
+
+from __future__ import annotations
+
+import argparse
+import json
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(
+        description=(
+            "Classify a project fix after root-cause and "
+            "regression-abstraction evidence is complete."
+        )
+    )
+    result.add_argument(
+        "--root-cause", required=True,
+        choices=("confirmed-one-seam", "unconfirmed", "multiple-seams"),
+    )
+    result.add_argument(
+        "--regression-abstraction", required=True,
+        choices=("complete", "incomplete"),
+    )
+    result.add_argument("--cohesive-pr", required=True, choices=("yes", "no"))
+    result.add_argument(
+        "--decisions", required=True, choices=("resolved", "unresolved")
+    )
+    result.add_argument(
+        "--cross-repository", required=True, choices=("yes", "no")
+    )
+    result.add_argument(
+        "--destructive-data-change", required=True, choices=("yes", "no")
+    )
+    result.add_argument(
+        "--auth-or-secret-policy", required=True, choices=("yes", "no")
+    )
+    result.add_argument(
+        "--scope-expansion", required=True, choices=("yes", "no")
+    )
+    result.add_argument(
+        "--external-data", required=True,
+        choices=("checked", "not-applicable", "unchecked"),
+    )
+    for flag in (
+        "ui-change", "financial-correctness", "external-contract",
+        "concurrency-or-ownership", "public-api", "user-data-semantics",
+        "security-or-privacy", "credible-data-loss",
+    ):
+        result.add_argument(f"--{flag}", choices=("yes", "no"), default="no")
+    return result
+
+
+def main() -> int:
+    arguments = parser().parse_args()
+    failed: list[str] = []
+    expectations = {
+        "root_cause": "confirmed-one-seam",
+        "regression_abstraction": "complete",
+        "cohesive_pr": "yes",
+        "decisions": "resolved",
+        "cross_repository": "no",
+        "destructive_data_change": "no",
+        "auth_or_secret_policy": "no",
+        "scope_expansion": "no",
+    }
+    for name, expected in expectations.items():
+        if getattr(arguments, name) != expected:
+            failed.append(name.replace("_", "-"))
+    if arguments.external_data == "unchecked":
+        failed.append("external-data")
+
+    elevated = sum(
+        getattr(arguments, name) == "yes"
+        for name in (
+            "financial_correctness", "external_contract",
+            "concurrency_or_ownership", "public_api", "user_data_semantics",
+        )
+    )
+    critical_surfaces = sum(
+        getattr(arguments, name) == "yes"
+        for name in (
+            "security_or_privacy", "credible_data_loss",
+            "auth_or_secret_policy", "destructive_data_change",
+        )
+    )
+    critical = critical_surfaces > 0 or elevated > 1
+    risk = "critical" if critical else "elevated" if elevated else "standard"
+    blind_lenses = (
+        0 if risk == "standard"
+        else 1 if risk == "elevated"
+        else min(2, critical_surfaces + elevated)
+    )
+    route = "fix_full" if failed else "fix_fast"
+    payload = {
+        "schema": "project-bug-fix-route",
+        "route": route,
+        "failedPredicates": failed,
+        "reviewRisk": risk,
+        "blindLenses": blind_lenses,
+        "remoteProviderRequired": risk == "critical",
+        "implementationOwners": 1 if route == "fix_fast" else None,
+        "proCalls": 0 if route == "fix_fast" else None,
+        "operationalBundles": 0 if route == "fix_fast" else 1,
+        "humanCheckpoints": 1 if arguments.ui_change == "yes" else 0,
+        "compactBugRecordRequired": route == "fix_fast",
+    }
+    print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

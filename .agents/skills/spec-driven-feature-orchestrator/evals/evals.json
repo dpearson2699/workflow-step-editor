@@ -1,0 +1,1239 @@
+{
+  "version": "2.9",
+  "skill": "spec-driven-feature-orchestrator",
+  "content_evals": [
+    {
+      "id": "content-explicit-user-stops-repeated-pro-planning",
+      "prompt": "Material applicability says another Pro primary is required. I then made final user-directed synthesis edits to the approved decisions and planning route. I explicitly authorize stopping Pro now. Adopt the exact final Plan and continue without another send.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "preserves every completed Pro response and applicability record without rebinding it to the current specification",
+        "produces a fresh CLEAN blind-completeness receipt for the exact candidate Plan after descendants are quiescent",
+        "uses the paired adopt-plan waiver reason and blind receipt inputs in the same atomic transaction",
+        "atomically advances the current specification and source to exact final approved bytes at a descendant source commit",
+        "binds the waiver to the exact active response, specification digest, source commit, canonical Plan digest, and blind receipt digest",
+        "enters Delivery only while the exact waiver and required_user_requested blind authority remain current"
+      ],
+      "anti_behaviors": [
+        "sends or retries another Pro consultation",
+        "rewrites accepted_for_digest or accepted_source_commit on completed Pro evidence",
+        "uses a Boolean bypass, separate waiver mutation, compatibility shim, migration, default, or old receipt interpretation",
+        "accepts an unavailable, non-descendant, or byte-mismatched final source commit",
+        "adopts an ordinary current-Pro Plan through the waiver path",
+        "carries the waiver across Plan, specification, source, or blind-receipt drift"
+      ]
+    },
+    {
+      "id": "content-epic-root-owned-plan",
+      "prompt": "Build data-synchronization health as an epic, break it into reviewable PRs, and ship the feature.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "keeps Discuss as a root-only user interview",
+        "dynamically delegates non-overlapping read-only Plan scopes without a workflow-authored count or depth limit when independent work is useful",
+        "keeps plan synthesis and all semantic and lifecycle writes at the root",
+        "creates one root-owned feature bundle with semantic Markdown, compact state, and per-slice plans",
+        "resolves material product and implementation decisions before detailed planning",
+        "commits and pushes the decision-complete specification checkpoint and reserves exactly one zero-pass Pro consultation",
+        "captures the completed response from the same canonical Pro conversation through the original lifecycle lease",
+        "records current Pro evidence, runs blind completeness, and keeps the complete slice DAG and acceptance mapping before Delivery",
+        "does not claim that prose enforces a model or reasoning-effort route"
+      ],
+      "anti_behaviors": [
+        "delegates user discussion, product decisions, or the complete plan",
+        "duplicates the full plan across optional support workers",
+        "creates a worker registry, lease system, journal, or fixed roster",
+        "duplicates decisions or acceptance prose into state.json"
+      ]
+    },
+    {
+      "id": "content-autonomous-pro-primary-loop",
+      "prompt": "The feature interview is decision-complete. Run the primary architecture pass autonomously through ChatGPT Pro, then continue planning when it finishes.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "probes the repo-local planner, in-app Browser, and ChatGPT Pro before sending",
+        "commits and pushes a decision-complete coordinator specification checkpoint without opening a PR",
+        "binds the Pro prompt to the exact specification digest, branch, commit, and path inventory",
+        "uses standing workflow authorization instead of asking for a per-send confirmation",
+        "reserves the canonical consultation in the existing zero-pass null-cursor planning continuation before primary send and rejects a duplicate receipt path",
+        "submits exactly once and consumes fresh typed wait results bound to the current task, consultation, attempt, and generation",
+        "yields only after heartbeat_registered and captures the full response Markdown plus canonical current conversation URL only after generation_completed with the original lease",
+        "advances planning-continuation.json to one immutable consumed pass and parent cursor",
+        "records the exact response and context manifest through work-state record-pro-primary",
+        "runs blind completeness and enters Delivery only after both current evidence gates pass",
+        "never resends or substitutes a conversation"
+      ],
+      "anti_behaviors": [
+        "falls back to the removed Sol primary planner",
+        "opens Chrome, Computer Use, or Finder",
+        "stores the exact ChatGPT conversation URL in the feature bundle",
+        "polls the Browser from the root while generation is running",
+        "presses Answer now, Stop answering, or an equivalent early-stop control without exact current-conversation user authorization",
+        "resubmits merely because the Pro response is still running",
+        "persists internally consistent caller-authored bytes without the lifecycle pass as successful planning evidence"
+      ]
+    },
+    {
+      "id": "content-pro-invalid-response-bounded-successor",
+      "prompt": "The captured Pro answer contains useful repository-grounded planning with a preamble, tables, and mixed-depth headings. Recover proportionally, while preserving the bounded path for content the root judges unable to support planning.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "classifies useful planning content as valid regardless of presentation before any successor decision",
+        "preserves the original producer bytes and continuation without a derived presentation view or correction receipt",
+        "creates no lifecycle mutation, successor, lease, send, resend, or stage restart for presentation variants",
+        "uses --semantically-unusable only after the root makes a content-based decision that the response cannot support planning",
+        "preserves attempt 1 as invalidated evidence, derives exactly one attempt-2 receipt locator, and uses continuation revision two only for restart_or_fail_closed",
+        "uses the ordinary claim, typed wait, and capture transitions for an authorized attempt 2",
+        "advances continuation revision three with both immutable passes after a valid successor",
+        "returns BLK-PRO-INVALID-RESPONSE-EXHAUSTED and creates no third attempt after a second invalid response"
+      ],
+      "anti_behaviors": [
+        "uses accepted_with_annotations or repair text to bypass source or integrity failures",
+        "overwrites or deletes the invalid predecessor",
+        "reserves a successor for formatting, heading depth, tables, wrappers, or equivalent prose organization",
+        "reuses a consumed lease or accepts a caller-selected successor locator",
+        "accepts stale, replayed, substituted, duplicate, or conflicting orphan authority"
+      ]
+    },
+    {
+      "id": "content-pro-manual-resume-is-typed",
+      "prompt": "The Pro heartbeat registration failed after the one send. Leave the workflow safe for a later same-task manual resume.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "consumes a typed manual_resume_required result and claims neither yield nor future wake",
+        "reports manual_resume_required without Browser polling or capture",
+        "requires manual_resume_observed from the same current task and generation",
+        "requires a subsequent current manual generation_completed result before one inspection and capture"
+      ],
+      "anti_behaviors": [
+        "treats a later root turn as wait authority",
+        "captures directly from manual_resume_required",
+        "manufactures heartbeat evidence or stores heartbeat details in state.json"
+      ]
+    },
+    {
+      "id": "content-pro-missing-bound-tab-recovery",
+      "prompt": "The current Pro heartbeat is admitted and wakes the root, but integrated-browser cleanup removed every tab. The lifecycle receipt still binds the exact planning conversation and generation. Continue autonomously.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "keeps the persistent in-app Browser binding and discards only the missing tab binding",
+        "reopens the exact receipt-bound canonical conversation URL",
+        "verifies the committed conversation and generation before continuing the same generation",
+        "treats the reopened tab as the same producer rather than conversation substitution",
+        "continues automatically without manual recovery"
+      ],
+      "anti_behaviors": [
+        "reports manual_resume_required solely because the tab handle disappeared",
+        "records BLK-PRO-UNCERTAIN-SEND or reconcile-wake solely for tab cleanup",
+        "resends the prompt or opens a different conversation",
+        "asks the user to reopen the planning tab"
+      ]
+    },
+    {
+      "id": "content-completed-pro-heartbeat-invalid-successor",
+      "prompt": "Attempt 1 completed with an invalid Pro response, reserve-invalid-response-successor persisted attempt 2, and the heartbeat woke the root. Continue the active workflow.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "reloads the canonical continuation cursor and follows parent_action claim_successor_send in the same root trajectory",
+        "claims and begins attempt 2 through the ordinary send, typed wait, and capture commands",
+        "emits the final heartbeat envelope and yields after attempt 2 records a fresh heartbeat_registered result",
+        "keeps the workflow nonterminal while the successor or later Plan work remains active"
+      ],
+      "anti_behaviors": [
+        "returns a quiet terminal response after reserving attempt 2",
+        "waits for another user message before beginning the prepared successor",
+        "treats wait-generation completion as workflow completion"
+      ]
+    },
+    {
+      "id": "content-completed-pro-heartbeat-valid-plan",
+      "prompt": "The completed Pro heartbeat produced a valid captured response and parent_action record_pro_primary. Continue the active spec-work lifecycle.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "executes record_pro_primary in the same root trajectory",
+        "continues Plan through plan adoption and blind completeness",
+        "proceeds into Delivery when the remaining canonical gates pass"
+      ],
+      "anti_behaviors": [
+        "ends the root turn merely because Pro generation completed",
+        "describes the workflow as complete before Plan or Delivery finishes",
+        "requires user steering to consume the valid response"
+      ]
+    },
+    {
+      "id": "content-completed-pro-heartbeat-replay-noop",
+      "prompt": "A stale heartbeat and then a duplicate terminal heartbeat arrive after the canonical Pro transition was already consumed. Reconcile safely.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "reloads canonical state before acting",
+        "treats stale and duplicate terminal evidence as an idempotent no-op for evidence consumption",
+        "executes any pending canonical parent_action or continuation cursor despite the replay",
+        "leaves the consumed transition unchanged while accurately reporting any still-nonterminal workflow state"
+      ],
+      "anti_behaviors": [
+        "captures or records the response twice",
+        "creates another successor or heartbeat",
+        "claims nonterminal work is complete because the replay itself needs no action"
+      ]
+    },
+    {
+      "id": "content-pro-applicability-target-reconciliation",
+      "prompt": "A current applicability receipt fails only because toSourceCommit names the wrong SHA; current state, active evidence, local HEAD, a live remote observation, source bytes, diff, and anchors all identify one other SHA.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "uses record-pro-applicability --source-observation only after the ordinary strict path fails",
+        "requires the context manifest repository and branch to match active evidence and its local HEAD to equal the one live verified remote head and checked-out HEAD",
+        "recomputes current approved source bytes, changedPaths, evidence anchors, and monotonic assessment epoch before accepting the candidate",
+        "preserves the original receipt and all non-target fields while storing a canonical derived effective receipt and correction receipt",
+        "avoids at most one fresh Pro primary and one blind audit and creates no successor, send, task replacement, stage restart, repeated review, or repeated verification"
+      ],
+      "anti_behaviors": [
+        "reconciles a semantic field, stale active evidence, unavailable provenance, or conflicting candidates",
+        "uses remote-tracking state as live provider proof",
+        "overwrites the producer receipt or treats an orphan artifact as authority",
+        "repeats Pro planning or blind completeness after successful reconciliation"
+      ]
+    },
+    {
+      "id": "content-pro-loop-fail-closed",
+      "prompt": "The one authorized Pro send completed, but the Browser cannot attest which canonical conversation owns it. Continue safely.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "clears live send authority and records exact BLK-PRO-UNCERTAIN-SEND",
+        "does not send a repair or create a replacement conversation",
+        "does not substitute Sol or partial Pro output for the mandatory primary pass",
+        "surfaces the unavailable required capability as the permitted catastrophic human stop"
+      ],
+      "anti_behaviors": [
+        "retries indefinitely",
+        "proceeds to the blind audit with no usable candidate primary evidence",
+        "claims workflow autonomy authorizes arbitrary ChatGPT messages"
+      ]
+    },
+    {
+      "id": "content-stale-pro-wake-parent-continuation",
+      "prompt": "A caller-authored continuation claims a consumed Pro response, parent cursor, and deleted heartbeat while the canonical continuation is zero-pass. Continue safely.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "rejects the positive continuation because it lacks the bridge-owned canonical pass identity and response evidence",
+        "opens no Browser conversation and sends no prompt or repair",
+        "does not treat active or deleted heartbeat projections as authority",
+        "records an exact state mismatch or uncertain-send blocker and stops before blind audit or Delivery"
+      ],
+      "anti_behaviors": [
+        "trusts lifecycle_state copied into the heartbeat",
+        "accepts a pass whose canonical identity or response evidence does not validate",
+        "resumes a caller-authored parent cursor"
+      ]
+    },
+    {
+      "id": "content-terminal-duplicate-and-cleanup-pending",
+      "prompt": "Duplicate callbacks present the same caller-authored terminal candidate before any trusted producer exists.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "rejects both terminal candidates without publishing response evidence",
+        "keeps the canonical continuation unchanged",
+        "publishes no planning evidence through the canonical state boundary",
+        "does not create or retain heartbeat authority",
+        "stops Plan without blind audit or Delivery"
+      ],
+      "anti_behaviors": [
+        "deduplicates forged evidence into accepted authority",
+        "mutates or reinspects the terminal candidate",
+        "equates callback arrival with trusted producer proof"
+      ]
+    },
+    {
+      "id": "content-compaction-and-state-mismatch",
+      "prompt": "Resume a compacted feature task where narrative context and a caller-authored wake claim positive Pro state, but the canonical continuation remains zero-pass.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "uses the canonical continuation and state rather than compacted narrative as authority",
+        "rejects positive wake, terminal, cursor, and heartbeat projections",
+        "records an exact mismatch blocker without resubmission",
+        "forbids Browser and sends",
+        "does not create inspection or replacement authority"
+      ],
+      "anti_behaviors": [
+        "reconstructs a pending consultation from memory",
+        "recreates an inspect heartbeat after not-found",
+        "accepts mismatched identity because the wake arrived later"
+      ]
+    },
+    {
+      "id": "content-pro-non-material-digest-carry",
+      "prompt": "A caller-authored record claims an accepted Pro primary and non-material applicability carry-forward. Continue rigorously.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "rejects the claimed positive primary and applicability record when no canonical lifecycle pass binds them",
+        "does not use repository anchors to upgrade caller-authored Pro bytes into authority",
+        "keeps active_response_digest null and evidence empty",
+        "keeps the bundle in Plan without another send",
+        "does not run blind completeness or enter Delivery"
+      ],
+      "anti_behaviors": [
+        "carries accepted_for_digest from untrusted evidence",
+        "records an applicability chain without a trusted producer",
+        "uses a blind-completeness receipt to bypass the blocker"
+      ]
+    },
+    {
+      "id": "content-pro-material-or-uncertain-digest-change",
+      "prompt": "The acceptance predicate changed after a caller-authored record claimed a successful Pro primary. Continue the feature workflow.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "rejects caller-authored positive evidence that lacks canonical lifecycle authority regardless of its claimed classification",
+        "requires material or uncertain applicability to bind the current evidence and authorize a fresh primary",
+        "keeps Plan-to-Delivery blocked until a new canonical pass and blind audit exist",
+        "does not resend or ask the user to approve a substitution"
+      ],
+      "anti_behaviors": [
+        "carries prior evidence despite the absent trusted producer",
+        "uses a coordinator annotation to cure absent authority",
+        "starts Delivery from internally consistent caller-authored bytes"
+      ]
+    },
+    {
+      "id": "content-pro-applicability-chain-and-blind-audit",
+      "prompt": "Caller-authored files claim two applicability records and a clean blind audit after a forged Pro primary. Show the safe requirement before Delivery.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "rejects the primary, applicability records, and blind receipt when their canonical identity or evidence bindings do not validate",
+        "accepts applicability and blind completeness only after canonical current Pro evidence",
+        "keeps Plan-to-Delivery closed until exact evidence and quiescence gates pass"
+      ],
+      "anti_behaviors": [
+        "treats append-only structure as producer attestation",
+        "accepts the blind receipt from caller-authored evidence",
+        "continues to Delivery"
+      ]
+    },
+    {
+      "id": "content-plan-support-routing",
+      "prompt": "Plan a cross-module synchronization-health feature. The root is Sol; use planning help only where it improves evidence or coverage without wasting tokens.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "keeps the user interview and consequential decisions at the root",
+        "assigns only distinct bounded live-data, local-only, code-intelligence, or plan-coverage questions rather than duplicate broad GitHub research",
+        "keeps internal Plan delegation route-neutral without named workflow roles or profiles",
+        "gives every internal delegation exact sources, a stop condition, and a compact evidence receipt",
+        "allows Plan agents to delegate narrower read-only work and fans in the full tree before synthesis",
+        "fans in receipts before the root finalizes affected discovery or plan sections"
+      ],
+      "anti_behaviors": [
+        "spawns support merely because capacity exists",
+        "claims an independently requested or effective route for internal delegation",
+        "changes repository-wide subagent depth or prevents unrelated workflows from nesting"
+      ]
+    },
+    {
+      "id": "content-blind-plan-convergence",
+      "prompt": "The ChatGPT Pro primary plan for a large async feature is drafted. Audit it until it is safe to begin implementation.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "records required_multi_slice_reconciliation for this large async plan before creating a blind audit",
+        "uses the fresh-context read-only blind-completeness contract without a named profile or route",
+        "withholds the ChatGPT Pro transcript, evidence artifact, receipt, conversation metadata, routing history, and previous audit rationale and dispositions",
+        "binds every audit result to the exact candidate plan digest",
+        "runs another blind pass only after accepted material findings change the plan digest",
+        "requires a clean receipt for the exact final digest and returns unresolved product ambiguity to the user"
+      ],
+      "anti_behaviors": [
+        "asks the primary planner to confirm its own plan",
+        "repeats an audit after duplicate, stylistic, or non-blocking findings",
+        "starts delivery using a clean receipt for an older plan digest"
+      ]
+    },
+    {
+      "id": "content-slice-task-tree-delegation",
+      "prompt": "Implement approved PR-01 by opening its dedicated Codex task in a new worktree with the planned route. Use GPT-5.6 subagents wherever they improve the implementation, tests, integration, or verification.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "calls codex_app.create_thread for one user-visible project-worktree implementation task and never substitutes root mutation, a same-directory task, fork_thread, or an internal subagent",
+        "mechanically registers the plan-derived task and route roster without asking the user, then requests gpt-5.6-sol Medium, High, or xHigh from named predicates while treating the implementor TOML as prompt context",
+        "records requested and effective routing separately and labels accepted request transport codex_task_request",
+        "commits the plan checkpoint, reserves the launch, creates the project-worktree task with one RUN_SLICE prompt, verifies the resolved checkout, and binds it directly active without a preparation callback or activation message",
+        "uses codex_app.send_message_to_thread with the delegation source_thread_id for the terminal parent callback, or reports manual_resume_required after a failed or unavailable direct task message",
+        "consumes the approved slice plan directly without creating a second execution-plan artifact",
+        "dynamically delegates mutating test, implementation, and integration work when useful",
+        "allows concurrent child mutation only on disjoint delegated paths and serializes overlap",
+        "uses a waited shipping worker after the verified commit to push and open only the assigned PR",
+        "returns one integrated receipt after the descendant tree is quiescent while the feature root retains lifecycle and merge authority",
+        "creates a separate exact-head Codex worktree task running gitnexus-pr-review before merge"
+      ],
+      "anti_behaviors": [
+        "implements the slice in the feature root or substitutes a fork, same-directory task, or internal subagent",
+        "forces implementation descendants to remain read-only",
+        "attaches a second peer top-level task to the same worktree",
+        "lets the implementation task review its own PR",
+        "adds a workflow-authored agent count, depth, or concurrency cap",
+        "lets a child own polling or recovery, or adds a persisted heartbeat, lease, registry, or global configuration change",
+        "uses PREPARE_ONLY, start-wave, or an ACTIVATE message for this single serial slice",
+        "treats collaboration messaging to /root or an agent path as the user-visible parent callback",
+        "lets descendants edit the coordinator bundle or declare feature completion"
+      ]
+    },
+    {
+      "id": "content-implementation-effort-routing",
+      "prompt": "Route implementation for a localized setting, an async multi-file sync change, and a cross-module persistence/concurrency change with missed-verification history.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "requests gpt-5.6-sol Medium for the localized known-seam slice",
+        "requests gpt-5.6-sol High for the stateful or asynchronous multi-file slice and for one critical predicate",
+        "requests gpt-5.6-sol xHigh for interacting persistence or concurrency invariants with named missed-verification history and for multiple critical predicates",
+        "does not claim the unpinned implementor profile enforces those routes",
+        "returns contradictions to Plan rather than increasing effort"
+      ],
+      "anti_behaviors": [
+        "routes by diff size, capacity, model novelty, or a vague complexity label",
+        "increases effort merely because a feature is large",
+        "adds Max or Ultra to ordinary implementation"
+      ]
+    },
+    {
+      "id": "content-local-plan-no-delegation",
+      "prompt": "Add one already-understood display preference in a known settings module and plan the smallest reviewable feature slice.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "handles the bounded planning work in the root when a support task has no independent value",
+        "keeps acceptance, ownership, verification, and lifecycle writes at the root",
+        "does not equate available agent capacity with a reason to delegate"
+      ],
+      "anti_behaviors": [
+        "creates a mandatory researcher or analyst task",
+        "adds a fixed planning roster or worker registry"
+      ]
+    },
+    {
+      "id": "content-safe-parallel-wave",
+      "prompt": "The planned feature has an isolated backend slice and an isolated UI slice. Run them in parallel if it is actually safe and carry the feature through implementation and review.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "performs the complete pairwise parallelization assessment in the root plan",
+        "requires no dependency edge, disjoint owned paths, no shared semantic or resource boundary, and independent verification",
+        "creates distinct clean harness-native user-visible project-worktree tasks from one observed origin/main SHA outside the state helper",
+        "uses PREPARE_ONLY only because at least two independent implementation tasks must enter the wave together, records every prepared task binding, and atomically activates the complete wave with start-wave before sending ACTIVATE",
+        "creates no preparation receipt or wake proof",
+        "on partial ACTIVATE delivery, stops notified tasks, persists a blocker, and retains active state until observed quiescence instead of faking rollback",
+        "keeps one owning task tree per slice worktree and the root as the only feature-state writer"
+      ],
+      "anti_behaviors": [
+        "parallelizes from diff size or a vague complexity label",
+        "activates only part of a parallel wave",
+        "asks the user to approve the task roster, planned writing, or model routes",
+        "lets implementation tasks edit the coordinator bundle or merge their PRs"
+      ]
+    },
+    {
+      "id": "content-parallel-retry-cohort",
+      "prompt": "Two independent slices from one parallel wave both have typed unrecoverable worktree failures and need replacement attempts. Refresh and resume them safely.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "treats every nonterminal same-wave retry member as one complete cohort when at least two must mutate",
+        "reserves and prepares every cohort member before one atomic start-wave and sends ACTIVATE only afterward",
+        "rejects partial activation and uses direct RUN_SLICE only when all same-wave peers are terminal or quiescent"
+      ],
+      "anti_behaviors": [
+        "peels one mutating retry from a multi-member cohort into a direct launch",
+        "uses singleton start-wave",
+        "rewinds or falsely completes an independent sibling"
+      ]
+    },
+    {
+      "id": "content-direct-launch-blocker-admission",
+      "prompt": "Explain the unattended blocker timing for a direct serial slice when the blocker exists before reservation versus when the creating reservation succeeded and create_thread may already have run. Contrast that with prepared parallel tasks.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "submits the direct creating reservation before create_thread and treats rejection as admission failure",
+        "creates no mutating task and leaves state byte-identical when the blocker rejects reservation",
+        "treats an accepted direct creating reservation as the activation token; creating-to-active records returned identity, worktree, and START and is not a second admission gate",
+        "if creation may have occurred before a later blocker, reconciles the exact task identity and stops and accounts for the task instead of erasing the attempt",
+        "allows nonmutating PREPARE_ONLY reservation only for a real parallel cohort while start-wave remains blocked"
+      ],
+      "anti_behaviors": [
+        "creates a RUN_SLICE task before discovering the blocker",
+        "uses active identity binding as a second admission gate and pretends a possibly created task does not exist",
+        "clears the blocker without its recorded evidence",
+        "asks the user to approve the already authorized task roster"
+      ]
+    },
+    {
+      "id": "content-conflicting-slices-serialize",
+      "prompt": "Plan three slices: two update the same canonical sync policy, one shares a generated test fixture, and two depend on the same UI acceptance checkpoint.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "classifies canonical-document, generated-fixture, and UI-acceptance sharing as parallel conflicts",
+        "records serial execution for every uncertain or coupled boundary",
+        "does not rely on different source filenames to claim semantic independence",
+        "keeps dependency-edge mutation ordered",
+        "uses the deterministic gate as a lower bound rather than claiming it proves semantic independence"
+      ],
+      "anti_behaviors": [
+        "places conflicting slices in one parallel wave",
+        "treats disjoint primary code paths as sufficient",
+        "silently removes a guardrail to reduce latency"
+      ]
+    },
+    {
+      "id": "content-stacked-pr-lifecycle",
+      "prompt": "In the active spec-feature bundle, PR-02 depends on PR-01, but I want useful work to continue while PR-01 is under review. Continue the planned feature loop.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "finishes and publishes PR-01 implementation, leaves its task quiescent, and obtains a separate exact-head clean gitnexus-pr-review task result before launching PR-02",
+        "starts PR-02 alone in serial mode from the open upstream PR head with one direct RUN_SLICE prompt and no preparation or activation turn",
+        "prevents PR-01 review remediation from resuming until PR-02 tasks quiesce and are superseded",
+        "blocks PR-02 when PR-01 merges, refreshes it onto origin/main, and reruns affected verification",
+        "prevents PR-02 from merging before PR-01"
+      ],
+      "anti_behaviors": [
+        "implements dependency-edge slices concurrently",
+        "asks the user to approve the planned implementation or review tasks",
+        "starts downstream work while the upstream review is active, blocked, missing, or stale",
+        "merges the downstream PR first",
+        "retains stale upstream-head verification after the dependency changes"
+      ]
+    },
+    {
+      "id": "content-public-pr-contract-projection",
+      "prompt": "PR-01 implementation and evidence are complete. Open the pull request from its checkpointed feature bundle and exact slice plan.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "reads and completely renders .github/pull_request_template.md even when creating the PR through a CLI or API",
+        "projects the linked issue when applicable, checkpointed primary specification, exact slice plan, and every assigned acceptance criterion into the public description",
+        "copies the accepted outcome, included scope, non-goals, and required outcomes instead of pointing reviewers at task-local or bundle scratch files",
+        "maps every required outcome to current or still-required evidence",
+        "freezes the Contract, Scope, and required-outcome text at PR creation while allowing implementation and evidence to follow later heads",
+        "updates semantic authority first and appends an explicit sourced Contract amendment when an accepted contract change is authorized"
+      ],
+      "anti_behaviors": [
+        "publishes a summary-only body with checkpoints and test totals",
+        "assumes CLI or API creation automatically applies the repository template",
+        "uses a bare bundle path or private working notes as the reviewer-visible contract",
+        "silently rewrites frozen scope or acceptance after review begins"
+      ]
+    },
+    {
+      "id": "content-review-head-rotation",
+      "prompt": "PR-01 was clean at head H1, then its separate reviewer pushed a valid fix and the remote head became H2. Continue safely.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "invalidates the H1 clean result after the PR head rotates",
+        "keeps remediation and re-review inside the separate gitnexus-pr-review task rather than returning ordinary findings to implementation",
+        "re-observes H2, refreshes verification and the active review binding, and requires a clean result for H2",
+        "blocks merge until the root accepts current-head evidence and every review descendant is quiescent"
+      ],
+      "anti_behaviors": [
+        "merges H2 using the H1 clean result",
+        "reuses the implementation task as the reviewer",
+        "changes model or effort mid-task instead of starting a new attempt when routing must change"
+      ]
+    },
+    {
+      "id": "content-direct-review-launch",
+      "prompt": "PR-01 implementation is quiescent and its remote head is H1. Start the required independent review and carry valid remediation to a current-head clean result.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "quiesces implementation, releases the PR branch through task-git-binding, records RELEASED proof, and then probes gitnexus-pr-review",
+        "creates one separate project-worktree review task from exact remote head H1 with gpt-5.6-sol High and one RUN_REVIEW goal",
+        "includes one digest-bound immutable startup fact block from which the task invokes task-git-binding and review-lease locally",
+        "corrects retryable startup errors in that same review task without a preparation callback, activation message, or replacement task",
+        "publishes release and attachment receipts beneath an explicit canonical bundle root while one common-directory and branch lock covers each complete helper operation",
+        "allows literal null runtime thread identities in the task-local attachment while the root reconciles the unique returned task and launch marker",
+        "requires the startup command and rolling lease to validate the exact attachment before loading gitnexus-pr-review or fan-out",
+        "binds every review attachment to the greatest causal typed release from the actual prior implementation or review owner",
+        "keeps native remediation, verification, GitHub thread disposition, push, and re-review in that review task",
+        "accepts clean only for the current remote PR head and after review descendants are quiescent"
+      ],
+      "anti_behaviors": [
+        "invokes review or remediation while the review worktree is detached or before the startup command proves unique branch ownership",
+        "creates an inert preparation task and later sends a second activation message",
+        "substitutes PARENT_TASK_ID or a guessed client identity for task-local attachment identity",
+        "copies implementation reasoning, old findings, or expected conclusions into the review prompt",
+        "marks an older reviewed head clean after remediation changes the PR"
+      ]
+    },
+    {
+      "id": "content-current-owner-base-sync",
+      "prompt": "The base of PR-01 advances once before implementation handoff, once during review startup, and once while review owns the branch. Continue each controlled fixture safely.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "keeps pre-handoff merge-based base synchronization in the original implementation task and records the new base with its terminal evidence",
+        "lets the same creating review task activate against its recorded ancestor base, then merge the advanced live base through review-lease advance without another task",
+        "keeps post-attachment merge-based base synchronization in the original review task through review-lease advance",
+        "reopens a previously clean original review task when another PR merge advances main, preserving its PR, head, task ID, and worktree",
+        "canonicalizes origin/main, refs/remotes/origin/main, and refs/heads/main to one remote base identity",
+        "preserves exactly one implementation task and one review task for the PR across all base advances"
+      ],
+      "anti_behaviors": [
+        "uses stale base as a replacement predicate",
+        "creates implementation attempt 2 solely to merge current main",
+        "discards a review task because startup base facts changed",
+        "allows implementation and review to own the branch concurrently"
+      ]
+    },
+    {
+      "id": "content-review-replan-stable-task-reuse",
+      "prompt": "The PR-01 reviewer found a material plan defect at H1. The accepted product goal and open PR remain valid. Replan, implement the correction, and review the revised head.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "finalizes the current review blocked, releases the branch, and returns Delivery to Plan without superseding either healthy task",
+        "records a fresh exact-digest Pro plan, new checkpoint, current task roster, and typed blind requirement",
+        "reauthorizes the same implementation task and worktree at the next slice revision epoch while retaining the same open PR",
+        "sends RESUME_IMPLEMENTATION_AFTER_REPLAN to the same implementation task with the exact plan and attach-implementation command",
+        "after the revised head is pushed and released, sends RESUME_REVIEW to the same review task with a next-revision attachment and review-lease resume command",
+        "accepts final evidence only for the revised head, current revision epoch, and same PR"
+      ],
+      "anti_behaviors": [
+        "creates a replacement implementation or review task merely because the plan changed",
+        "opens another PR for the same accepted goal",
+        "runs implementation and review concurrently against the shared branch",
+        "reuses a prior-revision terminal or clean receipt"
+      ]
+    },
+    {
+      "id": "content-exact-pro-plan-skips-blind-audit",
+      "prompt": "The captured ChatGPT Pro response is a complete exact-digest plan with no missing fields, unresolved ambiguity, multi-slice reconciliation need, or user-requested audit. Continue to Delivery.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "records not_required_exact_pro_plan against the current Pro evidence and plan digest",
+        "enters Delivery without a blind audit task or blind completeness receipt when every other gate passes",
+        "invalidates that decision if Pro evidence or material applicability later changes"
+      ],
+      "anti_behaviors": [
+        "creates a blind audit unconditionally",
+        "skips the typed blind requirement decision",
+        "carries the no-audit decision across a changed Pro response or material plan digest"
+      ]
+    },
+    {
+      "id": "content-review-nonprogress",
+      "prompt": "A current-head review repeats blocker F1. Deduplication maps it to the existing blocker, its evidence and proposed repair are unchanged, and required acceptance still fails. Continue the feature.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "returns demonstrated non-progress to the feature root as needs_parent_action",
+        "does not grant a no-op writer lease or replace the review task"
+      ],
+      "anti_behaviors": [
+        "starts another cycle without new blocker evidence or a meaningful repair",
+        "marks the PR clean despite failed acceptance evidence"
+      ]
+    },
+    {
+      "id": "content-evidence-first-interview",
+      "prompt": "The request contradicts an ADR, two questions may already be answered by current tests, and one product choice is still ambiguous. Discuss and prepare the feature docs, then resume without re-asking me.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "creates stable GA and Q entries in INTERVIEW.md with evidence and confidence",
+        "records rather than silently resolves the ADR/runtime conflict",
+        "closes evidence-resolved questions as answered_by_docs and never re-asks them",
+        "asks the remaining consequential product choice from the root with a recommended default",
+        "atomically synchronizes decision, feature, acceptance, plans, blockers, and canonical-doc obligations",
+        "invalidates a candidate plan digest and requires a fresh blind audit after a material answer"
+      ],
+      "anti_behaviors": [
+        "delegates the user interview",
+        "treats historical plans as canonical authority",
+        "records unresolved semantic choices only in state.json"
+      ]
+    },
+    {
+      "id": "content-durable-doc-promotion",
+      "prompt": "During feature discovery we choose a new cross-screen lifecycle rule. Record where that decision belongs and when its canonical update must land.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "records the evidence and conflict in the feature Doc Authority table",
+        "routes durable product or architecture policy to an ADR and system flow to architecture documentation",
+        "requires the owning canonical update before or with the first dependent implementation slice"
+      ],
+      "anti_behaviors": [
+        "leaves durable policy only in a feature plan",
+        "silently chooses current code over durable intended policy"
+      ]
+    },
+    {
+      "id": "content-single-pr-ui-gate",
+      "prompt": "This feature is one PR that changes a Dashboard control. Plan, verify, and ship it.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "automatically designates the only UI PR as the final UI slice",
+        "classifies its UI gate as final_human_required",
+        "gives the slice a unique automated UI acceptance ID and stable proof target distinct from final design acceptance",
+        "allows current-head implementation proof to defer the human checkpoint while the PR enters review",
+        "waits until review, CI, verification, mergeability, and current-head snapshot evidence are clean",
+        "keeps the configured verification session active for final human confirmation before merge readiness"
+      ],
+      "anti_behaviors": [
+        "merges the only UI PR from DEFERRED_TO_PR_FINAL without the final human checkpoint",
+        "treats a screenshot path as human confirmation"
+      ]
+    },
+    {
+      "id": "content-multi-pr-ui-deferral",
+      "prompt": "A multi-PR feature has two UI-affecting slices. Keep the intermediate PR moving but ask me for design confirmation only on the final UI PR.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "declares final_pr_design_gate and one later final UI slice",
+        "classifies the intermediate slice snapshot_required_human_deferred and the final slice final_human_required",
+        "assigns each UI slice its own automated acceptance ID and stable proof target while the final slice separately owns human design acceptance",
+        "serializes slices that share the final UI acceptance dependency",
+        "allows DEFERRED_TO_PR_FINAL only with current-head snapshot proof, clean other gates, and a released session",
+        "records each UI slice automated AC as passed only with its exact typed implementation receipt and revalidates it before that slice merges",
+        "keeps feature design acceptance pending until the final active-session human checkpoint"
+      ],
+      "anti_behaviors": [
+        "defers human review for a standalone PR",
+        "marks final feature design acceptance passed from an intermediate snapshot",
+        "parallelizes UI slices that share final design acceptance"
+      ]
+    },
+    {
+      "id": "content-ui-replan-and-stale-proof",
+      "prompt": "The designated final UI slice changed during replanning, its head advanced after snapshot proof, and an intermediate slice cannot produce snapshot evidence.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "updates the final UI slice policy and affected slice classifications during replanning",
+        "rebinds automated acceptance and proof targets from each current slice plan",
+        "invalidates final UI evidence after the head or designated slice changes",
+        "blocks the intermediate PR when snapshot evidence is missing instead of deferring",
+        "requires fresh automated proof and a new final human checkpoint"
+      ],
+      "anti_behaviors": [
+        "carries final UI confirmation across a new head",
+        "emits DEFERRED_TO_PR_FINAL after a failed automated snapshot"
+      ]
+    },
+    {
+      "id": "content-ui-verify-repair",
+      "prompt": "Add an account health badge to the Dashboard and ship it.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "records UI acceptance with a stable AC identifier",
+        "binds typed project-ui-proof evidence to the slice plan's automated AC and stable proof target with a closed displayed-value or control-present observation",
+        "rejects generic or waived automated UI acceptance and stale typed proof before merge",
+        "uses the repository-defined test, build, and project-ui-verification owners at their gates",
+        "returns a failing slice to implementation and re-verifies after repair",
+        "writes evidence explanations to RECEIPT.md and only evidence paths and status to JSON",
+        "does not complete while acceptance is pending or failed"
+      ],
+      "anti_behaviors": [
+        "treats launch-only smoke as displayed-value proof",
+        "accepts a task done message as verification",
+        "marks complete from an open PR or stale evidence"
+      ]
+    },
+    {
+      "id": "content-acceptance-semantic-drift",
+      "prompt": "AC-004 passed yesterday, but its wording changed under the same ID today. Resume and complete the feature safely.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "detects the normalized criterion digest mismatch and refuses stale completion",
+        "waits for every affected creating, prepared, or active task to quiesce before revision-checked refresh-acceptance",
+        "resets only AC-004 to pending, preserves unrelated criteria, invalidates the candidate plan digest when material, reruns blind planning audit, and reverifies AC-004"
+      ],
+      "anti_behaviors": [
+        "silently updates the digest while retaining passed evidence",
+        "treats a stable AC identifier as proof that its semantics did not change"
+      ]
+    },
+    {
+      "id": "content-reopened-acceptance-lock",
+      "prompt": "The feature completed, then reopened. Rewrite old AC-001 for the new epoch and continue.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "rejects semantic drift and refresh of locked AC-001 after reopen",
+        "preserves AC-001 status, evidence, digest, and lock without mutation",
+        "creates a new unlocked AC identifier for the new epoch and verifies it independently"
+      ],
+      "anti_behaviors": [
+        "unlocks or refreshes AC-001",
+        "resets locked evidence during attempt invalidation",
+        "treats reopening as permission to rewrite completed acceptance semantics"
+      ]
+    },
+    {
+      "id": "content-completed-evidence-drift",
+      "prompt": "The feature is complete, but a recorded acceptance evidence file was replaced at the same path. Resume safely.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "rehashes evidence bytes and rejects the completed state before any lifecycle mutation",
+        "distinguishes a stable evidence path from stable evidence content",
+        "preserves the locked record and requires explicit remediation rather than rewriting its digest"
+      ],
+      "anti_behaviors": [
+        "trusts evidence because the file path still exists",
+        "silently updates evidence_digests",
+        "reopens or completes while locked evidence content is stale"
+      ]
+    },
+    {
+      "id": "content-parallel-merge-refresh",
+      "prompt": "Two independent PRs are open from one parallel wave and the first just merged. Continue the feature.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "re-observes the merge from the system of record before updating state",
+        "blocks remaining active or open siblings instead of treating their old base as current",
+        "refreshes each remaining PR from current origin/main and updates its binding",
+        "reruns affected verification and current-head review before merge",
+        "does not rewind an independent sibling merely because another slice failed before merge"
+      ],
+      "anti_behaviors": [
+        "merges the second PR using verification from the old base",
+        "lets the state helper perform Git operations",
+        "declares feature completion after only one wave member merges"
+      ]
+    },
+    {
+      "id": "content-resume-after-compaction",
+      "prompt": "Resume the active notification feature after this thread was compacted.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "reloads semantic Markdown, relevant slice plans and receipts, and state.json",
+        "runs feature-state validate, show, and ready before choosing work",
+        "reconstructs active slices from their statuses and reconciles recorded implementation/review task IDs, queued client IDs, worktrees, attempts, and bound heads through the running harness's task read surface",
+        "uses the observed revision for the next root-owned mutation",
+        "continues recorded delivery without reconstructing semantic prose from JSON"
+      ],
+      "anti_behaviors": [
+        "trusts compacted chat history over the feature bundle",
+        "overwrites a stale revision",
+        "creates a second state surface or worker ledger"
+      ]
+    },
+    {
+      "id": "content-completion-routing",
+      "prompt": "All feature PRs are merged. Decide completion once with direct evidence and once with cross-slice stale-evidence ambiguity.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "re-observes current repository and GitHub facts, then asks the deterministic bridge to consume existing typed evidence directly",
+        "launches no completion-audit model task and creates no duplicate completion receipt",
+        "keeps waiver, merge, lifecycle mutation, and completion authority at the root",
+        "treats missing or stale current-head evidence as blocking",
+        "returns the completed state or exact deterministic blockers"
+      ],
+      "anti_behaviors": [
+        "declares completion from a worker receipt or an older head",
+        "launches another model task to restate evidence already owned by the bridge",
+        "adds a compatibility path for the removed completion-audit contract"
+      ]
+    },
+    {
+      "id": "content-unattended-task-roster-registration",
+      "prompt": "The feature plan is final. PR-03 needs its GitNexus review, then PR-04 needs Sol High implementation and its review. Continue the workflow end to end.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "derives the implementation and review roster plus bounded replacement predicates from the approved plan",
+        "writes Codex Task Roster with registered status and no user-evidence field",
+        "runs record-task-roster with revision CAS before reserving the next task",
+        "creates and progresses eligible harness-native user-visible worktree tasks without asking the user to approve writing, review, or model routes",
+        "retains exact route digests, worktree isolation, current-head review, quiescence, and completion gates"
+      ],
+      "anti_behaviors": [
+        "asks the user to confirm the task roster",
+        "treats each PR or route as a separate permission grant",
+        "removes task roster digests to avoid the approval prompt"
+      ]
+    },
+    {
+      "id": "content-unattended-bounded-replacement",
+      "prompt": "PR-02's implementation worktree is proven unrecoverable after its open PR was published. Replace only that failed task and continue on the same PR.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "quiesces the stale task lineage and records required stop and branch-release proof",
+        "uses the plan-recorded unrecoverable_worktree replacement predicate and current observation receipt",
+        "re-registers a changed roster mechanically when its canonical entry changes",
+        "captures the open PR and exact current head as replacement lineage before the base refresh invalidates attempt facts",
+        "starts the replacement from the retained head as START, integrates the refreshed REQUIRED_BASE before planned edits, preserves existing commits, and never force-pushes",
+        "accepts a verified rotated output head only on the same PR and then clears replacement lineage",
+        "creates the replacement task without asking for user approval when the change stays inside workflow authority",
+        "reruns current-base verification and exact-head review"
+      ],
+      "anti_behaviors": [
+        "asks the user to authorize the replacement attempt or routine reroute",
+        "reuses a stale task or silently changes model effort mid-task",
+        "continues from stale evidence",
+        "silently substitutes a different PR or starts from the refreshed base instead of the retained PR head"
+      ]
+    },
+    {
+      "id": "content-human-stop-boundary-after-roster-registration",
+      "prompt": "Continue a planned multi-PR feature, but one acceptance criterion contradicts the approved product behavior and the final slice changes visible UI.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "does not ask for task-roster, writing, review, or model-route approval",
+        "returns the consequential product contradiction to the user with a recommendation before changing the plan",
+        "preserves the final UI human design checkpoint after automated evidence and ordinary gates are clean",
+        "keeps explicit waiver and unavailable-capability stops human-owned",
+        "stops when a requested action exceeds the approved workflow authority"
+      ],
+      "anti_behaviors": [
+        "uses unattended task authority to resolve contradictory product behavior",
+        "removes the final UI design checkpoint",
+        "asks the user to reapprove unaffected roster entries"
+      ]
+    },
+    {
+      "id": "content-user-visible-parent-task-callback",
+      "prompt": "The implementation task finished and its delegation envelope names source_thread_id 019f-parent, but that parent is absent from list_threads. Send the terminal callback and finish honestly.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "calls codex_app.send_message_to_thread directly with threadId 019f-parent even though list_threads did not return it",
+        "does not use collaboration messaging to local /root or an agent path as a substitute",
+        "claims the callback was sent only after the task-messaging tool succeeds",
+        "reports manual_resume_required with exact parent and child task IDs if the direct task message is unavailable or fails",
+        "treats a successful direct call as terminal notification delivery, not proof that the parent resumed",
+        "sends no routine progress callback, heartbeat, polling traffic, or callback-proof artifact"
+      ],
+      "anti_behaviors": [
+        "claims an internal subagent message woke the user-visible parent task",
+        "requires list_threads membership before attempting the exact source_thread_id",
+        "adds a callback proof artifact, state field, schema, heartbeat, or polling loop"
+      ]
+    },
+    {
+      "id": "content-wait-heartbeat-review-callback-success-and-miss",
+      "prompt": "A review task has a direct terminal callback. Describe both the successful-callback path and recovery when delivery is missed.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "selects callback-backed mode only after successful current-generation task-messaging capability observation and exact review attempt/thread binding",
+        "continues the parent immediately when the review callback arrives, recognizes that exact-current terminal producer evidence is consumable once through the durable parent transition, and then treats later delivery as a consumed replay",
+        "keeps exactly one parent-owned roughly 400-minute missed-callback recovery heartbeat for that review generation, ends the parent turn after exact binding, and performs one exact task liveness and receipt reconciliation when delivery is missed",
+        "uses attention or terminal callback as the ordinary wake, deletes the recovery heartbeat after successful durable consumption, and produces no routine parent progress commentary, wait_threads, read_thread, sleep, or polling while the child is healthy",
+        "if task messaging fails and parent-owned polling-heartbeat creation succeeds for the exact review attempt/thread, selects a callback-free active-poll cadence",
+        "if polling-heartbeat creation fails, preserves the exact review attempt/thread facts, does not yield or claim active polling or a future wake, and reports manual_resume_required or blocked"
+      ],
+      "anti_behaviors": [
+        "makes the child poll or own recovery",
+        "waits for the recovery heartbeat after a successful callback",
+        "treats a recovery wake as terminal review evidence",
+        "creates a second recovery heartbeat or turns recovery into a polling loop",
+        "emits routine parent progress commentary or repeatedly reads the healthy child task",
+        "treats terminal evidence as consumed before the durable parent transition",
+        "lets a stale, superseded, or duplicate review delivery transition phase or create, update, or delete a heartbeat",
+        "claims active polling or a future wake after heartbeat creation fails"
+      ]
+    },
+    {
+      "id": "content-wait-heartbeat-registered-pr-check-recovery",
+      "prompt": "CI checks are running for one exact PR head. Describe the wait when event registration succeeds for that head and the fallback when registration fails for the same head.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "requires successful PR/check callback registration for the exact PR/head and registration receipt before selecting callback-backed mode",
+        "uses registered event delivery as the primary wake with one parent-owned 240-minute missed-callback recovery heartbeat",
+        "if PR/check registration fails and parent-owned polling-heartbeat creation succeeds for the exact PR/head, selects a callback-free active-poll cadence",
+        "if polling-heartbeat creation fails, preserves the exact PR/head and registration facts, does not yield or claim active polling or a future wake, and reports manual_resume_required or blocked",
+        "reconciles current PR/check and registration-receipt facts on recovery, recognizes that exact-current terminal producer evidence is consumable once through the durable parent transition, and then treats later delivery as a consumed replay"
+      ],
+      "anti_behaviors": [
+        "assumes callback registration from prose or configuration",
+        "waits for the fallback after the registered callback arrives",
+        "makes the check runner or child own recovery",
+        "treats terminal evidence as consumed before the durable parent transition",
+        "lets a stale or duplicate PR/check delivery transition phase or create, update, or delete a heartbeat",
+        "claims active polling or a future wake after heartbeat creation fails"
+      ]
+    },
+    {
+      "id": "content-wait-heartbeat-callback-free-non-pro",
+      "prompt": "The parent must wait for an external phase that has no reliable callback and is not ChatGPT Pro. Pick the heartbeat behavior.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "selects active polling with an explicit phase-appropriate cadence",
+        "documents why the callback-free cadence is not the roughly 400-minute callback-backed task recovery",
+        "binds one parent-owned heartbeat to the current wait generation",
+        "creates and observes the parent-owned heartbeat before yielding or claiming active polling",
+        "reports manual_resume_required or blocked without yielding if heartbeat creation fails",
+        "treats stale, superseded, or duplicate deliveries as idempotent no-ops"
+      ],
+      "anti_behaviors": [
+        "applies this wait policy to ChatGPT Pro or creates a Pro heartbeat",
+        "inherits the callback-backed roughly 400-minute task cadence",
+        "leaves cadence implicit",
+        "lets a stale or duplicate delivery transition phase or mutate heartbeat ownership",
+        "claims active polling or a future wake after heartbeat creation fails"
+      ]
+    },
+    {
+      "id": "content-pro-fresh-invocation-fields",
+      "prompt": "Start the one authorized Pro primary send from a fresh decision-complete pushed feature bundle.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "derives the prompt digest from exact prompt-file bytes and binds repository, source, and specification identity before submission",
+        "reserves revision zero with empty passes and a null parent cursor before submission",
+        "captures the completed response through the original lease and advances to one consumed pass",
+        "records BLK-PRO-UNCERTAIN-SEND only when exact response capture is unavailable",
+        "never retries the send or creates repair or heartbeat authority"
+      ],
+      "anti_behaviors": [
+        "accepts caller-supplied prompt, conversation-reference, submitted-time, or deadline projections",
+        "requires a conversation URL or heartbeat ID before the initial browser submission",
+        "treats caller-authored post-send identity without the live capture CAS as authority"
+      ]
+    },
+    {
+      "id": "content-pro-late-repair-no-slot",
+      "prompt": "Caller-authored bytes claim the Pro answer needs a mechanical repair, but no trusted response producer exists.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "sends no repair",
+        "rejects the response and repair bytes as positive authority",
+        "records BLK-PRO-UNCERTAIN-SEND in the canonical state.json boundary",
+        "creates no heartbeat or parent cursor"
+      ],
+      "anti_behaviors": [
+        "creates a heartbeat before the parent consumes the blocker",
+        "extends the deadline",
+        "creates a seventh inspection",
+        "sends an unobservable repair"
+      ]
+    },
+    {
+      "id": "content-pro-reserved-repair-inspection",
+      "prompt": "Caller-authored state claims a contract repair, terminal capture, replacement heartbeat, and parent cursor.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "rejects the repair, terminal, heartbeat, successor, and cursor projection",
+        "keeps the canonical planning-continuation unchanged",
+        "keeps state planning evidence empty",
+        "records BLK-PRO-UNCERTAIN-SEND and stops"
+      ],
+      "anti_behaviors": ["sends a repair", "resubmits the primary", "schedules an inspection", "accepts the projected successor"]
+    },
+    {
+      "id": "content-policy-bound-follow-up-issue",
+      "prompt": "During PR-02 delivery, review finds new verified evidence for a durable pre-existing data-integrity defect outside every frozen criterion and owned path. Exact-fingerprint discovery finds one open owning issue whose body does not contain the new evidence. It should not become another feature slice. Track it without stopping unrelated delivery.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "keeps the finding outside active-PR remediation and selects the root-owned follow-up path",
+        "loads .github/issue-label-policy.json and classifies one creation issue type plus P1, P2, or P3",
+        "computes the normalized failed-invariant and typed-surface fingerprint and searches only the canonical marker across all issue states",
+        "treats search-result state as discovery metadata, directly refetches every exact-fingerprint candidate, and fails closed when authoritative state is unavailable",
+        "reuses only one authoritatively verified open exact-fingerprint owner, preserves its existing prose, appends only the missing verified evidence, adds the canonical marker when absent, reconciles labels, and never creates a duplicate issue",
+        "treats closed exact matches as historical links for a new regression issue, lets related nonmatching results never suppress creation, and fails closed for multiple open matches or duplicate triage",
+        "after creation, owner maintenance, label reconciliation, or closure repeats all-state exact-marker discovery, authoritatively refetches every discovered exact candidate, and fails closed unless exactly one selected open owner remains or the terminally completed selected owner is closed with no open exact owner",
+        "records URL, verified state, fingerprint comparison, type, severity, exact disposition created, reused-open, created-after-closed, or closed-complete, label reconciliation, and verification under the originating RECEIPT.md Follow-ups section",
+        "keeps feature-state and state.json GitHub-free while unrelated delivery continues"
+      ],
+      "anti_behaviors": [
+        "creates an unlabeled issue or assigns duplicate automatically",
+        "reuses a candidate whose authoritative state is missing or closed, or lets title/body similarity suppress creation without an exact fingerprint match",
+        "lets post-mutation list state or a selected-only refetch establish final ownership",
+        "replaces existing issue prose, rewrites its title, publishes a redundant comment, or changes state without terminal completion evidence",
+        "stores GitHub issue publication data in state.json",
+        "publishes again when GitNexus already returned a verified receipt"
+      ]
+    },
+    {
+      "id": "content-in-scope-issue-terminal-lifecycle",
+      "prompt": "Use the debugging route to resolve the supplied open GitHub issue. The accepted fix is complete, verified, and durably effective in the authoritative owning system, but the issue body lacks the completion evidence and canonical marker.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "treats the supplied open issue as the in-scope owner only after an authoritative repository, open-state, defect-identity, and exact-owner inventory check finds no different open exact owner",
+        "preserves existing issue prose and does not create a replacement or duplicate issue",
+        "appends missing verified completion evidence, adds the canonical marker when absent, and closes the issue without requesting separate user authorization once the fix is durably effective in the authoritative owning system",
+        "refetches the issue and exact-fingerprint inventory to verify the selected owner is closed and no open exact owner remains",
+        "records closed-complete disposition, completion evidence, and label verification in the owning handoff or receipt"
+      ],
+      "anti_behaviors": [
+        "asks the user for separate authorization to edit or close the in-scope owning issue",
+        "leaves a durably completed owning issue open",
+        "creates a duplicate or replacement issue",
+        "closes an issue for an uncommitted, inactive, or unverified fix",
+        "rewrites existing issue prose or posts a redundant comment"
+      ]
+    },
+    {
+      "id": "content-explicit-feature-invocation-routes-fix-ship-bug",
+      "prompt": "Use the spec-driven-feature-orchestrator to fix and ship the stale displayed-value bug, including the normal documentation and PR workflow.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "classifies the request as an ordinary bug and loads project-debugging rather than creating a feature bundle",
+        "keeps runtime tracing or the closest executable evidence, confirmed root cause, and the canonical regression abstraction under debugging ownership",
+        "constructs the bug_fix descriptor only after the root-cause and regression gates are confirmed",
+        "creates docs/bug_fixes/in_progress/<date>-<slug>/ with BUG_FIX.md, INTERVIEW.md, DECISIONS.md, ACCEPTANCE.md, state.json, STATUS.md, and both required discovery records",
+        "invokes the shared spec-work core for Pro planning, blind completeness, user-visible implementation and review tasks, UI policy when applicable, and merged-PR completion"
+      ],
+      "anti_behaviors": [
+        "creates docs/features for the bug",
+        "stops after diagnosis when the requested outcome is fix and ship",
+        "duplicates the shared lifecycle prose into either adapter"
+      ]
+    },
+    {
+      "id": "content-explicit-feature-invocation-routes-diagnosis-only-bug",
+      "prompt": "Use the spec-driven-feature-orchestrator to diagnose why the dashboard is stale and report the root cause; do not implement a fix.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "routes to the project-debugging diagnosis-only path",
+        "collects evidence and reports the confirmed or bounded root cause without implementation authority",
+        "creates no feature or bug-fix bundle, Pro pass, heartbeat, implementation task, review task, or publication authority"
+      ],
+      "anti_behaviors": [
+        "creates documentation merely because the feature adapter was explicitly named",
+        "starts Delivery or edits production code"
+      ]
+    },
+    {
+      "id": "content-greenfield-interview-question-batches",
+      "prompt": "This repository is empty apart from the harness: no product code, docs, or tests. Build the first capability: shared workspace notes that teammates can revisit later. Run discovery before planning.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "treats each consequential gray area as low confidence because repository evidence is absent and the request settles none of them",
+        "records stable GA entries with linked Q questions for the primary user and use context, the persistence and ownership boundary, the identity and access boundary, and the accepted delivery and verification outcome",
+        "asks dependent decisions sequentially, respects the active user-input tool's per-call question limit, and continues with later batches after recording each answer",
+        "resolves the accepted delivery and verification ambiguity before closing Discuss",
+        "closes Discuss only when every recorded consequential entry has a terminal status"
+      ],
+      "anti_behaviors": [
+        "closes Discuss with an entry-less interview ledger",
+        "claims repository evidence resolves a gray area in an empty repository",
+        "collapses every decision into one oversized batch that ignores the user-input tool's per-call question limit",
+        "enters Plan while a consequential entry remains open or question_required"
+      ]
+    },
+    {
+      "id": "content-greenfield-interview-user-settled-decisions",
+      "prompt": "This repository is empty apart from the harness: no product code, docs, or tests. Build the first capability: shared workspace notes. Teammates reviewing weekly activity are the audience, notes persist in the shared workspace store and belong to the workspace, only workspace members can read or edit them, and done means a merged PR whose note list renders for a seeded workspace.",
+      "run_modes": ["with_skill", "without_skill"],
+      "expected_behaviors": [
+        "records each user-supplied decision as a terminally closed gray area with the request as its evidence anchor",
+        "asks zero user questions because the request settles every consequential decision",
+        "does not re-ask a decision the user already supplied",
+        "does not convert a clear user statement into a confirmation question",
+        "closes Discuss with recorded evidence-closed entries rather than an empty ledger"
+      ],
+      "anti_behaviors": [
+        "re-asks the audience, persistence, access, or delivery decision",
+        "asks a confirmation question for a clear user statement",
+        "closes Discuss with an entry-less interview ledger",
+        "invents speculative extra questions to appear thorough"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    {
+      "id": "train-trigger-broad-feature",
+      "split": "train",
+      "prompt": "Build a feature that warns me about import conflicts and plan the implementation slices.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-explicit-feature-adapter-for-bug",
+      "split": "train",
+      "prompt": "Use spec-driven-feature-orchestrator to fix and ship this ordinary display bug with its documentation.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-epic",
+      "split": "train",
+      "prompt": "This is an epic across the client and backend; work out the decisions and PR breakdown, then implement it.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-cross-module",
+      "split": "train",
+      "prompt": "Add integration health across the backend, model, and dashboard.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-product-capability",
+      "split": "train",
+      "prompt": "I want a new way to compare export outcomes across workspaces.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-resume-bundle",
+      "split": "train",
+      "prompt": "Resume the active feature bundle and continue with its next PR slice.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-no-trigger-debug",
+      "split": "train",
+      "prompt": "The detail screen freezes; debug the root cause.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-no-trigger-scoped",
+      "split": "train",
+      "prompt": "Implement the already-approved PR-02 plan exactly as written.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-no-trigger-review",
+      "split": "train",
+      "prompt": "Review PR 212 for merge readiness.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-no-trigger-parallel-scoped",
+      "split": "train",
+      "prompt": "Run these two already-approved independent implementation contracts in their existing worktrees.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-trigger-reopened-feature",
+      "split": "train",
+      "prompt": "Reopen the completed import-warning feature for a new product decision and plan new PR slices without rewriting its shipped history.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-no-trigger-ui-proof",
+      "split": "train",
+      "prompt": "Validate this existing UI acceptance receipt against PR 199 and its current head.",
+      "should_trigger": false
+    },
+    {
+      "id": "validation-trigger-ui-feature",
+      "split": "validation",
+      "prompt": "Design and ship a multi-step Dashboard feature with accessibility acceptance.",
+      "should_trigger": true
+    },
+    {
+      "id": "validation-trigger-data-capability",
+      "split": "validation",
+      "prompt": "Support historical activity analytics; work out the decisions and PR breakdown first.",
+      "should_trigger": true
+    },
+    {
+      "id": "validation-trigger-parallel-question",
+      "split": "validation",
+      "prompt": "Build this large feature and use parallel PR slices only where the boundaries are truly independent.",
+      "should_trigger": true
+    },
+    {
+      "id": "validation-trigger-stale-pro-heartbeat",
+      "split": "validation",
+      "prompt": "A terminal Pro answer exists, but a stale pending heartbeat fired; reconcile it and continue the feature plan.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-no-trigger-automation-cleanup",
+      "split": "train",
+      "prompt": "Delete this Codex reminder and do nothing else.",
+      "should_trigger": false
+    },
+    {
+      "id": "validation-no-trigger-remediation",
+      "split": "validation",
+      "prompt": "Execute this six-PR remediation queue until each item is merged.",
+      "should_trigger": false
+    },
+    {
+      "id": "validation-no-trigger-test-run",
+      "split": "validation",
+      "prompt": "Run the focused SyncOrchestrator unit tests.",
+      "should_trigger": false
+    },
+    {
+      "id": "validation-no-trigger-small-edit",
+      "split": "validation",
+      "prompt": "Rename this local variable and update its test.",
+      "should_trigger": false
+    },
+    {
+      "id": "validation-no-trigger-feature-state",
+      "split": "validation",
+      "prompt": "Run feature-state validate on this already-created bundle and report the JSON error.",
+      "should_trigger": false
+    }
+  ]
+}

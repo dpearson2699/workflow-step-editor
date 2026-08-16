@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Test-only launcher that injects a deterministic clock into pro-lifecycle."""
+
+from __future__ import annotations
+
+import importlib.machinery
+import importlib.util
+import os
+from pathlib import Path
+
+SCRIPT = Path(__file__).with_name("pro-lifecycle")
+loader = importlib.machinery.SourceFileLoader("pro_lifecycle_test_target", str(SCRIPT))
+spec = importlib.util.spec_from_loader(loader.name, loader)
+if spec is None or spec.loader is None:
+    raise RuntimeError("unable to load lifecycle test target")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+if os.environ.get("PRO_LIFECYCLE_TEST_MODE") != "1":
+    raise SystemExit("pro-lifecycle-test requires PRO_LIFECYCLE_TEST_MODE=1")
+override = os.environ.get("PRO_LIFECYCLE_TEST_NOW")
+if not override:
+    raise SystemExit("pro-lifecycle-test requires PRO_LIFECYCLE_TEST_NOW")
+module.utc_now = lambda: override
+raise SystemExit(module.main())

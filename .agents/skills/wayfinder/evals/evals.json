@@ -1,0 +1,162 @@
+{
+  "version": "1.0",
+  "skill": "wayfinder",
+  "content_evals": [
+    {
+      "id": "content-chart-names-destination-then-maps",
+      "prompt": "I have a loose idea: migrate the app to a multi-account model. Chart a wayfinder map.",
+      "run_modes": [
+        "with_skill",
+        "without_skill"
+      ],
+      "expected_behaviors": [
+        "runs a grilling and domain-modeling session to name the destination before anything else",
+        "grills again breadth-first to surface open decisions rather than digging deep on one thread",
+        "stops without a map when breadth-first grilling surfaces no fog",
+        "creates one map issue labeled wayfinder:map with Destination, Notes, a derived (pointer-only) Decisions so far, and fog in Not yet specified",
+        "creates child tickets via gh with exactly one wayfinder type label each and --parent so each is born attached to the map, then wires blocking edges idempotently in a second pass",
+        "fires AFK research sub-agents for research tickets and posts cited findings as resolution comments",
+        "stops after charting; resolves no non-research ticket in the same session"
+      ]
+    },
+    {
+      "id": "content-work-claims-one-frontier-ticket",
+      "prompt": "Work the multi-account wayfinder map.",
+      "run_modes": [
+        "with_skill",
+        "without_skill"
+      ],
+      "expected_behaviors": [
+        "loads the map body low-res instead of fetching every ticket",
+        "picks the first frontier ticket and claims it through the comment-first claim protocol, assigning only after winning, before any work",
+        "resolves the ticket per its type, never answering the user's side of a HITL ticket",
+        "posts a resolution comment whose first line is decision: or fact: plus a one-line gist, then closes the ticket; Decisions so far is derived from closed tickets, not hand-appended",
+        "graduates newly specifiable fog into create-then-wire tickets and rules mis-scoped tickets out of scope",
+        "stops after one non-research ticket",
+        "refers to tickets by name with links riding inside, never bare issue numbers"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    {
+      "id": "train-trigger-chart",
+      "split": "train",
+      "prompt": "Chart a wayfinder map for moving us to a plugin architecture.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-wayfind",
+      "split": "train",
+      "prompt": "This idea is too big and foggy for one session — wayfind it.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-work-map",
+      "split": "train",
+      "prompt": "Work the wayfinder map and take the next ticket.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-decision-ticket",
+      "split": "train",
+      "prompt": "Resolve the next decision ticket on the migration map.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-loose-idea",
+      "split": "train",
+      "prompt": "I have a loose idea for a multi-tenant rewrite; map out the decisions before we plan anything.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-slash",
+      "split": "train",
+      "prompt": "/wayfinder",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-fog",
+      "split": "train",
+      "prompt": "There are too many open questions to start this rewrite — chart the map of what we need to decide.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-nomiss-feature",
+      "split": "train",
+      "prompt": "Build a CSV export feature and plan its implementation slices.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-nomiss-bug",
+      "split": "train",
+      "prompt": "Fix the crash when closing a wheel with no trades.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-nomiss-survey",
+      "split": "train",
+      "prompt": "Survey the architecture for deepening opportunities.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-nomiss-issue",
+      "split": "train",
+      "prompt": "Open a GitHub issue for the stale badge in the README.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-nomiss-review",
+      "split": "train",
+      "prompt": "Review my pull request for merge readiness.",
+      "should_trigger": false
+    },
+    {
+      "id": "val-trigger-chart-course",
+      "split": "val",
+      "prompt": "Chart a map for turning the notes in this repo's docs/ into the course this repository ships.",
+      "should_trigger": true
+    },
+    {
+      "id": "val-trigger-resume-map",
+      "split": "val",
+      "prompt": "Pick up the wayfinder map from last week and continue.",
+      "should_trigger": true
+    },
+    {
+      "id": "val-trigger-frontier",
+      "split": "val",
+      "prompt": "What's on the frontier of the payments map? Claim the first ticket.",
+      "should_trigger": true
+    },
+    {
+      "id": "val-trigger-lock-decisions",
+      "split": "val",
+      "prompt": "Before we spec anything, map the decisions we still have to make for the offline mode effort.",
+      "should_trigger": true
+    },
+    {
+      "id": "val-nomiss-spec",
+      "split": "val",
+      "prompt": "Spec and implement dark mode end to end.",
+      "should_trigger": false
+    },
+    {
+      "id": "val-nomiss-explain",
+      "split": "val",
+      "prompt": "Explain how the sync pipeline works.",
+      "should_trigger": false
+    },
+    {
+      "id": "val-nomiss-refactor",
+      "split": "val",
+      "prompt": "Refactor the pricing module into a deep module.",
+      "should_trigger": false
+    },
+    {
+      "id": "val-nomiss-todo",
+      "split": "val",
+      "prompt": "Turn this plan into a set of tracked tasks and start executing.",
+      "should_trigger": false
+    }
+  ]
+}

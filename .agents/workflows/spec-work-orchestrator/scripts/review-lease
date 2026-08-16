@@ -1,0 +1,1383 @@
+#!/usr/bin/env python3
+"""Create, advance, resume, and finalize one exact task-local PR-review lease."""
+
+from __future__ import annotations
+
+import sys
+
+if sys.version_info < (3, 11):
+    detected = ".".join(str(part) for part in sys.version_info[:3])
+    print(
+        f"review-lease requires Python 3.11 or newer; found {detected}",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
+import argparse
+from contextlib import contextmanager
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import stat
+import subprocess
+import tempfile
+
+
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+ACCEPTANCE_ID_RE = re.compile(r"^AC-[0-9]{3}$")
+LEASE_SCHEMA = "spec-work-review-lease"
+MUTATION_SCHEMA = "spec-work-review-mutation"
+TERMINAL_SCHEMA = "spec-work-review-lease-terminal"
+INVALIDATED_EVIDENCE = [
+    "ci", "mergeability", "semantic-review", "terminal-verification"
+]
+ATTACHMENT_FIELDS = {
+    "schema", "kind", "workKind", "workId", "workBundle", "sliceId",
+    "role", "taskType", "attempt", "revisionEpoch", "launchMarker", "threadId",
+    "clientThreadId", "gitCommonDir", "taskWorktree", "branch", "branchRef",
+    "boundSha", "worktreeHeadSha", "localBranchSha",
+    "observedRemoteHeadSha", "symbolicRef", "branchOwners", "clean", "result",
+    "observationEpoch", "releaseReceiptDigest", "releaseObservationEpoch",
+    "ownedPaths", "reauthorizationDigest", "snapshotAuthorization",
+}
+LEASE_FIELDS = {
+    "schema", "activationDigest", "identityDigest", "workKind", "workId",
+    "workBundle", "sliceId", "role", "taskType", "attempt", "revisionEpoch",
+    "launchMarker", "threadId", "clientThreadId", "taskWorktree", "gitCommonDir", "branch",
+    "branchRef", "remote", "remoteUrl", "baseRef", "initialHeadSha",
+    "currentHeadSha", "initialBaseSha", "currentBaseSha", "ownedPaths",
+    "compactBugFixRecord", "reauthorizationDigest", "snapshotAuthorization", "rotations",
+    "invalidatedEvidence", "result",
+}
+SNAPSHOT_AUTHORIZATION_FIELDS = {
+    "sliceId", "snapshotCommit", "snapshotPath", "classification",
+    "manifestDigest",
+}
+MUTATION_FIELDS = {
+    "schema", "kind", "activationDigest", "priorLeaseDigest", "taskWorktree",
+    "gitCommonDir", "branch", "remote", "priorHeadSha", "newHeadSha",
+    "priorBaseSha", "newBaseSha", "changedPaths", "authorization", "result",
+}
+class LeaseError(RuntimeError):
+    """A fail-closed review lease violation."""
+
+
+def run_git(root: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["git", "-C", str(root), *arguments], text=True,
+        capture_output=True, check=False, timeout=30,
+    )
+    if check and result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "git failed"
+        raise LeaseError(f"git {' '.join(arguments)} failed: {detail}")
+    return result
+
+
+def run_git_bytes(root: Path, *arguments: str) -> bytes:
+    result = subprocess.run(
+        ["git", "-C", str(root), *arguments],
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode(errors="replace").strip() or "git failed"
+        raise LeaseError(f"git {' '.join(arguments)} failed: {detail}")
+    return result.stdout
+
+
+def exact_object(value: object, fields: set[str], label: str) -> dict:
+    if not isinstance(value, dict) or set(value) != fields:
+        raise LeaseError(f"{label} does not match the current exact contract")
+    return value
+
+
+def read_json(path: Path, fields: set[str], label: str) -> tuple[dict, bytes]:
+    try:
+        resolved = path.expanduser().resolve(strict=True)
+        metadata = resolved.lstat()
+        if not stat.S_ISREG(metadata.st_mode):
+            raise LeaseError(f"{label} must be a regular file")
+        raw = resolved.read_bytes()
+        value = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise LeaseError(f"invalid {label}: {error}") from error
+    return exact_object(value, fields, label), raw
+
+
+def require_sha(value: object, label: str) -> str:
+    if not isinstance(value, str) or SHA_RE.fullmatch(value) is None:
+        raise LeaseError(f"{label} must be a lowercase 40-character Git SHA")
+    return value
+
+
+def require_digest(value: object, label: str) -> str:
+    if not isinstance(value, str) or DIGEST_RE.fullmatch(value) is None:
+        raise LeaseError(f"{label} must be a lowercase SHA-256 digest")
+    return value
+
+
+def require_commit(root: Path, value: object, label: str) -> str:
+    commit = require_sha(value, label)
+    result = run_git(root, "cat-file", "-e", f"{commit}^{{commit}}", check=False)
+    if result.returncode != 0:
+        raise LeaseError(f"{label} does not identify a commit object")
+    return commit
+
+
+def canonical_owned_path(value: str) -> str:
+    if not value or "\x00" in value or "\\" in value:
+        raise LeaseError("owned paths must be nonempty repository-relative POSIX paths")
+    pure = PurePosixPath(value)
+    if pure.is_absolute() or any(part in {"", ".", ".."} for part in pure.parts):
+        raise LeaseError("owned paths must be canonical repository-relative POSIX paths")
+    return pure.as_posix()
+
+
+def normalized_paths(values: object, label: str) -> list[str]:
+    if not isinstance(values, list) or not values:
+        raise LeaseError(f"{label} must be a nonempty array")
+    if not all(isinstance(value, str) for value in values):
+        raise LeaseError(f"{label} must contain strings")
+    paths = sorted(canonical_owned_path(value) for value in values)
+    if len(paths) != len(set(paths)):
+        raise LeaseError(f"{label} contains duplicate paths")
+    return paths
+
+
+def canonical_compact_bug_fix_record(work_id: str) -> str:
+    return canonical_owned_path(
+        f"docs/bug_fixes/completed/{work_id}/BUG_FIX.md"
+    )
+
+
+def requested_compact_bug_fix_record(value: str, canonical: str) -> str:
+    normalized = canonical_owned_path(value)
+    if value != normalized:
+        raise LeaseError(
+            "compact bug-fix record must be a canonical repository-relative POSIX path"
+        )
+    if normalized != canonical:
+        raise LeaseError(
+            "compact bug-fix record must equal the work-derived canonical path: "
+            + canonical
+        )
+    return normalized
+
+
+def changed_paths(root: Path, left: str, right: str) -> list[str]:
+    output = run_git(root, "diff", "--name-only", "--no-renames", left, right).stdout
+    return sorted(filter(None, output.splitlines()))
+
+
+def compact_record_changed_paths(root: Path, head: str, record: str) -> list[str]:
+    result = run_git(root, "show", f"{head}:{record}", check=False)
+    if result.returncode != 0:
+        raise LeaseError("compact bug-fix record is absent from the final review head")
+    lines = result.stdout.splitlines()
+    headings = [
+        index for index, line in enumerate(lines)
+        if line == "## Changed Paths"
+    ]
+    if len(headings) != 1:
+        raise LeaseError(
+            "compact bug-fix record must contain exactly one ## Changed Paths section"
+        )
+    start = headings[0] + 1
+    end = next(
+        (
+            index for index in range(start, len(lines))
+            if lines[index].startswith("## ")
+        ),
+        len(lines),
+    )
+    entries: list[str] = []
+    for line in lines[start:end]:
+        if not line:
+            continue
+        match = re.fullmatch(r"- `([^`]+)`", line)
+        if match is None:
+            raise LeaseError(
+                "compact bug-fix Changed Paths must contain only "
+                "backtick-wrapped repository-relative file bullets"
+            )
+        entry = match.group(1)
+        if entry != canonical_owned_path(entry):
+            raise LeaseError(
+                "compact bug-fix Changed Paths must contain canonical "
+                "repository-relative POSIX paths"
+            )
+        entries.append(entry)
+    return normalized_paths(entries, "compact bug-fix Changed Paths")
+
+
+def require_compact_record_matches(
+    root: Path, head: str, record: str, final_paths: list[str]
+) -> None:
+    recorded_paths = compact_record_changed_paths(root, head, record)
+    missing = sorted(set(final_paths) - set(recorded_paths))
+    stale = sorted(set(recorded_paths) - set(final_paths))
+    if missing or stale:
+        details = []
+        if missing:
+            details.append("missing final paths: " + ", ".join(missing))
+        if stale:
+            details.append("stale entries: " + ", ".join(stale))
+        raise LeaseError(
+            "compact bug-fix Changed Paths differ from the final PR delta; "
+            + "; ".join(details)
+        )
+
+
+def within_owned(path: str, owned: list[str]) -> bool:
+    return any(path == prefix or path.startswith(prefix + "/") for prefix in owned)
+
+
+def require_owned(paths: list[str], owned: list[str]) -> None:
+    escaped = [path for path in paths if not within_owned(path, owned)]
+    if escaped:
+        raise LeaseError(
+            "changed paths are outside frozen owned paths: " + ", ".join(escaped)
+        )
+
+
+def snapshot_lifecycle_paths(
+    work_kind: str, work_bundle: str, classification: str
+) -> tuple[str, str]:
+    roots = {"feature": "docs/features", "bug_fix": "docs/bug_fixes"}
+    if not isinstance(work_kind, str) or work_kind not in roots:
+        raise LeaseError("snapshot authorization requires feature or bug-fix work")
+    phases = {"intermediate": "in_progress", "final": "completed"}
+    if not isinstance(classification, str) or classification not in phases:
+        raise LeaseError(
+            "snapshot authorization classification must be intermediate or final"
+        )
+    if not isinstance(work_bundle, str) or not work_bundle:
+        raise LeaseError("snapshot authorization requires a nonempty work bundle")
+    phase = phases[classification]
+    alternate = "completed" if phase == "in_progress" else "in_progress"
+    root = roots[work_kind]
+    return (
+        canonical_owned_path(f"{root}/{phase}/{work_bundle}"),
+        canonical_owned_path(f"{root}/{alternate}/{work_bundle}"),
+    )
+
+
+def validate_snapshot_authorization(value: object, attachment: dict) -> dict | None:
+    if value is None:
+        return None
+    authorization = exact_object(
+        value, SNAPSHOT_AUTHORIZATION_FIELDS, "snapshot authorization"
+    )
+    if authorization["sliceId"] != attachment["sliceId"]:
+        raise LeaseError("snapshot authorization slice differs from the review slice")
+    require_sha(authorization["snapshotCommit"], "snapshot authorization commit")
+    require_digest(
+        authorization["manifestDigest"], "snapshot authorization manifest digest"
+    )
+    expected_path, _alternate = snapshot_lifecycle_paths(
+        attachment["workKind"],
+        attachment["workBundle"],
+        authorization["classification"],
+    )
+    try:
+        snapshot_path = canonical_owned_path(authorization["snapshotPath"])
+    except (LeaseError, TypeError) as error:
+        raise LeaseError(
+            "snapshot authorization path must be canonical repository-relative POSIX"
+        ) from error
+    if authorization["snapshotPath"] != snapshot_path or snapshot_path != expected_path:
+        raise LeaseError(
+            "snapshot authorization path differs from the canonical lifecycle path"
+        )
+    return authorization
+
+
+def commit_path_manifest(root: Path, commit: str, repository_path: str) -> list[dict]:
+    output = run_git(
+        root, "ls-tree", "-r", "-z", "--full-tree", commit, "--", repository_path
+    ).stdout
+    prefix = repository_path + "/"
+    entries: list[dict] = []
+    for record in output.split("\0"):
+        if not record:
+            continue
+        metadata, separator, path = record.partition("\t")
+        parts = metadata.split()
+        if (
+            not separator
+            or len(parts) != 3
+            or parts[1] != "blob"
+            or parts[0] not in {"100644", "100755"}
+            or not path.startswith(prefix)
+        ):
+            raise LeaseError("snapshot commit contains an unsupported tree entry")
+        blob = run_git_bytes(root, "cat-file", "blob", parts[2])
+        entries.append({
+            "path": path.removeprefix(prefix),
+            "mode": parts[0],
+            "sha256": hashlib.sha256(blob).hexdigest(),
+        })
+    return sorted(entries, key=lambda entry: entry["path"])
+
+
+def manifest_digest(manifest: list[dict]) -> str:
+    serialized = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
+def validate_snapshot_materialization(
+    root: Path, head: str, authorization: dict | None
+) -> tuple[str, str] | None:
+    if authorization is None:
+        return None
+    snapshot_commit = require_commit(
+        root, authorization["snapshotCommit"], "snapshot authorization commit"
+    )
+    review_head = require_commit(root, head, "review head")
+    ancestry = run_git(
+        root, "merge-base", "--is-ancestor", snapshot_commit, review_head,
+        check=False,
+    )
+    if ancestry.returncode == 1:
+        raise LeaseError(
+            "snapshot authorization commit must be an ancestor of the review head"
+        )
+    if ancestry.returncode != 0:
+        raise LeaseError("cannot verify snapshot authorization commit ancestry")
+    snapshot_path = authorization["snapshotPath"]
+    phase = "completed" if authorization["classification"] == "final" else "in_progress"
+    alternate_phase = "in_progress" if phase == "completed" else "completed"
+    parts = list(PurePosixPath(snapshot_path).parts)
+    parts[-2] = alternate_phase
+    alternate_path = PurePosixPath(*parts).as_posix()
+    approved = commit_path_manifest(root, snapshot_commit, snapshot_path)
+    if not approved:
+        raise LeaseError("snapshot authorization commit is missing the frozen bundle")
+    if manifest_digest(approved) != authorization["manifestDigest"]:
+        raise LeaseError("snapshot authorization manifest digest is stale or incorrect")
+    if commit_path_manifest(root, snapshot_commit, alternate_path):
+        raise LeaseError("snapshot authorization commit contains both lifecycle paths")
+    if commit_path_manifest(root, head, snapshot_path) != approved:
+        raise LeaseError("review head does not contain the exact authorized snapshot bytes")
+    if commit_path_manifest(root, head, alternate_path):
+        raise LeaseError("review head contains both snapshot lifecycle paths")
+    return snapshot_path, alternate_path
+
+
+def require_owned_or_snapshot(
+    root: Path,
+    left: str,
+    right: str,
+    owned: list[str],
+    authorization: dict | None,
+) -> list[str]:
+    paths = changed_paths(root, left, right)
+    lifecycle_paths = validate_snapshot_materialization(root, right, authorization)
+    if lifecycle_paths is None:
+        require_owned(paths, owned)
+        return paths
+    snapshot_path, alternate_path = lifecycle_paths
+    ordinary_paths = [
+        path for path in paths
+        if not within_owned(path, [snapshot_path, alternate_path])
+    ]
+    unexplained = [
+        path for path in ordinary_paths if not within_owned(path, owned)
+    ]
+    if unexplained:
+        raise LeaseError(
+            "changed paths are outside frozen owned paths and authenticated snapshot: "
+            + ", ".join(unexplained)
+        )
+    return ordinary_paths
+
+
+def require_clean(root: Path) -> None:
+    if run_git(root, "status", "--porcelain=v1", "--untracked-files=all").stdout:
+        raise LeaseError("review worktree is not clean")
+
+
+def remote_url(root: Path, remote: str) -> str:
+    value = run_git(root, "remote", "get-url", remote).stdout.strip()
+    if not value:
+        raise LeaseError("review remote has no URL")
+    return value
+
+
+def remote_head(root: Path, remote: str, branch_ref: str) -> str:
+    result = run_git(root, "ls-remote", "--heads", remote, branch_ref)
+    rows = [line.split() for line in result.stdout.splitlines() if line.strip()]
+    if len(rows) != 1 or len(rows[0]) != 2 or rows[0][1] != branch_ref:
+        raise LeaseError(f"remote ref does not resolve exactly once: {branch_ref}")
+    return require_sha(rows[0][0], "remote head")
+
+
+def canonical_remote_branch_ref(value: str, remote: str) -> str:
+    if value.startswith("refs/heads/"):
+        branch = value.removeprefix("refs/heads/")
+    elif value.startswith(f"refs/remotes/{remote}/"):
+        branch = value.removeprefix(f"refs/remotes/{remote}/")
+    elif value.startswith(f"{remote}/"):
+        branch = value.removeprefix(f"{remote}/")
+    elif value.startswith("refs/"):
+        raise LeaseError(f"unsupported remote branch ref: {value}")
+    else:
+        branch = value
+    if (
+        not branch
+        or branch.startswith("/")
+        or branch.endswith("/")
+        or ".." in branch
+        or "@{" in branch
+    ):
+        raise LeaseError(f"unsupported remote branch ref: {value}")
+    return f"refs/heads/{branch}"
+
+
+def common_dir(root: Path) -> str:
+    value = run_git(
+        root, "rev-parse", "--path-format=absolute", "--git-common-dir"
+    ).stdout.strip()
+    return Path(value).resolve(strict=True).as_posix()
+
+
+def identity_projection(lease: dict) -> dict:
+    return {
+        key: lease[key]
+        for key in (
+            "activationDigest", "workKind", "workId", "workBundle", "sliceId",
+            "role", "taskType", "attempt", "revisionEpoch", "launchMarker",
+            "threadId",
+            "clientThreadId", "taskWorktree", "gitCommonDir", "branch",
+            "branchRef", "remote", "remoteUrl", "baseRef", "initialHeadSha",
+            "initialBaseSha", "ownedPaths", "compactBugFixRecord",
+            "reauthorizationDigest", "snapshotAuthorization",
+        )
+    }
+
+
+def identity_digest(lease: dict) -> str:
+    encoded = json.dumps(
+        identity_projection(lease), sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def encoded(value: dict) -> bytes:
+    return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def create_file(path: Path, value: dict, label: str) -> None:
+    target = path.expanduser().absolute()
+    parent = target.parent.resolve(strict=True)
+    target = parent / target.name
+    try:
+        descriptor = os.open(
+            target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(encoded(value))
+            handle.flush()
+            os.fsync(handle.fileno())
+    except FileExistsError as error:
+        raise LeaseError(f"{label} already exists") from error
+    except OSError as error:
+        raise LeaseError(f"cannot create {label}: {error}") from error
+
+
+def replace_file(path: Path, value: dict) -> None:
+    target = path.expanduser().resolve(strict=True)
+    metadata = target.lstat()
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid():
+        raise LeaseError("review lease must remain a user-owned regular file")
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{target.name}.", dir=target.parent
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(encoded(value))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    except OSError as error:
+        raise LeaseError(f"cannot replace review lease: {error}") from error
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+@contextmanager
+def lease_lock(path: Path):
+    target = path.expanduser().absolute()
+    parent = target.parent.resolve(strict=True)
+    lock_path = parent / f".{target.name}.lock"
+    try:
+        descriptor = os.open(
+            lock_path,
+            os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid():
+            raise LeaseError("review lease lock must be a user-owned regular file")
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    except OSError as error:
+        raise LeaseError(f"cannot lock review lease: {error}") from error
+    finally:
+        if "descriptor" in locals():
+            os.close(descriptor)
+
+
+def validate_attachment(path: Path) -> tuple[dict, str]:
+    attachment, _raw = read_json(path, ATTACHMENT_FIELDS, "review attachment")
+    if (
+        attachment["schema"] != "spec-work-task-git-binding"
+        or attachment["kind"] != "review_attachment"
+        or attachment["role"] != "review"
+        or attachment["taskType"] != "slice_review"
+        or attachment["result"] != "ATTACHED_UNIQUE"
+        or attachment["clean"] is not True
+    ):
+        raise LeaseError("review attachment is not an active exact review binding")
+    if (
+        type(attachment["revisionEpoch"]) is not int
+        or attachment["revisionEpoch"] < 1
+    ):
+        raise LeaseError("review attachment revision epoch must be positive")
+    if (
+        type(attachment["observationEpoch"]) is not int
+        or attachment["observationEpoch"] < 1
+    ):
+        raise LeaseError("review attachment observation epoch must be positive")
+    normalized_owned_paths = normalized_paths(
+        attachment["ownedPaths"], "review attachment owned paths"
+    )
+    if attachment["ownedPaths"] != normalized_owned_paths:
+        raise LeaseError(
+            "review attachment owned paths must be sorted and unique"
+        )
+    reauthorization_digest = attachment["reauthorizationDigest"]
+    if attachment["revisionEpoch"] > 1:
+        require_digest(
+            reauthorization_digest, "review attachment reauthorization digest"
+        )
+    elif reauthorization_digest is not None:
+        raise LeaseError("initial review attachment cannot claim reauthorization")
+    validate_snapshot_authorization(attachment["snapshotAuthorization"], attachment)
+    return attachment, hashlib.sha256(encoded(attachment)).hexdigest()
+
+
+def validate_release_receipt(
+    path: Path, attachment: dict, prior_head: str
+) -> tuple[str, int]:
+    release, raw = read_json(path, ATTACHMENT_FIELDS, "branch release receipt")
+    release_digest = require_digest(
+        attachment["releaseReceiptDigest"],
+        "review attachment release receipt digest",
+    )
+    release_epoch = attachment["releaseObservationEpoch"]
+    if type(release_epoch) is not int or release_epoch < 1:
+        raise LeaseError(
+            "review attachment release observation epoch must be positive"
+        )
+    if hashlib.sha256(raw).hexdigest() != release_digest:
+        raise LeaseError("review attachment release receipt digest is stale")
+    release_head = release["boundSha"]
+    release_revision = release["revisionEpoch"]
+    if type(release_revision) is not int or release_revision < 1:
+        raise LeaseError("review attachment release receipt is stale")
+    if release_head not in {prior_head, attachment["boundSha"]}:
+        raise LeaseError("review attachment release receipt is stale")
+    expected = {
+        "schema": "spec-work-task-git-binding",
+        "kind": "branch_release",
+        "workKind": attachment["workKind"],
+        "workId": attachment["workId"],
+        "workBundle": attachment["workBundle"],
+        "sliceId": attachment["sliceId"],
+        "gitCommonDir": attachment["gitCommonDir"],
+        "branch": attachment["branch"],
+        "branchRef": attachment["branchRef"],
+        "boundSha": release_head,
+        "worktreeHeadSha": release_head,
+        "localBranchSha": release_head,
+        "observedRemoteHeadSha": release_head,
+        "symbolicRef": None,
+        "branchOwners": [],
+        "clean": True,
+        "result": "RELEASED",
+        "observationEpoch": release_epoch,
+        "releaseReceiptDigest": None,
+        "releaseObservationEpoch": None,
+        "ownedPaths": [],
+        "reauthorizationDigest": None,
+        "snapshotAuthorization": None,
+    }
+    if any(release[key] != value for key, value in expected.items()):
+        raise LeaseError("review attachment release receipt is stale")
+    if (
+        release["role"] not in {"implementation", "review"}
+        or release["taskType"] != f"slice_{release['role']}"
+    ):
+        raise LeaseError("review attachment release receipt is stale")
+    if attachment["observationEpoch"] <= release_epoch:
+        raise LeaseError("review attachment must follow its branch release")
+    return release_head, release_revision
+
+
+def validate_recorded_lease(
+    lease: dict, *, allowed_results: set[str] | None = None
+) -> Path:
+    exact_object(lease, LEASE_FIELDS, "review lease")
+    allowed = {"ACTIVE"} if allowed_results is None else allowed_results
+    if lease["schema"] != LEASE_SCHEMA or lease["result"] not in allowed:
+        raise LeaseError("review lease is not active")
+    if identity_digest(lease) != lease["identityDigest"]:
+        raise LeaseError("review lease identity changed")
+    root = Path(lease["taskWorktree"]).resolve(strict=True)
+    if common_dir(root) != lease["gitCommonDir"]:
+        raise LeaseError("review lease Git common directory changed")
+    return root
+
+
+def validate_live(lease: dict, *, advancing: bool = False) -> Path:
+    root = validate_recorded_lease(lease)
+    if run_git(root, "symbolic-ref", "--quiet", "HEAD").stdout.strip() != lease["branchRef"]:
+        raise LeaseError("review lease branch identity changed")
+    if remote_url(root, lease["remote"]) != lease["remoteUrl"]:
+        raise LeaseError("review remote identity changed")
+    require_clean(root)
+    head = require_sha(run_git(root, "rev-parse", "HEAD").stdout.strip(), "review head")
+    if not advancing and head != lease["currentHeadSha"]:
+        raise LeaseError("live review head differs from the current lease")
+    if not advancing and remote_head(root, lease["remote"], lease["branchRef"]) != head:
+        raise LeaseError("remote review head differs from the current lease")
+    return root
+
+
+def command_activate(arguments: argparse.Namespace) -> dict:
+    attachment_path = Path(arguments.attachment)
+    attachment, activation_digest = validate_attachment(attachment_path)
+    root = Path(attachment["taskWorktree"]).resolve(strict=True)
+    require_clean(root)
+    if common_dir(root) != attachment["gitCommonDir"]:
+        raise LeaseError("activation Git common directory mismatch")
+    head = require_sha(run_git(root, "rev-parse", "HEAD").stdout.strip(), "review head")
+    if head != attachment["boundSha"]:
+        raise LeaseError("activation head differs from the attachment")
+    if run_git(root, "symbolic-ref", "--quiet", "HEAD").stdout.strip() != attachment["branchRef"]:
+        raise LeaseError("activation branch differs from the attachment")
+    remote = arguments.remote
+    url = remote_url(root, remote)
+    if remote_head(root, remote, attachment["branchRef"]) != head:
+        raise LeaseError("activation remote branch differs from the attachment")
+    base_sha = require_sha(arguments.base_sha, "base SHA")
+    base_ref = canonical_remote_branch_ref(arguments.base_ref, remote)
+    live_base = remote_head(root, remote, base_ref)
+    if live_base != base_sha:
+        base_ancestor = run_git(
+            root,
+            "merge-base",
+            "--is-ancestor",
+            base_sha,
+            live_base,
+            check=False,
+        )
+        if base_ancestor.returncode != 0:
+            raise LeaseError(
+                "activation cannot follow rewritten remote base history"
+            )
+    owned = attachment["ownedPaths"]
+    requested_record = arguments.compact_bug_fix_record
+    initial_paths = require_owned_or_snapshot(
+        root, base_sha, head, owned, attachment["snapshotAuthorization"]
+    )
+    record = None
+    if attachment["workKind"] == "bug_fix":
+        canonical_record = canonical_compact_bug_fix_record(attachment["workId"])
+        fast_fix = canonical_record in initial_paths
+        if fast_fix and requested_record is None:
+            raise LeaseError(
+                "FAST-FIX activation requires --compact-bug-fix-record "
+                + canonical_record
+            )
+        if requested_record is not None:
+            record = requested_compact_bug_fix_record(
+                requested_record, canonical_record
+            )
+            if not fast_fix:
+                raise LeaseError(
+                    "compact bug-fix record must be present in the initial "
+                    "base-to-head Git delta"
+                )
+            require_owned([record], owned)
+    elif requested_record is not None:
+        raise LeaseError(
+            "compact bug-fix record is valid only for bug-fix review leases"
+        )
+    if attachment["snapshotAuthorization"] is None and requested_record is None:
+        raise LeaseError(
+            "spec-work review activation requires an authenticated snapshot or "
+            "an explicit compact fast-fix record"
+        )
+    lease = {
+        "schema": LEASE_SCHEMA,
+        "activationDigest": activation_digest,
+        "identityDigest": "",
+        **{
+            key: attachment[key]
+            for key in (
+                "workKind", "workId", "workBundle", "sliceId", "role",
+                "taskType", "attempt", "revisionEpoch", "launchMarker", "threadId",
+                "clientThreadId", "taskWorktree", "gitCommonDir", "branch",
+                "branchRef",
+            )
+        },
+        "remote": remote,
+        "remoteUrl": url,
+        "baseRef": base_ref,
+        "initialHeadSha": head,
+        "currentHeadSha": head,
+        "initialBaseSha": base_sha,
+        "currentBaseSha": base_sha,
+        "ownedPaths": owned,
+        "compactBugFixRecord": record,
+        "reauthorizationDigest": attachment["reauthorizationDigest"],
+        "snapshotAuthorization": attachment["snapshotAuthorization"],
+        "rotations": [],
+        "invalidatedEvidence": [],
+        "result": "ACTIVE",
+    }
+    lease["identityDigest"] = identity_digest(lease)
+    create_file(Path(arguments.lease), lease, "review lease")
+    return {**lease, "rotationCount": 0}
+
+
+def command_advance(arguments: argparse.Namespace) -> dict:
+    lease_path = Path(arguments.lease)
+    lease, lease_raw = read_json(lease_path, LEASE_FIELDS, "review lease")
+    root = validate_live(lease, advancing=True)
+    if arguments.mutation_receipt is None:
+        raise LeaseError("review lease advance requires a mutation receipt")
+    mutation, mutation_raw = read_json(
+        Path(arguments.mutation_receipt), MUTATION_FIELDS, "review mutation receipt"
+    )
+    if mutation["schema"] != MUTATION_SCHEMA or mutation["kind"] not in {
+        "remediation", "base_sync"
+    }:
+        raise LeaseError("review mutation receipt has an unsupported kind")
+    expected = {
+        "activationDigest": lease["activationDigest"],
+        "priorLeaseDigest": hashlib.sha256(lease_raw).hexdigest(),
+        "taskWorktree": lease["taskWorktree"],
+        "gitCommonDir": lease["gitCommonDir"],
+        "branch": lease["branch"],
+        "remote": lease["remote"],
+        "priorHeadSha": lease["currentHeadSha"],
+        "priorBaseSha": lease["currentBaseSha"],
+        "authorization": "AUTHORIZED",
+        "result": "PUSHED",
+    }
+    if any(mutation[key] != value for key, value in expected.items()):
+        raise LeaseError("review mutation receipt identity or authority is stale")
+    new_head = require_sha(mutation["newHeadSha"], "new review head")
+    new_base = require_sha(mutation["newBaseSha"], "new review base")
+    live_head = run_git(root, "rev-parse", "HEAD").stdout.strip()
+    if live_head != new_head:
+        raise LeaseError("mutation receipt new head differs from the live review head")
+    ancestor = run_git(
+        root, "merge-base", "--is-ancestor", lease["currentHeadSha"], new_head,
+        check=False,
+    )
+    if ancestor.returncode != 0:
+        raise LeaseError("new review head is not a descendant; force pushes are forbidden")
+    if remote_head(root, lease["remote"], lease["branchRef"]) != new_head:
+        raise LeaseError("remote review head does not equal the mutation head")
+    if mutation["kind"] == "remediation":
+        if new_base != lease["currentBaseSha"]:
+            raise LeaseError("remediation cannot change the review base")
+        actual = changed_paths(root, lease["currentHeadSha"], new_head)
+        require_owned(actual, lease["ownedPaths"])
+    else:
+        parents = run_git(root, "rev-list", "--parents", "-n", "1", new_head).stdout.split()
+        if len(parents) != 3 or parents[1:] != [lease["currentHeadSha"], new_base]:
+            raise LeaseError("base sync must be a clean merge with prior head first")
+        if remote_head(root, lease["remote"], lease["baseRef"]) != new_base:
+            raise LeaseError("base sync does not use the current remote base")
+        base_ancestor = run_git(
+            root, "merge-base", "--is-ancestor", lease["currentBaseSha"], new_base,
+            check=False,
+        )
+        if base_ancestor.returncode != 0:
+            raise LeaseError(
+                "new review base is not a descendant; rewritten base history is forbidden"
+            )
+        base_to_head = require_owned_or_snapshot(
+            root,
+            new_base,
+            new_head,
+            lease["ownedPaths"],
+            lease["snapshotAuthorization"],
+        )
+        actual = [
+            path for path in base_to_head
+            if within_owned(path, lease["ownedPaths"])
+        ]
+    claimed = normalized_paths(mutation["changedPaths"], "mutation changed paths")
+    if claimed != actual:
+        raise LeaseError("mutation changed paths differ from deterministic Git evidence")
+    final_paths = require_owned_or_snapshot(
+        root,
+        new_base,
+        new_head,
+        lease["ownedPaths"],
+        lease["snapshotAuthorization"],
+    )
+    lease["rotations"].append({
+        "kind": mutation["kind"],
+        "priorHeadSha": lease["currentHeadSha"],
+        "newHeadSha": new_head,
+        "priorBaseSha": lease["currentBaseSha"],
+        "newBaseSha": new_base,
+        "changedPaths": actual,
+        "mutationReceiptDigest": hashlib.sha256(mutation_raw).hexdigest(),
+    })
+    lease["currentHeadSha"] = new_head
+    lease["currentBaseSha"] = new_base
+    lease["invalidatedEvidence"] = INVALIDATED_EVIDENCE
+    replace_file(lease_path, lease)
+    return {**lease, "rotationCount": len(lease["rotations"])}
+
+
+def command_resume(arguments: argparse.Namespace) -> dict:
+    lease_path = Path(arguments.lease)
+    lease, _lease_raw = read_json(lease_path, LEASE_FIELDS, "review lease")
+    prior_result = lease["result"]
+    root = validate_recorded_lease(lease, allowed_results={"BLOCKED", "CLEAN"})
+    attachment, activation_digest = validate_attachment(Path(arguments.attachment))
+    expected = {
+        key: lease[key]
+        for key in (
+            "workKind", "workId", "workBundle", "sliceId", "role",
+            "taskType", "attempt", "launchMarker", "threadId",
+            "clientThreadId", "taskWorktree", "gitCommonDir", "branch",
+            "branchRef",
+        )
+    }
+    if any(attachment[key] != value for key, value in expected.items()):
+        raise LeaseError("resume attachment changed the review lease identity")
+    if (
+        prior_result != "BLOCKED"
+        and attachment["snapshotAuthorization"] != lease["snapshotAuthorization"]
+    ):
+        raise LeaseError("resume attachment changed frozen snapshot authorization")
+    if prior_result == "BLOCKED":
+        if attachment["revisionEpoch"] < lease["revisionEpoch"]:
+            raise LeaseError("blocked resume cannot regress the review revision epoch")
+    elif attachment["revisionEpoch"] != lease["revisionEpoch"]:
+        raise LeaseError("clean base-sync resume must preserve the review revision epoch")
+    resumed_head = attachment["boundSha"]
+    if (
+        attachment["worktreeHeadSha"] != resumed_head
+        or attachment["localBranchSha"] != resumed_head
+        or attachment["observedRemoteHeadSha"] != resumed_head
+    ):
+        raise LeaseError("resume attachment fields disagree on the revised head")
+    require_clean(root)
+    if common_dir(root) != lease["gitCommonDir"]:
+        raise LeaseError("resume Git common directory changed")
+    if run_git(root, "symbolic-ref", "--quiet", "HEAD").stdout.strip() != lease["branchRef"]:
+        raise LeaseError("resume branch identity changed")
+    if remote_url(root, lease["remote"]) != lease["remoteUrl"]:
+        raise LeaseError("resume remote identity changed")
+    head = require_sha(run_git(root, "rev-parse", "HEAD").stdout.strip(), "review head")
+    if head != resumed_head or remote_head(
+        root, lease["remote"], lease["branchRef"]
+    ) != head:
+        raise LeaseError("resume head differs from the revised attachment")
+    resumed_base_ref = (
+        lease["baseRef"]
+        if arguments.base_ref is None
+        else canonical_remote_branch_ref(arguments.base_ref, lease["remote"])
+    )
+    if prior_result == "BLOCKED" and resumed_base_ref != lease["baseRef"]:
+        raise LeaseError("blocked resume cannot change the review base reference")
+    resumed_base = remote_head(root, lease["remote"], resumed_base_ref)
+    if prior_result == "BLOCKED":
+        if arguments.reason != "base_sync":
+            raise LeaseError("late-evidence resume requires a clean lease")
+        if (
+            attachment["revisionEpoch"] == lease["revisionEpoch"]
+            and resumed_head != lease["currentHeadSha"]
+        ):
+            raise LeaseError(
+                "same-revision blocked resume must preserve the review head"
+            )
+        revision_advanced = attachment["revisionEpoch"] > lease["revisionEpoch"]
+        if resumed_head != lease["currentHeadSha"] or revision_advanced:
+            if arguments.release_receipt is None:
+                message = (
+                    "blocked revision advance requires its branch release receipt"
+                    if revision_advanced
+                    else (
+                        "blocked resume onto a descendant requires its branch "
+                        "release receipt"
+                    )
+                )
+                raise LeaseError(message)
+            release_head, release_revision = validate_release_receipt(
+                Path(arguments.release_receipt),
+                attachment,
+                lease["currentHeadSha"],
+            )
+            if release_head != resumed_head:
+                raise LeaseError(
+                    "revised blocked resume requires the revised head release receipt"
+                )
+            if release_revision != attachment["revisionEpoch"]:
+                raise LeaseError("review attachment release receipt is stale")
+        if attachment["revisionEpoch"] > lease["revisionEpoch"]:
+            if attachment["revisionEpoch"] != lease["revisionEpoch"] + 1:
+                raise LeaseError("blocked resume must advance one revision at a time")
+            ancestor = run_git(
+                root,
+                "merge-base",
+                "--is-ancestor",
+                lease["currentHeadSha"],
+                resumed_head,
+                check=False,
+            )
+            if ancestor.returncode != 0:
+                raise LeaseError(
+                    "revised review head rewrites the blocked review history"
+                )
+        reauthorized_owned = attachment["ownedPaths"]
+        reauthorization_digest = attachment["reauthorizationDigest"]
+        snapshot_authorization = attachment["snapshotAuthorization"]
+        if attachment["revisionEpoch"] == lease["revisionEpoch"]:
+            if (
+                reauthorized_owned != lease["ownedPaths"]
+                or reauthorization_digest != lease["reauthorizationDigest"]
+                or snapshot_authorization != lease["snapshotAuthorization"]
+            ):
+                raise LeaseError(
+                    "same-revision resume changed frozen review authority"
+                )
+        elif not set(lease["ownedPaths"]).issubset(reauthorized_owned):
+            raise LeaseError(
+                "revised review attachment removed frozen owned paths"
+            )
+        integrated_base_result = run_git(
+            root,
+            "merge-base",
+            resumed_base,
+            resumed_head,
+            check=False,
+        )
+        if integrated_base_result.returncode != 0:
+            raise LeaseError(
+                "revised review head has no shared history with the live base"
+            )
+        integrated_base = require_sha(
+            integrated_base_result.stdout.strip(),
+            "revised review integrated base",
+        )
+        require_owned_or_snapshot(
+            root,
+            integrated_base,
+            resumed_head,
+            reauthorized_owned,
+            snapshot_authorization,
+        )
+        lease["ownedPaths"] = reauthorized_owned
+        lease["reauthorizationDigest"] = reauthorization_digest
+        lease["snapshotAuthorization"] = snapshot_authorization
+        lease["revisionEpoch"] = attachment["revisionEpoch"]
+        lease["initialHeadSha"] = resumed_head
+        lease["currentHeadSha"] = resumed_head
+        lease["initialBaseSha"] = integrated_base
+        lease["currentBaseSha"] = integrated_base
+        lease["rotations"] = []
+        lease["invalidatedEvidence"] = []
+    else:
+        if (
+            attachment["ownedPaths"] != lease["ownedPaths"]
+            or attachment["reauthorizationDigest"]
+            != lease["reauthorizationDigest"]
+            or attachment["snapshotAuthorization"]
+            != lease["snapshotAuthorization"]
+        ):
+            raise LeaseError(
+                "clean base-sync resume changed frozen review authority"
+            )
+        released_descendant = resumed_head != lease["currentHeadSha"]
+        resume_base = resumed_base if released_descendant else lease["currentBaseSha"]
+        adoption_rotation = None
+        if released_descendant:
+            # A clean review may resume onto a newly attached head only when
+            # the branch-release evidence authorizes that same review lineage.
+            # The descendant check and frozen authority checks below keep this
+            # from becoming a force-push or scope-expansion escape hatch.
+            if not attachment["releaseReceiptDigest"]:
+                raise LeaseError(
+                    "clean resume onto a descendant requires released-head authority"
+                )
+            if arguments.release_receipt is None:
+                raise LeaseError(
+                    "clean resume onto a descendant requires its branch release receipt"
+                )
+            _release_head, release_revision = validate_release_receipt(
+                Path(arguments.release_receipt),
+                attachment,
+                lease["currentHeadSha"],
+            )
+            if release_revision != attachment["revisionEpoch"]:
+                raise LeaseError("review attachment release receipt is stale")
+            if run_git(
+                root,
+                "merge-base",
+                "--is-ancestor",
+                lease["currentHeadSha"],
+                resumed_head,
+                check=False,
+            ).returncode != 0:
+                raise LeaseError(
+                    "released resume head must descend from the reviewed head"
+                )
+            require_owned_or_snapshot(
+                root,
+                resume_base,
+                resumed_head,
+                lease["ownedPaths"],
+                lease["snapshotAuthorization"],
+            )
+            prior_head = lease["currentHeadSha"]
+            prior_base = lease["currentBaseSha"]
+            if resume_base == prior_base:
+                adopted_paths = changed_paths(root, prior_head, resumed_head)
+                require_owned(adopted_paths, lease["ownedPaths"])
+                rotation_kind = "remediation"
+            else:
+                base_to_head = require_owned_or_snapshot(
+                    root,
+                    resume_base,
+                    resumed_head,
+                    lease["ownedPaths"],
+                    lease["snapshotAuthorization"],
+                )
+                adopted_paths = [
+                    path for path in base_to_head
+                    if within_owned(path, lease["ownedPaths"])
+                ]
+                rotation_kind = "base_sync"
+            adoption_rotation = {
+                "kind": rotation_kind,
+                "priorHeadSha": prior_head,
+                "newHeadSha": resumed_head,
+                "priorBaseSha": prior_base,
+                "newBaseSha": resume_base,
+                "changedPaths": adopted_paths,
+                "mutationReceiptDigest": attachment["releaseReceiptDigest"],
+            }
+            lease["currentHeadSha"] = resumed_head
+            lease["invalidatedEvidence"] = INVALIDATED_EVIDENCE
+        if arguments.reason == "late_evidence":
+            if activation_digest == lease["activationDigest"]:
+                raise LeaseError(
+                    "late-evidence resume requires a fresh review attachment"
+                )
+            if (
+                resumed_base_ref != lease["baseRef"]
+                or resumed_base != lease["currentBaseSha"]
+            ):
+                raise LeaseError(
+                    "late-evidence resume must preserve the reviewed base"
+                )
+        else:
+            if resumed_base == lease["currentBaseSha"] and not released_descendant:
+                raise LeaseError(
+                    "clean base-sync resume requires an advanced remote base"
+                )
+            if resumed_base != lease["currentBaseSha"]:
+                base_ancestor = run_git(
+                    root,
+                    "merge-base",
+                    "--is-ancestor",
+                    lease["currentBaseSha"],
+                    resumed_base,
+                    check=False,
+                )
+                if base_ancestor.returncode != 0:
+                    raise LeaseError(
+                        "clean base-sync resume cannot follow rewritten base history"
+                    )
+                if released_descendant and run_git(
+                    root,
+                    "merge-base",
+                    "--is-ancestor",
+                    resumed_base,
+                    resumed_head,
+                    check=False,
+                ).returncode != 0:
+                    raise LeaseError(
+                        "released resume head must contain the resumed base"
+                    )
+        if adoption_rotation is not None:
+            lease["rotations"].append(adoption_rotation)
+        require_owned_or_snapshot(
+            root,
+            resume_base,
+            resumed_head,
+            lease["ownedPaths"],
+            lease["snapshotAuthorization"],
+        )
+        if arguments.reason == "base_sync":
+            lease["baseRef"] = resumed_base_ref
+            if released_descendant:
+                lease["currentBaseSha"] = resume_base
+    lease["activationDigest"] = activation_digest
+    lease["identityDigest"] = identity_digest(lease)
+    lease["result"] = "ACTIVE"
+    replace_file(lease_path, lease)
+    return {**lease, "rotationCount": len(lease["rotations"])}
+
+
+def command_finalize(arguments: argparse.Namespace) -> dict:
+    lease_path = Path(arguments.lease)
+    lease, lease_raw = read_json(lease_path, LEASE_FIELDS, "review lease")
+    result = arguments.result.upper()
+    finalizing = f"FINALIZING_{result}"
+    recovery = lease["result"] == finalizing
+    if lease["result"] not in {"ACTIVE", finalizing}:
+        raise LeaseError("review lease is not active")
+    if recovery:
+        active_lease = {**lease, "result": "ACTIVE"}
+        active_lease_raw = encoded(active_lease)
+        root = (
+            validate_live(active_lease)
+            if arguments.result == "clean"
+            else validate_recorded_lease(lease, allowed_results={finalizing})
+        )
+    else:
+        active_lease_raw = lease_raw
+        root = (
+            validate_live(lease)
+            if arguments.result == "clean"
+            else validate_recorded_lease(lease)
+        )
+    final_paths = require_owned_or_snapshot(
+        root,
+        lease["currentBaseSha"],
+        lease["currentHeadSha"],
+        lease["ownedPaths"],
+        lease["snapshotAuthorization"],
+    )
+    required_owned_paths = normalized_paths(
+        arguments.required_owned_path, "required owned paths"
+    ) if arguments.required_owned_path else []
+    regression_obligations = arguments.regression_obligation or []
+    verification_obligations = arguments.verification_obligation or []
+    blocked_fields_present = any((
+        arguments.blocked_disposition is not None,
+        required_owned_paths,
+        arguments.acceptance_id is not None,
+        arguments.owning_seam is not None,
+        regression_obligations,
+        verification_obligations,
+    ))
+    if arguments.result == "clean" and blocked_fields_present:
+        raise LeaseError(
+            "clean finalization cannot carry a blocked-review disposition"
+        )
+    if arguments.blocked_disposition is None:
+        if blocked_fields_present:
+            raise LeaseError(
+                "blocked-review scope evidence requires a typed disposition"
+            )
+    elif (
+        arguments.result != "blocked"
+        or arguments.blocked_disposition
+        != "required_by_intent_scope_expansion"
+        or not required_owned_paths
+        or not isinstance(arguments.acceptance_id, str)
+        or ACCEPTANCE_ID_RE.fullmatch(arguments.acceptance_id) is None
+        or not arguments.owning_seam
+        or not regression_obligations
+        or not verification_obligations
+    ):
+        raise LeaseError(
+            "required-by-intent blocked-review evidence is incomplete"
+        )
+    for label, values in (
+        ("regression obligations", regression_obligations),
+        ("verification obligations", verification_obligations),
+    ):
+        if (
+            not all(isinstance(value, str) and value.strip() for value in values)
+            or any(len(value) > 500 for value in values)
+        ):
+            raise LeaseError(f"{label} must be nonempty strings of at most 500 characters")
+    if arguments.result == "clean" and lease["compactBugFixRecord"] is not None:
+        require_compact_record_matches(
+            root,
+            lease["currentHeadSha"],
+            lease["compactBugFixRecord"],
+            final_paths,
+        )
+    terminal = {
+        "schema": TERMINAL_SCHEMA,
+        "kind": "review_lease_terminal",
+        **{
+            key: lease[key]
+            for key in (
+                "workKind", "workId", "workBundle", "sliceId", "role",
+                "taskType", "attempt", "revisionEpoch", "launchMarker", "threadId",
+                "clientThreadId", "taskWorktree", "gitCommonDir", "branch",
+                "branchRef", "remote", "remoteUrl", "baseRef", "ownedPaths",
+                "initialHeadSha", "initialBaseSha", "identityDigest",
+                "compactBugFixRecord", "reauthorizationDigest",
+                "snapshotAuthorization",
+            )
+        },
+        "finalHeadSha": lease["currentHeadSha"],
+        "finalBaseSha": lease["currentBaseSha"],
+        "changedPaths": final_paths,
+        "activationDigest": lease["activationDigest"],
+        "leaseDigest": hashlib.sha256(active_lease_raw).hexdigest(),
+        "rotationCount": len(lease["rotations"]),
+        "rotations": lease["rotations"],
+        "invalidatedEvidence": lease["invalidatedEvidence"],
+        "reviewReceiptDigest": None,
+        "observationEpoch": arguments.observation_epoch,
+        "clean": True,
+        "result": result,
+        "blockedDisposition": arguments.blocked_disposition,
+        "requiredOwnedPaths": required_owned_paths,
+        "acceptanceId": arguments.acceptance_id,
+        "owningSeam": arguments.owning_seam,
+        "regressionObligations": regression_obligations,
+        "verificationObligations": verification_obligations,
+    }
+    bundle_root = Path(arguments.bundle_root).expanduser().resolve(strict=True)
+    receipt = Path(arguments.receipt).expanduser()
+    if not receipt.is_absolute():
+        receipt = bundle_root / receipt
+    receipt = receipt.parent.resolve(strict=True) / receipt.name
+    try:
+        receipt.relative_to(bundle_root)
+    except ValueError as error:
+        raise LeaseError("terminal receipt must be confined to the work bundle") from error
+    if recovery and receipt.exists():
+        try:
+            receipt_bytes = receipt.read_bytes()
+        except OSError as error:
+            raise LeaseError(
+                f"cannot read terminal review lease receipt: {error}"
+            ) from error
+        if receipt_bytes != encoded(terminal):
+            raise LeaseError("terminal review lease receipt already exists")
+        lease["result"] = result
+        replace_file(lease_path, lease)
+        return terminal
+    if arguments.result == "clean":
+        live_base = remote_head(root, lease["remote"], lease["baseRef"])
+        if lease["currentBaseSha"] != live_base:
+            if recovery:
+                replace_file(lease_path, active_lease)
+            raise LeaseError(
+                "clean finalization requires synchronization to the live remote base"
+            )
+    if not recovery:
+        lease["result"] = finalizing
+        replace_file(lease_path, lease)
+    if receipt.exists():
+        try:
+            receipt_bytes = receipt.read_bytes()
+        except OSError as error:
+            raise LeaseError(
+                f"cannot read terminal review lease receipt: {error}"
+            ) from error
+        if not recovery or receipt_bytes != encoded(terminal):
+            raise LeaseError("terminal review lease receipt already exists")
+    else:
+        create_file(receipt, terminal, "terminal review lease receipt")
+    lease["result"] = result
+    replace_file(lease_path, lease)
+    return terminal
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(
+        description="Maintain one exact task-local rolling PR-review lease."
+    )
+    commands = result.add_subparsers(dest="operation", required=True)
+    activate = commands.add_parser("activate")
+    activate.add_argument("--attachment", required=True)
+    activate.add_argument("--lease", required=True)
+    activate.add_argument("--remote", required=True)
+    activate.add_argument("--base-ref", required=True)
+    activate.add_argument("--base-sha", required=True)
+    activate.add_argument("--compact-bug-fix-record")
+    activate.set_defaults(handler=command_activate)
+    advance = commands.add_parser("advance")
+    advance.add_argument("--lease", required=True)
+    advance.add_argument("--mutation-receipt")
+    advance.set_defaults(handler=command_advance)
+    resume = commands.add_parser("resume")
+    resume.add_argument("--lease", required=True)
+    resume.add_argument("--attachment", required=True)
+    resume.add_argument("--release-receipt")
+    resume.add_argument("--base-ref")
+    resume.add_argument(
+        "--reason",
+        choices=("base_sync", "late_evidence"),
+        default="base_sync",
+    )
+    resume.set_defaults(handler=command_resume)
+    finalize = commands.add_parser("finalize")
+    finalize.add_argument("--lease", required=True)
+    finalize.add_argument("--result", required=True, choices=("clean", "blocked"))
+    finalize.add_argument("--bundle-root", required=True)
+    finalize.add_argument("--receipt", required=True)
+    finalize.add_argument("--observation-epoch", required=True, type=int)
+    finalize.add_argument(
+        "--blocked-disposition",
+        choices=("required_by_intent_scope_expansion",),
+    )
+    finalize.add_argument("--required-owned-path", action="append")
+    finalize.add_argument("--acceptance-id")
+    finalize.add_argument("--owning-seam")
+    finalize.add_argument("--regression-obligation", action="append")
+    finalize.add_argument("--verification-obligation", action="append")
+    finalize.set_defaults(handler=command_finalize)
+    return result
+
+
+def main() -> int:
+    arguments = parser().parse_args()
+    if getattr(arguments, "observation_epoch", 1) < 1:
+        print("review-lease: observation epoch must be positive", file=sys.stderr)
+        return 2
+    try:
+        with lease_lock(Path(arguments.lease)):
+            value = arguments.handler(arguments)
+    except LeaseError as error:
+        print(f"review-lease: {error}", file=sys.stderr)
+        return 2
+    print(json.dumps(value, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

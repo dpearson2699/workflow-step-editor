@@ -1,0 +1,162 @@
+{
+  "version": "1.0",
+  "skill": "improve-codebase-architecture",
+  "content_evals": [
+    {
+      "id": "content-survey-produces-report-and-stops-at-pick",
+      "prompt": "Survey this repository's architecture for deepening opportunities.",
+      "run_modes": [
+        "with_skill",
+        "without_skill"
+      ],
+      "expected_behaviors": [
+        "scopes the scan from user direction or recent git hot spots before reading widely",
+        "reads CONTEXT.md and ADRs in the scanned area before proposing anything",
+        "spawns a read-only explorer sub-agent instead of walking every file in the root context",
+        "writes a single CDN-backed HTML report to the OS temp directory, never into the repository",
+        "uses module, interface, depth, seam, adapter, leverage, and locality as the architectural nouns, never component, service, API, or boundary as synonyms — while preserving exact identifiers and CONTEXT.md terms verbatim",
+        "labels each candidate Strong, Worth exploring, or Speculative and names a top recommendation",
+        "ends by asking which candidate to explore, with no interface proposals yet",
+        "edits no production code and starts no spec-work bundle"
+      ]
+    },
+    {
+      "id": "content-picked-candidate-grills-then-routes",
+      "prompt": "I pick the second candidate from the architecture report. Let's explore it.",
+      "run_modes": [
+        "with_skill",
+        "without_skill"
+      ],
+      "expected_behaviors": [
+        "runs grilling rounds over the candidate's design tree with recommended answers, waiting for the user between rounds",
+        "updates CONTEXT.md inline when a term is resolved, creating it lazily",
+        "offers an ADR only when the three-part test holds, including for a load-bearing rejection",
+        "offers the design-it-twice parallel pattern for alternative interfaces",
+        "ends by routing the outcome to the durable GitHub issue lifecycle or the spec-work orchestrator",
+        "does not implement the refactor or open a work bundle itself"
+      ]
+    }
+  ],
+  "trigger_evals": [
+    {
+      "id": "train-trigger-survey",
+      "split": "train",
+      "prompt": "Survey the architecture of this repo for deepening opportunities.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-health-check",
+      "split": "train",
+      "prompt": "Run an architecture health check on the codebase.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-muddy",
+      "split": "train",
+      "prompt": "Where is this codebase getting muddy? Do a review of module depth.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-shallow-scan",
+      "split": "train",
+      "prompt": "Scan the repo for shallow modules we should deepen.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-maintenance",
+      "split": "train",
+      "prompt": "Time for the periodic maintenance survey of the architecture.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-slash",
+      "split": "train",
+      "prompt": "/improve-codebase-architecture",
+      "should_trigger": true
+    },
+    {
+      "id": "train-trigger-candidates",
+      "split": "train",
+      "prompt": "Find refactoring candidates worth turning into spec work.",
+      "should_trigger": true
+    },
+    {
+      "id": "train-nomiss-refactor-exec",
+      "split": "train",
+      "prompt": "Refactor this class into a separate module.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-nomiss-explain",
+      "split": "train",
+      "prompt": "Explain the architecture of the sync pipeline.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-nomiss-pr-review",
+      "split": "train",
+      "prompt": "Review my pull request for merge readiness.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-nomiss-bug",
+      "split": "train",
+      "prompt": "Fix the crash when closing a wheel with no trades.",
+      "should_trigger": false
+    },
+    {
+      "id": "train-nomiss-feature",
+      "split": "train",
+      "prompt": "Build a feature that exports performance data to CSV.",
+      "should_trigger": false
+    },
+    {
+      "id": "val-trigger-deepening",
+      "split": "val",
+      "prompt": "Find deepening opportunities in this repository.",
+      "should_trigger": true
+    },
+    {
+      "id": "val-trigger-friction",
+      "split": "val",
+      "prompt": "Do an architectural friction survey and show me the candidates.",
+      "should_trigger": true
+    },
+    {
+      "id": "val-trigger-report",
+      "split": "val",
+      "prompt": "Give me the visual architecture review report for this repo.",
+      "should_trigger": true
+    },
+    {
+      "id": "val-trigger-depth-audit",
+      "split": "val",
+      "prompt": "Audit module depth across the codebase and recommend where to invest.",
+      "should_trigger": true
+    },
+    {
+      "id": "val-nomiss-rename",
+      "split": "val",
+      "prompt": "Rename this function safely across the repo.",
+      "should_trigger": false
+    },
+    {
+      "id": "val-nomiss-simplify",
+      "split": "val",
+      "prompt": "Simplify the changed code in my working tree.",
+      "should_trigger": false
+    },
+    {
+      "id": "val-nomiss-how-works",
+      "split": "val",
+      "prompt": "How does the auth flow work in this codebase?",
+      "should_trigger": false
+    },
+    {
+      "id": "val-nomiss-safe-change",
+      "split": "val",
+      "prompt": "Is it safe to change the Wheel.endDate field?",
+      "should_trigger": false
+    }
+  ]
+}

@@ -1,0 +1,1999 @@
+#!/usr/bin/env python3
+"""Deterministically release, adopt, attach, and verify task branches."""
+
+from __future__ import annotations
+
+import sys
+
+if sys.version_info < (3, 11):
+    detected = ".".join(str(part) for part in sys.version_info[:3])
+    print(
+        f"task-git-binding requires Python 3.11 or newer; found {detected}",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
+import argparse
+from contextlib import contextmanager
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+from pathlib import PurePosixPath
+import re
+import stat
+import subprocess
+import tempfile
+
+
+SCHEMA = "spec-work-task-git-binding"
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+SNAPSHOT_CLASSIFICATIONS = {"intermediate", "final"}
+
+
+class BindingError(RuntimeError):
+    """A fail-closed Git binding contract violation."""
+
+
+class BindingArgumentParser(argparse.ArgumentParser):
+    """Argument parser that preserves the helper's structured error contract."""
+
+    def error(self, message: str) -> None:
+        operation = sys.argv[1] if len(sys.argv) > 1 else None
+        print(
+            json.dumps({
+                "schema": "spec-work-task-git-binding-error",
+                "operation": operation,
+                "result": "ERROR",
+                "error": message,
+            }, sort_keys=True),
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+
+def run_git(worktree: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    process = subprocess.run(
+        ["git", "-C", str(worktree), *arguments],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if check and process.returncode != 0:
+        detail = process.stderr.strip() or process.stdout.strip() or "git command failed"
+        raise BindingError(f"git {' '.join(arguments)} failed: {detail}")
+    return process
+
+
+def run_git_bytes(
+    worktree: Path, *arguments: str, check: bool = True
+) -> subprocess.CompletedProcess[bytes]:
+    process = subprocess.run(
+        ["git", "-C", str(worktree), *arguments],
+        text=False,
+        capture_output=True,
+        check=False,
+    )
+    if check and process.returncode != 0:
+        detail = (
+            process.stderr.decode(errors="replace").strip()
+            or process.stdout.decode(errors="replace").strip()
+            or "git command failed"
+        )
+        raise BindingError(f"git {' '.join(arguments)} failed: {detail}")
+    return process
+
+
+def live_remote_branch_head(worktree: Path, branch_ref: str) -> str:
+    canonical_ref = (
+        branch_ref
+        if branch_ref.startswith("refs/heads/")
+        else f"refs/heads/{branch_ref}"
+    )
+    observed = run_git(
+        worktree,
+        "ls-remote",
+        "--heads",
+        "origin",
+        canonical_ref,
+    )
+    records = [
+        line.split()
+        for line in observed.stdout.splitlines()
+        if line.strip()
+    ]
+    if (
+        len(records) != 1
+        or len(records[0]) != 2
+        or records[0][1] != canonical_ref
+    ):
+        raise BindingError(
+            "live remote branch head could not be resolved exactly"
+        )
+    return require_sha(records[0][0], "live remote branch head")
+
+
+def require_live_pull_request(
+    worktree: Path,
+    *,
+    pr: int,
+    branch: str,
+    base_ref: str,
+    bound_sha: str,
+) -> None:
+    try:
+        process = subprocess.run(
+            [
+                "gh", "pr", "view", str(pr), "--json",
+                "number,state,headRefName,headRefOid,baseRefName",
+            ],
+            cwd=worktree,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as error:
+        raise BindingError(
+            f"live pull request observation failed: {error}"
+        ) from error
+    if process.returncode != 0:
+        detail = process.stderr.strip() or "unable to observe pull request"
+        raise BindingError(f"live pull request observation failed: {detail}")
+    try:
+        value = json.loads(process.stdout)
+    except json.JSONDecodeError as error:
+        raise BindingError(
+            f"live pull request observation is invalid JSON: {error}"
+        ) from error
+    if not isinstance(value, dict):
+        raise BindingError("live pull request observation must be an object")
+    expected = {
+        "number": pr,
+        "state": "OPEN",
+        "headRefName": branch,
+        "headRefOid": bound_sha,
+        "baseRefName": remote_branch_ref(base_ref).removeprefix("refs/heads/"),
+    }
+    mismatched = [
+        name for name, expected_value in expected.items()
+        if value.get(name) != expected_value
+    ]
+    if mismatched:
+        raise BindingError(
+            "live pull request does not match adoption facts: "
+            + ", ".join(mismatched)
+        )
+
+
+def remote_branch_ref(value: str) -> str:
+    prefix = "origin/"
+    if value.startswith(prefix):
+        branch = value.removeprefix(prefix)
+    elif value.startswith("refs/"):
+        raise BindingError(
+            "base ref must use origin/<branch> or the stored short branch form"
+        )
+    else:
+        branch = value
+    return checked_branch_name(branch, "base ref")
+
+
+def checked_branch_name(branch: str, label: str) -> str:
+    if branch.startswith("refs/"):
+        raise BindingError(f"{label} must be a short branch name")
+    process = subprocess.run(
+        ["git", "check-ref-format", "--branch", branch],
+        text=True, capture_output=True, check=False,
+    )
+    if process.returncode != 0 or process.stdout.strip() != branch:
+        raise BindingError(f"{label} failed Git reference validation")
+    return f"refs/heads/{branch}"
+
+
+def canonical_path(value: str | Path, label: str) -> Path:
+    try:
+        path = Path(value).expanduser().resolve(strict=True)
+    except OSError as error:
+        raise BindingError(f"{label} cannot be resolved: {error}") from error
+    return path
+
+
+def canonical_bundle_root(arguments: argparse.Namespace) -> Path:
+    raw = Path(arguments.bundle_root).expanduser()
+    root = canonical_path(raw, "work bundle root")
+    if raw.as_posix() != root.as_posix():
+        raise BindingError("work bundle root must be a canonical absolute path")
+    if not root.is_dir():
+        raise BindingError("work bundle root must be a directory")
+    if root.name != arguments.work_bundle:
+        raise BindingError("work bundle root basename must equal work bundle")
+    return root
+
+
+def filesystem_error(context: str, error: OSError) -> BindingError:
+    return BindingError(f"{context} failed: {error}")
+
+
+@contextmanager
+def operation_lock(common_dir: Path, branch_ref: str):
+    digest = hashlib.sha256(
+        common_dir.as_posix().encode() + b"\0" + branch_ref.encode()
+    ).hexdigest()
+    lock_directory = Path(tempfile.gettempdir()) / (
+        f"spec-work-task-git-binding-locks-{os.getuid()}"
+    )
+    descriptor: int | None = None
+    try:
+        lock_directory.mkdir(mode=0o700, exist_ok=True)
+        directory_stat = os.lstat(lock_directory)
+        if (
+            not stat.S_ISDIR(directory_stat.st_mode)
+            or directory_stat.st_uid != os.getuid()
+        ):
+            raise BindingError("binding lock directory is not a user-owned directory")
+        os.chmod(lock_directory, 0o700)
+        descriptor = os.open(
+            lock_directory / f"{digest}.lock",
+            os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        lock_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_uid != os.getuid():
+            raise BindingError("binding lock is not a user-owned regular file")
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    except BindingError:
+        raise
+    except OSError as error:
+        raise filesystem_error("binding lock", error) from error
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+
+class ReceiptTarget:
+    """Create-only receipt target anchored below an immutable bundle descriptor."""
+
+    def __init__(
+        self,
+        bundle_root: Path,
+        receipt: str | Path,
+        *,
+        create_ancestors: bool = True,
+    ):
+        self.bundle_root = bundle_root
+        self.create_ancestors = create_ancestors
+        raw = Path(receipt).expanduser()
+        if not raw.is_absolute():
+            raw = bundle_root / raw
+        try:
+            relative = raw.relative_to(bundle_root)
+        except ValueError as error:
+            raise BindingError("receipt path must be confined to the work bundle") from error
+        pure = PurePosixPath(relative.as_posix())
+        if not pure.parts or any(part in {"", ".", ".."} for part in pure.parts):
+            raise BindingError("receipt path must be a bundle-relative descendant")
+        self.parts = pure.parts
+        self.root_fd: int | None = None
+        self.directory_fds: list[int] = []
+        self.identities: list[tuple[int, int]] = []
+        self.published_identity: tuple[int, int] | None = None
+
+    def __enter__(self) -> "ReceiptTarget":
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            self.root_fd = os.open(self.bundle_root, flags)
+            self.directory_fds = [self.root_fd]
+            root_stat = os.fstat(self.root_fd)
+            self.identities = [(root_stat.st_dev, root_stat.st_ino)]
+            parent = self.root_fd
+            for component in self.parts[:-1]:
+                if self.create_ancestors:
+                    try:
+                        os.mkdir(component, mode=0o700, dir_fd=parent)
+                    except FileExistsError:
+                        pass
+                child = os.open(component, flags, dir_fd=parent)
+                child_stat = os.fstat(child)
+                if not stat.S_ISDIR(child_stat.st_mode):
+                    os.close(child)
+                    raise BindingError("receipt ancestor is not a directory")
+                self.directory_fds.append(child)
+                self.identities.append((child_stat.st_dev, child_stat.st_ino))
+                parent = child
+            self._validate_leaf()
+            self.validate_identity()
+            return self
+        except BindingError:
+            self.close()
+            raise
+        except OSError as error:
+            self.close()
+            raise filesystem_error("receipt preflight", error) from error
+
+    @property
+    def parent_fd(self) -> int:
+        return self.directory_fds[-1]
+
+    @property
+    def leaf(self) -> str:
+        return self.parts[-1]
+
+    def _leaf_stat(self) -> os.stat_result | None:
+        try:
+            return os.stat(self.leaf, dir_fd=self.parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return None
+
+    def _validate_leaf(self) -> None:
+        leaf_stat = self._leaf_stat()
+        if leaf_stat is not None and not stat.S_ISREG(leaf_stat.st_mode):
+            raise BindingError("receipt path must be absent or a regular file")
+
+    def read(self) -> bytes | None:
+        leaf_stat = self._leaf_stat()
+        if leaf_stat is None:
+            return None
+        if not stat.S_ISREG(leaf_stat.st_mode):
+            raise BindingError("receipt path must be absent or a regular file")
+        descriptor = os.open(
+            self.leaf, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=self.parent_fd
+        )
+        try:
+            with os.fdopen(descriptor, "rb", closefd=False) as handle:
+                return handle.read()
+        finally:
+            os.close(descriptor)
+
+    def validate_identity(self) -> None:
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        reopened: list[int] = []
+        try:
+            descriptor = os.open(self.bundle_root, flags)
+            reopened.append(descriptor)
+            observed = os.fstat(descriptor)
+            if (observed.st_dev, observed.st_ino) != self.identities[0]:
+                raise BindingError("work bundle root identity changed")
+            for index, component in enumerate(self.parts[:-1], start=1):
+                descriptor = os.open(component, flags, dir_fd=descriptor)
+                reopened.append(descriptor)
+                observed = os.fstat(descriptor)
+                if (observed.st_dev, observed.st_ino) != self.identities[index]:
+                    raise BindingError("receipt ancestor identity changed")
+            self._validate_leaf()
+        except BindingError:
+            raise
+        except OSError as error:
+            raise filesystem_error("receipt identity validation", error) from error
+        finally:
+            for descriptor in reversed(reopened):
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+    def publish(self, encoded: bytes) -> None:
+        existing = self.read()
+        if existing is not None:
+            if existing == encoded:
+                return
+            raise BindingError("receipt path already exists with different content")
+        temporary = f".{self.leaf}.{os.getpid()}.{hashlib.sha256(encoded).hexdigest()[:12]}.tmp"
+        descriptor: int | None = None
+        try:
+            descriptor = os.open(
+                temporary,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+                dir_fd=self.parent_fd,
+            )
+            with os.fdopen(descriptor, "wb", closefd=False) as handle:
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(descriptor)
+            os.close(descriptor)
+            descriptor = None
+            try:
+                os.link(
+                    temporary, self.leaf,
+                    src_dir_fd=self.parent_fd, dst_dir_fd=self.parent_fd,
+                    follow_symlinks=False,
+                )
+            except FileExistsError:
+                if self.read() == encoded:
+                    return
+                raise BindingError("receipt path already exists with different content") from None
+            published = os.stat(self.leaf, dir_fd=self.parent_fd, follow_symlinks=False)
+            self.published_identity = (published.st_dev, published.st_ino)
+            os.fsync(self.parent_fd)
+        except BindingError:
+            raise
+        except OSError as error:
+            raise filesystem_error("receipt publication", error) from error
+        finally:
+            cleanup_errors: list[OSError] = []
+            if descriptor is not None:
+                try:
+                    os.close(descriptor)
+                except OSError as error:
+                    cleanup_errors.append(error)
+            try:
+                os.unlink(temporary, dir_fd=self.parent_fd)
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                cleanup_errors.append(error)
+            if cleanup_errors:
+                detail = "; ".join(str(error) for error in cleanup_errors)
+                active_error = sys.exc_info()[1]
+                if isinstance(active_error, BindingError):
+                    raise BindingError(
+                        f"{active_error}; receipt cleanup failed: {detail}"
+                    ) from active_error
+                raise BindingError(f"receipt cleanup failed: {detail}")
+
+    def remove_publication(self) -> None:
+        if self.published_identity is None:
+            return
+        current = self._leaf_stat()
+        if current is None:
+            self.published_identity = None
+            return
+        if (current.st_dev, current.st_ino) != self.published_identity:
+            raise BindingError("published receipt identity changed during rollback")
+        try:
+            os.unlink(self.leaf, dir_fd=self.parent_fd)
+            os.fsync(self.parent_fd)
+        except OSError as error:
+            raise filesystem_error("receipt rollback", error) from error
+        self.published_identity = None
+
+    def close(self) -> None:
+        for descriptor in reversed(self.directory_fds):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        self.directory_fds = []
+        self.root_fd = None
+
+    def __exit__(self, _type, _value, _traceback) -> None:
+        self.close()
+
+
+def require_sha(value: object, label: str) -> str:
+    if not isinstance(value, str) or not SHA_RE.fullmatch(value):
+        raise BindingError(f"{label} must be a lowercase 40-character Git SHA")
+    return value
+
+
+def require_digest(value: str | None, label: str) -> str:
+    if value is None or not DIGEST_RE.fullmatch(value):
+        raise BindingError(f"{label} must be a lowercase 64-character SHA-256 digest")
+    return value
+
+
+def normalized_repo_paths(values: list[str] | None, label: str) -> list[str]:
+    paths: list[str] = []
+    for value in values or []:
+        pure = PurePosixPath(value)
+        if (
+            not value
+            or pure.is_absolute()
+            or any(part in {"", ".", ".."} for part in pure.parts)
+            or pure.as_posix() != value
+        ):
+            raise BindingError(f"{label} must be canonical repository paths")
+        paths.append(value)
+    normalized = sorted(set(paths))
+    if len(normalized) != len(paths):
+        raise BindingError(f"{label} must not contain duplicates")
+    return normalized
+
+
+def snapshot_authorization(arguments: argparse.Namespace) -> dict[str, str] | None:
+    values = (
+        arguments.snapshot_slice_id,
+        arguments.snapshot_commit,
+        arguments.snapshot_path,
+        arguments.snapshot_classification,
+        arguments.snapshot_manifest_digest,
+    )
+    if all(value is None for value in values):
+        return None
+    if any(value is None for value in values):
+        raise BindingError(
+            "snapshot authorization requires slice, commit, path, classification, "
+            "and manifest digest"
+        )
+    if arguments.snapshot_slice_id != arguments.slice_id:
+        raise BindingError("snapshot authorization must bind the review slice")
+    paths = normalized_repo_paths(
+        [arguments.snapshot_path], "snapshot authorization path"
+    )
+    if arguments.snapshot_classification not in SNAPSHOT_CLASSIFICATIONS:
+        raise BindingError("snapshot authorization classification is invalid")
+    return {
+        "sliceId": arguments.snapshot_slice_id,
+        "snapshotCommit": require_sha(
+            arguments.snapshot_commit, "snapshot authorization commit"
+        ),
+        "snapshotPath": paths[0],
+        "classification": arguments.snapshot_classification,
+        "manifestDigest": require_digest(
+            arguments.snapshot_manifest_digest,
+            "snapshot authorization manifest digest",
+        ),
+    }
+
+
+def canonical_digest(value: object) -> str:
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def transport_digest(value: object) -> str:
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":")
+    ) + "\n"
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def bundle_json_receipt(
+    bundle_root: Path, relative: str, label: str
+) -> tuple[dict[str, object], str]:
+    with ReceiptTarget(
+        bundle_root, relative, create_ancestors=False
+    ) as target:
+        encoded = target.read()
+        target.validate_identity()
+    if encoded is None:
+        raise BindingError(f"{label} does not exist")
+    try:
+        value = json.loads(encoded)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise BindingError(f"{label} is not valid JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise BindingError(f"{label} must be a JSON object")
+    return value, hashlib.sha256(encoded).hexdigest()
+
+
+def path_is_owned(path: str, owned_paths: list[str]) -> bool:
+    return any(path == owned or path.startswith(f"{owned}/") for owned in owned_paths)
+
+
+def worktree_object(worktree: Path, path: str) -> tuple[str, str | None]:
+    target = worktree.joinpath(*PurePosixPath(path).parts)
+    try:
+        value = os.lstat(target)
+    except FileNotFoundError:
+        return "absent", None
+    except OSError as error:
+        raise filesystem_error(f"dirty path inspection for {path}", error) from error
+    if stat.S_ISREG(value.st_mode):
+        try:
+            return "regular", hashlib.sha256(target.read_bytes()).hexdigest()
+        except OSError as error:
+            raise filesystem_error(f"dirty path read for {path}", error) from error
+    if stat.S_ISLNK(value.st_mode):
+        try:
+            link = os.readlink(target)
+        except OSError as error:
+            raise filesystem_error(f"dirty symlink read for {path}", error) from error
+        return "symlink", hashlib.sha256(os.fsencode(link)).hexdigest()
+    raise BindingError(f"dirty path has unsupported filesystem type: {path}")
+
+
+def reject_unsupported_owned_objects(
+    worktree: Path, owned_paths: list[str]
+) -> None:
+    pending = [
+        worktree.joinpath(*PurePosixPath(path).parts)
+        for path in reversed(owned_paths)
+    ]
+    while pending:
+        target = pending.pop()
+        try:
+            metadata = os.lstat(target)
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            raise filesystem_error("owned-path inspection", error) from error
+        if stat.S_ISDIR(metadata.st_mode):
+            try:
+                with os.scandir(target) as entries:
+                    pending.extend(entry.path for entry in entries)
+            except OSError as error:
+                raise filesystem_error("owned-directory inspection", error) from error
+        elif not (
+            stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)
+        ):
+            relative = Path(target).relative_to(worktree).as_posix()
+            raise BindingError(
+                f"dirty path has unsupported filesystem type: {relative}"
+            )
+
+
+def dirty_manifest(
+    worktree: Path, owned_paths: list[str]
+) -> tuple[list[str], list[dict[str, object]], str]:
+    reject_unsupported_owned_objects(worktree, owned_paths)
+    ignored = run_git_bytes(
+        worktree,
+        "ls-files",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "-z",
+        "--",
+        *(f":(literal){path}" for path in owned_paths),
+    ).stdout
+    if ignored:
+        raise BindingError("ignored-only paths cannot enter the dirty manifest")
+    raw = run_git_bytes(
+        worktree,
+        "status",
+        "--porcelain=v2",
+        "-z",
+        "--untracked-files=all",
+    ).stdout
+    tokens = raw.split(b"\0")
+    if tokens and tokens[-1] == b"":
+        tokens.pop()
+    records: list[dict[str, object]] = []
+    paths_seen: set[str] = set()
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        index += 1
+        try:
+            text = token.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise BindingError("Git status contains a non-UTF-8 path") from error
+        source_path: str | None = None
+        index_mode: str | None = None
+        index_object_id: str | None = None
+        if text.startswith("1 "):
+            fields = text.split(" ", 8)
+            if len(fields) != 9:
+                raise BindingError("malformed ordinary Git status record")
+            record_type = "ordinary"
+            xy, submodule, path = fields[1], fields[2], fields[8]
+            index_mode, index_object_id = fields[4], fields[7]
+        elif text.startswith("2 "):
+            fields = text.split(" ", 9)
+            if len(fields) != 10 or index >= len(tokens):
+                raise BindingError("malformed rename/copy Git status record")
+            record_type = "rename" if fields[8].startswith("R") else "copy"
+            if record_type == "copy" and not fields[8].startswith("C"):
+                raise BindingError("unsupported type-2 Git status record")
+            xy, submodule, path = fields[1], fields[2], fields[9]
+            index_mode, index_object_id = fields[4], fields[7]
+            try:
+                source_path = tokens[index].decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise BindingError("Git status contains a non-UTF-8 source path") from error
+            index += 1
+        elif text.startswith("? "):
+            record_type = "untracked"
+            xy, submodule, path = "??", "N...", text[2:]
+        elif text.startswith("u "):
+            raise BindingError("unmerged paths cannot enter the dirty manifest")
+        else:
+            raise BindingError("unsupported Git status record")
+        if len(xy) != 2 or len(submodule) != 4:
+            raise BindingError("malformed Git status metadata")
+        if submodule != "N...":
+            raise BindingError("dirty submodules cannot enter the dirty manifest")
+        normalized = normalized_repo_paths([path], "dirty manifest paths")[0]
+        normalized_source = (
+            normalized_repo_paths([source_path], "dirty manifest source paths")[0]
+            if source_path is not None
+            else None
+        )
+        for claimed in (normalized, normalized_source):
+            if claimed is None:
+                continue
+            if claimed in paths_seen:
+                raise BindingError("dirty manifest paths must not contain duplicates")
+            paths_seen.add(claimed)
+            if not path_is_owned(claimed, owned_paths):
+                raise BindingError(f"dirty path is outside authorized owned paths: {claimed}")
+        object_type, content_digest = worktree_object(worktree, normalized)
+        if index_mode is None or index_object_id is None:
+            index_mode_value = None
+            index_content_digest = None
+        elif index_mode == "000000" and index_object_id == "0" * 40:
+            index_mode_value = None
+            index_content_digest = None
+        else:
+            if index_mode not in {"100644", "100755", "120000"}:
+                raise BindingError("dirty index contains an unsupported object mode")
+            if SHA_RE.fullmatch(index_object_id) is None:
+                raise BindingError("dirty index contains an invalid object identity")
+            index_mode_value = index_mode
+            index_content_digest = hashlib.sha256(
+                run_git_bytes(
+                    worktree, "cat-file", "blob", index_object_id
+                ).stdout
+            ).hexdigest()
+        records.append({
+            "path": normalized,
+            "sourcePath": normalized_source,
+            "recordType": record_type,
+            "indexStatus": xy[0],
+            "worktreeStatus": xy[1],
+            "indexMode": index_mode_value,
+            "indexContentSha256": index_content_digest,
+            "objectType": object_type,
+            "contentSha256": content_digest,
+        })
+    records.sort(key=lambda record: (str(record["path"]), str(record["sourcePath"] or "")))
+    dirty_paths = sorted(paths_seen)
+    return dirty_paths, records, canonical_digest(records)
+
+
+def checked_branch(worktree: Path, branch: str) -> tuple[str, str]:
+    return branch, checked_branch_name(branch, "branch")
+
+
+def symbolic_ref(worktree: Path) -> str | None:
+    process = run_git(worktree, "symbolic-ref", "--quiet", "HEAD", check=False)
+    if process.returncode == 1:
+        return None
+    if process.returncode != 0:
+        detail = process.stderr.strip() or "unable to resolve symbolic HEAD"
+        raise BindingError(detail)
+    return process.stdout.strip()
+
+
+def current_head(worktree: Path) -> str:
+    return run_git(worktree, "rev-parse", "HEAD").stdout.strip()
+
+
+def local_branch_head(worktree: Path, branch_ref: str) -> str:
+    process = run_git(worktree, "rev-parse", "--verify", branch_ref, check=False)
+    if process.returncode != 0:
+        raise BindingError(f"local branch ref is missing: {branch_ref}")
+    return process.stdout.strip()
+
+
+def git_common_dir(worktree: Path) -> Path:
+    value = run_git(
+        worktree, "rev-parse", "--path-format=absolute", "--git-common-dir"
+    ).stdout.strip()
+    return canonical_path(value, "Git common directory")
+
+
+def require_clean(worktree: Path) -> None:
+    status = run_git(
+        worktree, "status", "--porcelain=v1", "--untracked-files=all"
+    ).stdout
+    if status:
+        raise BindingError("worktree is not clean")
+
+
+def worktree_records(worktree: Path) -> list[dict[str, str | bool]]:
+    output = run_git(worktree, "worktree", "list", "--porcelain", "-z").stdout
+    records: list[dict[str, str | bool]] = []
+    current: dict[str, str | bool] = {}
+    for token in output.split("\0"):
+        if not token:
+            if current:
+                records.append(current)
+                current = {}
+            continue
+        key, separator, value = token.partition(" ")
+        current[key] = value if separator else True
+    if current:
+        records.append(current)
+    return records
+
+
+def branch_owners(worktree: Path, branch_ref: str) -> list[dict[str, str]]:
+    owners: list[dict[str, str]] = []
+    for record in worktree_records(worktree):
+        if record.get("branch") != branch_ref:
+            continue
+        raw_path = record.get("worktree")
+        raw_head = record.get("HEAD")
+        if not isinstance(raw_path, str) or not isinstance(raw_head, str):
+            raise BindingError("git worktree porcelain omitted owner path or head")
+        owners.append({
+            "worktree": canonical_path(raw_path, "worktree owner").as_posix(),
+            "headSha": require_sha(raw_head, "worktree owner head"),
+            "branchRef": branch_ref,
+        })
+    return sorted(owners, key=lambda owner: owner["worktree"])
+
+
+def immutable_discovery(
+    arguments: argparse.Namespace,
+) -> tuple[Path, Path, str, str]:
+    worktree = canonical_path(arguments.worktree, "task worktree")
+    expected_common = canonical_path(arguments.git_common_dir, "expected Git common directory")
+    actual_common = git_common_dir(worktree)
+    if actual_common != expected_common:
+        raise BindingError(
+            f"Git common directory mismatch: expected {expected_common}, got {actual_common}"
+        )
+    branch, branch_ref = checked_branch(worktree, arguments.branch)
+    bound_sha = require_sha(arguments.bound_sha, "bound SHA")
+    if arguments.operation not in {
+        "observe-pre-pr-implementation", "adopt-review-head"
+    }:
+        observed_remote_sha = require_sha(
+            arguments.observed_remote_sha, "observed remote SHA"
+        )
+        if observed_remote_sha != bound_sha:
+            raise BindingError("observed remote SHA does not equal the bound SHA")
+    return worktree, actual_common, branch, branch_ref
+
+
+def require_base_facts(
+    arguments: argparse.Namespace,
+    discovered: tuple[Path, Path, str, str],
+) -> tuple[str, list[dict[str, str]]]:
+    worktree, _common_dir, _branch, branch_ref = discovered
+    bound_sha = arguments.bound_sha
+    head_sha = require_sha(current_head(worktree), "worktree head")
+    if head_sha != bound_sha:
+        raise BindingError("worktree head does not equal the bound SHA")
+    local_sha = require_sha(local_branch_head(worktree, branch_ref), "local branch head")
+    if local_sha != bound_sha:
+        raise BindingError("local branch head does not equal the bound SHA")
+    if arguments.operation != "observe-pre-pr-implementation":
+        require_clean(worktree)
+    return local_sha, branch_owners(worktree, branch_ref)
+
+def changed_paths(worktree: Path, left: str, right: str) -> list[str]:
+    raw = run_git_bytes(
+        worktree, "diff", "--name-only", "--no-renames", "-z", left, right
+    ).stdout
+    try:
+        output = [
+            path.decode("utf-8")
+            for path in raw.split(b"\0")
+            if path
+        ]
+    except UnicodeDecodeError as error:
+        raise BindingError(
+            "review head adoption changed paths contain non-UTF-8 bytes"
+        ) from error
+    return normalized_repo_paths(
+        output,
+        "review head adoption changed paths",
+    )
+
+
+def require_clean_merge_tree(
+    worktree: Path,
+    *,
+    prior_head: str,
+    new_base: str,
+    new_head: str,
+) -> None:
+    merge = run_git(
+        worktree,
+        "merge-tree",
+        "--write-tree",
+        prior_head,
+        new_base,
+        check=False,
+    )
+    lines = [line for line in merge.stdout.splitlines() if line.strip()]
+    if merge.returncode != 0 or len(lines) != 1:
+        raise BindingError(
+            "adopted head does not have a deterministic clean merge tree"
+        )
+    expected_tree = require_sha(lines[0], "deterministic clean merge tree")
+    actual_tree = require_sha(
+        run_git(worktree, "rev-parse", f"{new_head}^{{tree}}").stdout.strip(),
+        "adopted head tree",
+    )
+    if actual_tree != expected_tree:
+        raise BindingError(
+            "adopted head tree differs from the deterministic clean merge"
+        )
+
+
+def implementation_adoption_result(
+    arguments: argparse.Namespace,
+    *,
+    worktree: Path,
+) -> str:
+    adoption_start = require_sha(
+        arguments.adoption_start_sha,
+        "implementation adoption start SHA",
+    )
+    bound_sha = require_sha(arguments.bound_sha, "bound SHA")
+    base_sha = require_sha(arguments.base_sha, "adoption base SHA")
+    if bound_sha == adoption_start:
+        if run_git(
+            worktree, "merge-base", "--is-ancestor", base_sha, bound_sha,
+            check=False,
+        ).returncode != 0:
+            raise BindingError(
+                "adopted implementation head must descend from its required base"
+            )
+        return "ADOPTED_EXISTING_PR"
+
+    base_branch_ref = remote_branch_ref(arguments.base_ref)
+    if live_remote_branch_head(worktree, base_branch_ref) != base_sha:
+        raise BindingError(
+            "live required base head does not equal the adoption base SHA"
+        )
+    parents = run_git(
+        worktree, "rev-list", "--parents", "-n", "1", bound_sha
+    ).stdout.split()
+    if len(parents) != 3 or parents[1:] != [adoption_start, base_sha]:
+        raise BindingError(
+            "required-base adoption does not preserve the exact authorized first parent"
+        )
+    require_clean_merge_tree(
+        worktree,
+        prior_head=adoption_start,
+        new_base=base_sha,
+        new_head=bound_sha,
+    )
+    return "ADOPTED_REQUIRED_BASE_SYNC"
+
+
+def require_causal_release_receipt(
+    arguments: argparse.Namespace,
+    *,
+    bundle_root: Path,
+    common_dir: Path,
+    branch: str,
+    branch_ref: str,
+    prior_head: str,
+) -> tuple[str, str, int]:
+    release_digest = require_digest(
+        arguments.release_receipt_digest, "release receipt digest"
+    )
+    release_epoch = arguments.release_observation_epoch
+    if release_epoch is None or release_epoch < 1:
+        raise BindingError("release observation epoch must be a positive integer")
+    if arguments.release_receipt is None:
+        raise BindingError("review head adoption requires the causal release receipt")
+    with ReceiptTarget(
+        bundle_root,
+        arguments.release_receipt,
+        create_ancestors=False,
+    ) as source:
+        encoded = source.read()
+        source.validate_identity()
+        relative = PurePosixPath(*source.parts).as_posix()
+    if encoded is None or hashlib.sha256(encoded).hexdigest() != release_digest:
+        raise BindingError("review head adoption release receipt is stale")
+    try:
+        value = json.loads(encoded)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise BindingError("review head adoption release receipt is invalid") from error
+    if not isinstance(value, dict):
+        raise BindingError("review head adoption release receipt is invalid")
+    expected = {
+        "schema": SCHEMA,
+        "kind": "branch_release",
+        "workKind": arguments.work_kind,
+        "workId": arguments.work_id,
+        "workBundle": arguments.work_bundle,
+        "sliceId": arguments.slice_id,
+        "gitCommonDir": common_dir.as_posix(),
+        "branch": branch,
+        "branchRef": branch_ref,
+        "boundSha": prior_head,
+        "worktreeHeadSha": prior_head,
+        "localBranchSha": prior_head,
+        "observedRemoteHeadSha": prior_head,
+        "symbolicRef": None,
+        "branchOwners": [],
+        "clean": True,
+        "result": "RELEASED",
+        "observationEpoch": release_epoch,
+        "releaseReceiptDigest": None,
+        "releaseObservationEpoch": None,
+        "ownedPaths": [],
+        "reauthorizationDigest": None,
+    }
+    if any(value.get(name) != expected_value for name, expected_value in expected.items()):
+        raise BindingError("review head adoption release receipt is stale")
+    if (
+        value.get("role") not in {"implementation", "review"}
+        or value.get("taskType") != f"slice_{value['role']}"
+    ):
+        raise BindingError("review head adoption release receipt is stale")
+    return relative, release_digest, release_epoch
+
+
+def review_head_adoption_value(
+    arguments: argparse.Namespace,
+    *,
+    worktree: Path,
+    common_dir: Path,
+    branch: str,
+    branch_ref: str,
+    local_sha: str,
+    owners: list[dict[str, str]],
+    bundle_root: Path,
+) -> dict[str, object]:
+    if arguments.role != "review":
+        raise BindingError("review head adoption requires role=review")
+    if arguments.thread_id is None and arguments.client_thread_id is None:
+        raise BindingError("review head adoption requires one external task identity")
+    if symbolic_ref(worktree) is not None or owners:
+        raise BindingError("review head adoption requires an ownerless detached branch")
+    prior_head = require_sha(arguments.bound_sha, "prior head SHA")
+    new_head = require_sha(arguments.observed_remote_sha, "new head SHA")
+    prior_base = require_sha(arguments.base_sha, "prior base SHA")
+    new_base = require_sha(arguments.observed_base_sha, "observed base SHA")
+    if new_head == prior_head:
+        raise BindingError("review head adoption requires an advanced remote head")
+    if new_base == prior_base:
+        raise BindingError("review head adoption requires an advanced remote base")
+    if live_remote_branch_head(worktree, branch_ref) != new_head:
+        raise BindingError("live remote branch head does not equal the adopted SHA")
+    base_branch_ref = remote_branch_ref(arguments.base_ref)
+    if live_remote_branch_head(worktree, base_branch_ref) != new_base:
+        raise BindingError("live remote base head does not equal the observed base SHA")
+    if run_git(
+        worktree, "merge-base", "--is-ancestor", prior_base, new_base,
+        check=False,
+    ).returncode != 0:
+        raise BindingError("observed base rewrites the recorded base history")
+    parents = run_git(
+        worktree, "rev-list", "--parents", "-n", "1", new_head
+    ).stdout.split()
+    if len(parents) != 3 or parents[1:] != [prior_head, new_base]:
+        raise BindingError(
+            "adopted head is not the exact clean base-sync merge of prior head and base"
+        )
+    require_clean_merge_tree(
+        worktree,
+        prior_head=prior_head,
+        new_base=new_base,
+        new_head=new_head,
+    )
+    owned_paths = normalized_repo_paths(
+        arguments.owned_path, "review head adoption owned paths"
+    )
+    if not owned_paths:
+        raise BindingError("review head adoption requires owned paths")
+    final_paths = changed_paths(worktree, new_base, new_head)
+    escaped = [path for path in final_paths if not path_is_owned(path, owned_paths)]
+    if escaped:
+        raise BindingError(
+            "adopted PR paths escape authorized owned paths: " + ", ".join(escaped)
+        )
+    release_receipt, release_digest, release_epoch = require_causal_release_receipt(
+        arguments,
+        bundle_root=bundle_root,
+        common_dir=common_dir,
+        branch=branch,
+        branch_ref=branch_ref,
+        prior_head=prior_head,
+    )
+    if arguments.observation_epoch <= release_epoch:
+        raise BindingError("adoption observation epoch must follow branch release")
+    if arguments.pr < 1:
+        raise BindingError("PR must be a positive integer")
+    return {
+        "schema": "spec-work-review-head-adoption",
+        "kind": "review_head_adoption",
+        "workKind": arguments.work_kind,
+        "workId": arguments.work_id,
+        "workBundle": arguments.work_bundle,
+        "sliceId": arguments.slice_id,
+        "role": arguments.role,
+        "taskType": "slice_review",
+        "attempt": arguments.attempt,
+        "revisionEpoch": arguments.revision_epoch,
+        "launchMarker": arguments.launch_marker,
+        "threadId": arguments.thread_id,
+        "clientThreadId": arguments.client_thread_id,
+        "gitCommonDir": common_dir.as_posix(),
+        "observerWorktree": worktree.as_posix(),
+        "branch": branch,
+        "branchRef": branch_ref,
+        "baseRef": arguments.base_ref,
+        "pr": arguments.pr,
+        "priorHeadSha": prior_head,
+        "newHeadSha": new_head,
+        "priorBaseSha": prior_base,
+        "newBaseSha": new_base,
+        "worktreeHeadSha": new_head,
+        "localBranchSha": new_head,
+        "observedRemoteHeadSha": new_head,
+        "observedRemoteBaseSha": new_base,
+        "symbolicRef": None,
+        "branchOwners": [],
+        "clean": True,
+        "result": "ADOPTED_OWNERLESS_BASE_SYNC",
+        "observationEpoch": arguments.observation_epoch,
+        "releaseReceipt": release_receipt,
+        "releaseReceiptDigest": release_digest,
+        "releaseObservationEpoch": release_epoch,
+        "ownedPaths": owned_paths,
+        "changedPaths": final_paths,
+    }
+
+
+def prerequisite_observation_facts(
+    arguments: argparse.Namespace,
+    *,
+    bundle_root: Path,
+    worktree: Path,
+    base_sha: str,
+) -> dict[str, object]:
+    delivery_relative = arguments.prerequisite_delivery_receipt
+    if delivery_relative is None:
+        return {}
+    terminal, terminal_digest = bundle_json_receipt(
+        bundle_root,
+        arguments.terminal_receipt,
+        "prerequisite failure terminal receipt",
+    )
+    if terminal_digest != arguments.terminal_receipt_digest:
+        raise BindingError("prerequisite failure terminal receipt digest is stale")
+    terminal_fields = {
+        "schema", "workKind", "workId", "workBundle",
+        "implementationWorktree", "sliceId", "branch", "baseSha",
+        "boundSha", "taskType", "attempt", "revisionEpoch", "threadId",
+        "outputHeadSha", "pr", "result", "verificationVerdict",
+        "verificationDigest", "changedPathsDigest",
+        "descendantQuiescenceVerdict", "descendantQuiescenceDigest",
+        "prerequisiteFingerprint", "prerequisiteIssue", "prerequisitePr",
+        "prerequisiteHeadSha", "requiredBaseRef",
+    }
+    if set(terminal) != terminal_fields:
+        raise BindingError("prerequisite failure terminal has unexpected fields")
+    terminal_expected = {
+        "schema": "spec-work-implementation-terminal",
+        "workKind": arguments.work_kind,
+        "workId": arguments.work_id,
+        "workBundle": arguments.work_bundle,
+        "implementationWorktree": worktree.as_posix(),
+        "sliceId": arguments.slice_id,
+        "branch": arguments.branch,
+        "baseSha": base_sha,
+        "boundSha": arguments.bound_sha,
+        "taskType": "slice_implementation",
+        "attempt": arguments.attempt,
+        "revisionEpoch": arguments.revision_epoch,
+        "threadId": arguments.thread_id,
+        "outputHeadSha": arguments.bound_sha,
+        "pr": None,
+        "result": "FAILED",
+        "descendantQuiescenceVerdict": "PASS",
+    }
+    if any(
+        terminal.get(field) != expected
+        for field, expected in terminal_expected.items()
+    ):
+        raise BindingError(
+            "prerequisite failure terminal differs from the active implementation"
+        )
+    prerequisite_pr = terminal.get("prerequisitePr")
+    if isinstance(prerequisite_pr, bool) or not isinstance(prerequisite_pr, int) \
+            or prerequisite_pr < 1:
+        raise BindingError("prerequisite PR must be a positive integer")
+    prerequisite_head = require_sha(
+        terminal.get("prerequisiteHeadSha"), "prerequisite head SHA"
+    )
+    required_base_ref = terminal.get("requiredBaseRef")
+    if not isinstance(required_base_ref, str):
+        raise BindingError("prerequisite required base ref must be a string")
+    required_remote_ref = remote_branch_ref(required_base_ref)
+    prerequisite_issue = terminal.get("prerequisiteIssue")
+    if prerequisite_issue is not None and (
+        isinstance(prerequisite_issue, bool)
+        or not isinstance(prerequisite_issue, int)
+        or prerequisite_issue < 1
+    ):
+        raise BindingError("prerequisite issue must be a positive integer or null")
+    fingerprint = canonical_digest({
+        "trackingIssue": prerequisite_issue,
+        "pullRequest": prerequisite_pr,
+        "headSha": prerequisite_head,
+        "requiredBaseRef": required_base_ref,
+    })
+    if terminal.get("prerequisiteFingerprint") != fingerprint:
+        raise BindingError("prerequisite failure fingerprint is stale")
+
+    delivery, delivery_digest = bundle_json_receipt(
+        bundle_root, delivery_relative, "prerequisite delivery merge receipt"
+    )
+    delivery_fields = {
+        "schema", "workKind", "workId", "workBundle", "reviewWorktree",
+        "sliceId", "branch", "pr", "reviewedHeadSha", "result",
+        "resultMainSha", "premergeReceipt", "premergeReceiptDigest",
+        "observationEpoch",
+    }
+    if set(delivery) != delivery_fields:
+        raise BindingError("prerequisite delivery merge receipt has unexpected fields")
+    if (
+        delivery.get("schema") != "spec-work-merge-observation"
+        or delivery.get("workKind") != arguments.work_kind
+        or delivery.get("workId") != arguments.work_id
+        or delivery.get("workBundle") != arguments.work_bundle
+        or delivery.get("pr") != prerequisite_pr
+        or delivery.get("reviewedHeadSha") != prerequisite_head
+        or delivery.get("result") != "MERGED"
+    ):
+        raise BindingError(
+            "prerequisite delivery merge receipt differs from the prerequisite"
+        )
+    prerequisite_merge_sha = require_sha(
+        delivery.get("resultMainSha"), "prerequisite merge SHA"
+    )
+    premerge_relative = delivery.get("premergeReceipt")
+    if not isinstance(premerge_relative, str):
+        raise BindingError("prerequisite delivery premerge receipt path is invalid")
+    premerge, premerge_digest = bundle_json_receipt(
+        bundle_root, premerge_relative, "prerequisite delivery premerge receipt"
+    )
+    if (
+        premerge_digest != delivery.get("premergeReceiptDigest")
+        or not DIGEST_RE.fullmatch(premerge_digest)
+    ):
+        raise BindingError("prerequisite delivery premerge receipt digest is stale")
+    premerge_fields = {
+        "schema", "requestDigest", "workKind", "workId", "sliceId",
+        "operationDigest", "expectedPrNumber", "expectedHeadSha",
+        "expectedBaseRef", "expectedBaseSha", "observedPrNumber",
+        "observedHeadSha", "observedBaseSha", "result", "mergeMethod",
+        "merged", "mergeCommitSha", "mergeCommitParents", "provider",
+        "providerStatus", "providerCommandDigest",
+        "reconciliationCommandDigest", "atomicCommitIdentityEnforced",
+        "policyPreconditionDigest", "observationEpoch",
+    }
+    if set(premerge) != premerge_fields:
+        raise BindingError("prerequisite delivery premerge receipt has unexpected fields")
+    premerge_expected = {
+        "schema": "spec-work-premerge-result",
+        "workKind": arguments.work_kind,
+        "workId": arguments.work_id,
+        "expectedPrNumber": prerequisite_pr,
+        "expectedHeadSha": prerequisite_head,
+        "expectedBaseRef": required_base_ref,
+        "expectedBaseSha": base_sha,
+        "observedPrNumber": prerequisite_pr,
+        "observedHeadSha": prerequisite_head,
+        "observedBaseSha": base_sha,
+        "result": "MERGED",
+        "mergeMethod": "merge",
+        "merged": True,
+        "mergeCommitSha": prerequisite_merge_sha,
+        "mergeCommitParents": [base_sha, prerequisite_head],
+        "atomicCommitIdentityEnforced": True,
+    }
+    if any(
+        premerge.get(field) != expected
+        for field, expected in premerge_expected.items()
+    ):
+        raise BindingError(
+            "prerequisite delivery premerge receipt differs from the prerequisite"
+        )
+    request = {
+        "schema": "spec-work-premerge-operation",
+        "workKind": arguments.work_kind,
+        "workId": arguments.work_id,
+        "sliceId": premerge["sliceId"],
+        "expectedPrNumber": prerequisite_pr,
+        "expectedHeadSha": prerequisite_head,
+        "expectedBaseRef": required_base_ref,
+        "expectedBaseSha": base_sha,
+        "mergeMethod": "merge",
+        "policyPreconditionDigest": premerge["policyPreconditionDigest"],
+        "observationEpoch": premerge["observationEpoch"],
+    }
+    operation = {
+        "request": request,
+        "provider": premerge["provider"],
+        "providerCommandDigest": premerge["providerCommandDigest"],
+        "reconciliationCommandDigest": premerge["reconciliationCommandDigest"],
+    }
+    if premerge.get("requestDigest") != transport_digest(request):
+        raise BindingError("prerequisite delivery request digest is stale")
+    if premerge.get("operationDigest") != transport_digest(operation):
+        raise BindingError("prerequisite delivery operation digest is stale")
+
+    required_base_sha = live_remote_branch_head(worktree, required_remote_ref)
+    for commit, label in (
+        (required_base_sha, "live required base"),
+        (prerequisite_merge_sha, "prerequisite merge"),
+    ):
+        if run_git(worktree, "cat-file", "-e", f"{commit}^{{commit}}", check=False).returncode != 0:
+            raise BindingError(f"{label} commit is not available locally")
+    for ancestor, label in (
+        (base_sha, "prior base"),
+        (prerequisite_merge_sha, "prerequisite merge"),
+    ):
+        if run_git(
+            worktree, "merge-base", "--is-ancestor", ancestor,
+            required_base_sha, check=False,
+        ).returncode != 0:
+            raise BindingError(f"{label} is not an ancestor of the live required base")
+    return {
+        "priorBaseSha": base_sha,
+        "requiredBaseRef": required_base_ref,
+        "requiredBaseSha": required_base_sha,
+        "prerequisiteFingerprint": fingerprint,
+        "prerequisiteDeliveryReceipt": delivery_relative,
+        "prerequisiteDeliveryDigest": delivery_digest,
+        "prerequisiteMergeSha": prerequisite_merge_sha,
+    }
+
+
+def pre_pr_observation_value(
+    arguments: argparse.Namespace,
+    *,
+    worktree: Path,
+    common_dir: Path,
+    branch: str,
+    branch_ref: str,
+    local_sha: str,
+    owners: list[dict[str, str]],
+    bundle_root: Path,
+) -> dict[str, object]:
+    if arguments.role != "implementation":
+        raise BindingError("pre-PR observation requires role=implementation")
+    if any(
+        value is not None
+        for value in (
+            arguments.release_receipt_digest,
+            arguments.release_observation_epoch,
+            arguments.reauthorization_digest,
+        )
+    ):
+        raise BindingError(
+            "pre-PR observation cannot claim release or reauthorization inputs"
+        )
+    base_sha = require_sha(arguments.base_sha, "base SHA")
+    if run_git(
+        worktree, "merge-base", "--is-ancestor", base_sha, arguments.bound_sha,
+        check=False,
+    ).returncode != 0:
+        raise BindingError("base SHA is not an ancestor of the bound SHA")
+    expected_owner = [{
+        "worktree": worktree.as_posix(),
+        "headSha": arguments.bound_sha,
+        "branchRef": branch_ref,
+    }]
+    if owners != expected_owner or symbolic_ref(worktree) != branch_ref:
+        raise BindingError("implementation worktree is not the unique branch owner")
+    owned_paths = normalized_repo_paths(
+        arguments.owned_path, "pre-PR observation owned paths"
+    )
+    if not owned_paths:
+        raise BindingError("pre-PR observation requires owned paths")
+    dirty_paths, manifest, manifest_digest = dirty_manifest(worktree, owned_paths)
+    prerequisite_facts = prerequisite_observation_facts(
+        arguments,
+        bundle_root=bundle_root,
+        worktree=worktree,
+        base_sha=base_sha,
+    )
+    precursor = {
+        "workKind": arguments.work_kind,
+        "workId": arguments.work_id,
+        "workBundle": arguments.work_bundle,
+        "stateRevision": arguments.state_revision,
+        "sliceId": arguments.slice_id,
+        "taskType": "slice_implementation",
+        "attempt": arguments.attempt,
+        "revisionEpoch": arguments.revision_epoch,
+        "launchMarker": arguments.launch_marker,
+        "threadId": arguments.thread_id,
+        "clientThreadId": arguments.client_thread_id,
+        "gitCommonDir": common_dir.as_posix(),
+        "taskWorktree": worktree.as_posix(),
+        "branch": branch,
+        "branchRef": branch_ref,
+        "boundSha": arguments.bound_sha,
+        "baseSha": base_sha,
+        "terminalReceipt": arguments.terminal_receipt,
+        "terminalReceiptDigest": require_digest(
+            arguments.terminal_receipt_digest, "terminal receipt digest"
+        ),
+        "planCheckpointSha": require_sha(
+            arguments.plan_checkpoint_sha, "plan checkpoint SHA"
+        ),
+        "planDigest": require_digest(arguments.plan_digest, "plan digest"),
+        "authorizationDigest": require_digest(
+            arguments.authorization_digest, "authorization digest"
+        ),
+        "ownedPaths": owned_paths,
+        "specificationDigest": require_digest(
+            arguments.specification_digest, "specification digest"
+        ),
+        "acceptanceDigest": require_digest(
+            arguments.acceptance_digest, "acceptance digest"
+        ),
+        "observationEpoch": arguments.observation_epoch,
+        "dirtyManifestDigest": manifest_digest,
+        **prerequisite_facts,
+    }
+    return {
+        "schema": SCHEMA,
+        "kind": (
+            "pre_pr_prerequisite_observation"
+            if prerequisite_facts
+            else "pre_pr_implementation_observation"
+        ),
+        **precursor,
+        "worktreeHeadSha": arguments.bound_sha,
+        "localBranchSha": local_sha,
+        "symbolicRef": branch_ref,
+        "branchOwners": owners,
+        "clean": not manifest,
+        "result": (
+            "PREREQUISITE_SATISFIED" if prerequisite_facts else "OBSERVED"
+        ),
+        "dirtyPaths": dirty_paths,
+        "dirtyManifest": manifest,
+        "precursorAuthorityDigest": canonical_digest(precursor),
+    }
+
+
+def require_unique_review_owner(
+    worktree: Path, branch_ref: str, bound_sha: str
+) -> list[dict[str, str]]:
+    expected = [{
+        "worktree": worktree.as_posix(),
+        "headSha": bound_sha,
+        "branchRef": branch_ref,
+    }]
+    owners = branch_owners(worktree, branch_ref)
+    if owners != expected:
+        raise BindingError("review worktree is not the unique owner of the PR branch")
+    if symbolic_ref(worktree) != branch_ref:
+        raise BindingError("review worktree is not attached to the PR branch")
+    return owners
+
+
+def owner_list(owners: list[dict[str, str]]) -> str:
+    return json.dumps(owners, sort_keys=True, separators=(",", ":"))
+
+
+def receipt_value(
+    arguments: argparse.Namespace,
+    *,
+    kind: str,
+    result: str,
+    worktree: Path,
+    common_dir: Path,
+    branch: str,
+    branch_ref: str,
+    local_sha: str,
+    owners: list[dict[str, str]],
+    head_sha: str,
+    symbolic_ref_value: str | None,
+) -> dict[str, object]:
+    release_digest = arguments.release_receipt_digest
+    release_epoch = arguments.release_observation_epoch
+    owned_paths: list[str] = []
+    reauthorization_digest = arguments.reauthorization_digest
+    authorized_snapshot = snapshot_authorization(arguments)
+    if kind in {"review_attachment", "implementation_attachment"}:
+        release_digest = require_digest(release_digest, "release receipt digest")
+        if release_epoch is None or release_epoch < 1:
+            raise BindingError("release observation epoch must be a positive integer")
+    elif release_digest is not None or release_epoch is not None:
+        raise BindingError("branch release receipts cannot claim a prerequisite release")
+    if kind == "review_attachment":
+        owned_paths = normalized_repo_paths(
+            arguments.owned_path, "review attachment owned paths"
+        )
+        if not owned_paths:
+            raise BindingError("review attachment requires owned paths")
+        if arguments.revision_epoch > 1:
+            reauthorization_digest = require_digest(
+                reauthorization_digest, "review reauthorization digest"
+            )
+        elif reauthorization_digest is not None:
+            raise BindingError(
+                "initial review attachment cannot claim reauthorization"
+            )
+    elif arguments.owned_path or reauthorization_digest is not None:
+        raise BindingError(
+            "owned paths and reauthorization digest apply only to review attachments"
+        )
+    if kind != "review_attachment" and authorized_snapshot is not None:
+        raise BindingError(
+            "snapshot authorization applies only to review attachments"
+        )
+    payload = {
+        "schema": SCHEMA,
+        "kind": kind,
+        "workKind": arguments.work_kind,
+        "workId": arguments.work_id,
+        "workBundle": arguments.work_bundle,
+        "sliceId": arguments.slice_id,
+        "role": arguments.role,
+        "taskType": f"slice_{arguments.role}",
+        "attempt": arguments.attempt,
+        "revisionEpoch": arguments.revision_epoch,
+        "launchMarker": arguments.launch_marker,
+        "threadId": arguments.thread_id,
+        "clientThreadId": arguments.client_thread_id,
+        "gitCommonDir": common_dir.as_posix(),
+        "taskWorktree": worktree.as_posix(),
+        "branch": branch,
+        "branchRef": branch_ref,
+        "boundSha": arguments.bound_sha,
+        "worktreeHeadSha": head_sha,
+        "localBranchSha": local_sha,
+        "observedRemoteHeadSha": arguments.observed_remote_sha,
+        "symbolicRef": symbolic_ref_value,
+        "branchOwners": owners,
+        "clean": True,
+        "result": result,
+        "observationEpoch": arguments.observation_epoch,
+        "releaseReceiptDigest": release_digest,
+        "releaseObservationEpoch": release_epoch,
+        "ownedPaths": owned_paths,
+        "reauthorizationDigest": reauthorization_digest,
+        "snapshotAuthorization": authorized_snapshot,
+    }
+    if kind == "implementation_pr_adoption":
+        if arguments.role != "implementation":
+            raise BindingError(
+                "implementation PR adoption requires role=implementation"
+            )
+        if arguments.attempt != 1:
+            raise BindingError(
+                "implementation PR adoption requires attempt=1"
+            )
+        base_ref = arguments.base_ref
+        base_sha = require_sha(arguments.base_sha, "adoption base SHA")
+        adoption_start_sha = require_sha(
+            arguments.adoption_start_sha,
+            "implementation adoption start SHA",
+        )
+        if arguments.pr is None or arguments.pr < 1:
+            raise BindingError("adoption PR must be a positive integer")
+        remote_branch_ref(base_ref)
+        payload.update({
+            "baseRef": base_ref,
+            "baseSha": base_sha,
+            "adoptionStartSha": adoption_start_sha,
+            "pr": arguments.pr,
+        })
+    return payload
+
+
+def receipt_bytes(payload: dict[str, object]) -> bytes:
+    return (
+        json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+
+
+def restore_binding(
+    worktree: Path,
+    branch: str,
+    branch_ref: str,
+    snapshot: dict[str, object],
+) -> None:
+    prior_symbolic_ref = snapshot["symbolic_ref"]
+    current_local_sha = local_branch_head(worktree, branch_ref)
+    if current_local_sha != snapshot["local_sha"]:
+        run_git(
+            worktree,
+            "update-ref",
+            branch_ref,
+            str(snapshot["local_sha"]),
+            current_local_sha,
+        )
+    if prior_symbolic_ref == branch_ref:
+        run_git(worktree, "switch", branch)
+    elif prior_symbolic_ref is None:
+        run_git(worktree, "switch", "--detach", str(snapshot["head_sha"]))
+    else:
+        raise BindingError("cannot restore an unexpected prior symbolic ref")
+    require_clean(worktree)
+    if current_head(worktree) != snapshot["head_sha"]:
+        raise BindingError("rollback did not restore the prior worktree head")
+    if local_branch_head(worktree, branch_ref) != snapshot["local_sha"]:
+        raise BindingError("rollback did not preserve the prior local branch head")
+    if symbolic_ref(worktree) != prior_symbolic_ref:
+        raise BindingError("rollback did not restore the prior symbolic ref")
+    if branch_owners(worktree, branch_ref) != snapshot["owners"]:
+        raise BindingError("rollback did not restore prior branch ownership")
+
+
+def execute(arguments: argparse.Namespace) -> dict[str, object]:
+    discovered = immutable_discovery(arguments)
+    worktree, common_dir, branch, branch_ref = discovered
+    bundle_root = (
+        canonical_bundle_root(arguments)
+        if arguments.operation in {
+            "release", "attach-review", "attach-implementation",
+            "adopt-implementation",
+            "observe-pre-pr-implementation", "adopt-review-head",
+        }
+        else None
+    )
+    with operation_lock(common_dir, branch_ref):
+        local_sha, owners = require_base_facts(arguments, discovered)
+        current_symbolic_ref = symbolic_ref(worktree)
+        snapshot: dict[str, object] = {
+            "symbolic_ref": current_symbolic_ref,
+            "head_sha": require_sha(current_head(worktree), "prior worktree head"),
+            "local_sha": local_sha,
+            "owners": owners,
+        }
+        expected_owner = {
+            "worktree": worktree.as_posix(),
+            "headSha": arguments.bound_sha,
+            "branchRef": branch_ref,
+        }
+
+        if arguments.operation == "observe-pre-pr-implementation":
+            assert bundle_root is not None
+            payload = pre_pr_observation_value(
+                arguments,
+                worktree=worktree,
+                common_dir=common_dir,
+                branch=branch,
+                branch_ref=branch_ref,
+                local_sha=local_sha,
+                owners=owners,
+                bundle_root=bundle_root,
+            )
+        elif arguments.operation == "adopt-review-head":
+            assert bundle_root is not None
+            payload = review_head_adoption_value(
+                arguments,
+                worktree=worktree,
+                common_dir=common_dir,
+                branch=branch,
+                branch_ref=branch_ref,
+                local_sha=local_sha,
+                owners=owners,
+                bundle_root=bundle_root,
+            )
+        elif arguments.operation == "release":
+            if current_symbolic_ref == branch_ref:
+                if owners != [expected_owner]:
+                    raise BindingError("expected task worktree is not the sole branch owner")
+            elif current_symbolic_ref is None:
+                if owners:
+                    raise BindingError(
+                        "branch is owned by other worktrees: " + owner_list(owners)
+                    )
+            else:
+                raise BindingError("worktree is attached to an unexpected branch")
+            payload = receipt_value(
+                arguments, kind="branch_release", result="RELEASED",
+                worktree=worktree, common_dir=common_dir, branch=branch,
+                branch_ref=branch_ref, local_sha=local_sha, owners=[],
+                head_sha=arguments.bound_sha, symbolic_ref_value=None,
+            )
+        else:
+            adoption = arguments.operation == "adopt-implementation"
+            adoption_result = (
+                implementation_adoption_result(arguments, worktree=worktree)
+                if adoption
+                else None
+            )
+            attachment_role = (
+                "review"
+                if arguments.operation in {"attach-review", "verify-review"}
+                else "implementation"
+            )
+            if arguments.role != attachment_role:
+                raise BindingError(
+                    f"{attachment_role} attachment operations require "
+                    f"role={attachment_role}"
+                )
+            if (
+                adoption
+                and not arguments.thread_id
+                and not arguments.client_thread_id
+            ):
+                raise BindingError(
+                    "implementation PR adoption requires one external task identity"
+                )
+            if (
+                arguments.operation in {
+                    "attach-implementation", "adopt-implementation"
+                }
+                and live_remote_branch_head(worktree, branch_ref)
+                != arguments.bound_sha
+            ):
+                raise BindingError(
+                    "live remote branch head does not equal the bound SHA"
+                )
+            if adoption:
+                require_live_pull_request(
+                    worktree,
+                    pr=arguments.pr,
+                    branch=branch,
+                    base_ref=arguments.base_ref,
+                    bound_sha=arguments.bound_sha,
+                )
+                if (
+                    adoption_result == "ADOPTED_REQUIRED_BASE_SYNC"
+                    and (
+                        current_symbolic_ref != branch_ref
+                        or owners != [expected_owner]
+                    )
+                ):
+                    raise BindingError(
+                        "required-base adoption requires the exact task worktree owner"
+                    )
+            if current_symbolic_ref == branch_ref:
+                if owners != [expected_owner]:
+                    raise BindingError(
+                        f"{attachment_role} worktree is not the unique branch owner"
+                    )
+            elif current_symbolic_ref is None:
+                if owners:
+                    raise BindingError(
+                        "branch is owned by other worktrees: " + owner_list(owners)
+                    )
+                if arguments.operation == "verify-review":
+                    raise BindingError("review worktree is detached")
+            else:
+                raise BindingError("worktree is attached to an unexpected branch")
+            payload = receipt_value(
+                arguments,
+                kind=(
+                    "implementation_pr_adoption"
+                    if adoption
+                    else f"{attachment_role}_attachment"
+                ),
+                result=(
+                    adoption_result if adoption else "ATTACHED_UNIQUE"
+                ),
+                worktree=worktree, common_dir=common_dir, branch=branch,
+                branch_ref=branch_ref, local_sha=local_sha,
+                owners=[expected_owner], head_sha=arguments.bound_sha,
+                symbolic_ref_value=branch_ref,
+            )
+
+        if arguments.operation == "verify-review":
+            expected_digest = require_digest(
+                arguments.expected_receipt_digest,
+                "expected attachment receipt digest",
+            )
+            actual_digest = hashlib.sha256(receipt_bytes(payload)).hexdigest()
+            if actual_digest != expected_digest:
+                raise BindingError(
+                    "live review attachment does not match the attachment digest"
+                )
+            require_unique_review_owner(worktree, branch_ref, arguments.bound_sha)
+            return payload
+
+        assert bundle_root is not None
+        binding_mutated = False
+        with ReceiptTarget(bundle_root, arguments.receipt) as target:
+            encoded = receipt_bytes(payload)
+            existing = target.read()
+            if existing is not None and existing != encoded:
+                raise BindingError("receipt path already exists with different content")
+            if (
+                arguments.operation == "adopt-implementation"
+                and current_symbolic_ref == branch_ref
+                and existing is None
+                and payload["result"] != "ADOPTED_REQUIRED_BASE_SYNC"
+            ):
+                raise BindingError(
+                    "implementation PR adoption requires a detached, "
+                    "ownerless branch"
+                )
+            target.validate_identity()
+            try:
+                if arguments.operation == "observe-pre-pr-implementation":
+                    if current_head(worktree) != arguments.bound_sha:
+                        raise BindingError(
+                            "pre-PR observation changed the worktree head"
+                        )
+                    if local_branch_head(worktree, branch_ref) != arguments.bound_sha:
+                        raise BindingError(
+                            "pre-PR observation changed the local branch head"
+                        )
+                    if symbolic_ref(worktree) != branch_ref:
+                        raise BindingError(
+                            "pre-PR observation changed branch ownership"
+                        )
+                elif arguments.operation == "release":
+                    if current_symbolic_ref == branch_ref:
+                        binding_mutated = True
+                        run_git(worktree, "switch", "--detach", arguments.bound_sha)
+                    require_clean(worktree)
+                    if current_head(worktree) != arguments.bound_sha:
+                        raise BindingError("branch release changed the worktree head")
+                    if branch_owners(worktree, branch_ref):
+                        raise BindingError("branch remains owned after release")
+                    if symbolic_ref(worktree) is not None:
+                        raise BindingError("worktree remains attached after release")
+                elif arguments.operation == "adopt-review-head":
+                    binding_mutated = True
+                    run_git(
+                        worktree,
+                        "update-ref",
+                        branch_ref,
+                        arguments.observed_remote_sha,
+                        arguments.bound_sha,
+                    )
+                    run_git(worktree, "switch", "--detach", arguments.observed_remote_sha)
+                    require_clean(worktree)
+                    if current_head(worktree) != arguments.observed_remote_sha:
+                        raise BindingError(
+                            "review head adoption did not advance the detached worktree"
+                        )
+                    if local_branch_head(worktree, branch_ref) != arguments.observed_remote_sha:
+                        raise BindingError(
+                            "review head adoption changed the local branch head"
+                        )
+                    if branch_owners(worktree, branch_ref):
+                        raise BindingError(
+                            "review head adoption unexpectedly acquired branch ownership"
+                        )
+                    if symbolic_ref(worktree) is not None:
+                        raise BindingError(
+                            "review head adoption attached the observer worktree"
+                        )
+                else:
+                    if current_symbolic_ref is None:
+                        binding_mutated = True
+                        run_git(worktree, "switch", branch)
+                    require_clean(worktree)
+                    if current_head(worktree) != arguments.bound_sha:
+                        raise BindingError(
+                            "attached worktree head does not equal the bound SHA"
+                        )
+                    if local_branch_head(worktree, branch_ref) != arguments.bound_sha:
+                        raise BindingError("local branch head does not equal the bound SHA")
+                    require_unique_review_owner(
+                        worktree, branch_ref, arguments.bound_sha
+                    )
+                target.validate_identity()
+                target.publish(encoded)
+                target.validate_identity()
+            except BindingError as primary_error:
+                rollback_errors: list[str] = []
+                try:
+                    target.remove_publication()
+                except BindingError as error:
+                    rollback_errors.append(str(error))
+                if binding_mutated:
+                    try:
+                        restore_binding(worktree, branch, branch_ref, snapshot)
+                    except BindingError as error:
+                        rollback_errors.append(str(error))
+                if rollback_errors:
+                    raise BindingError(
+                        f"{primary_error}; binding rollback failed: "
+                        + "; ".join(rollback_errors)
+                    ) from primary_error
+                raise
+        return payload
+
+
+def parser() -> argparse.ArgumentParser:
+    root = BindingArgumentParser(
+        description=(
+            "Release, adopt, attach, or verify exact-head branch ownership for "
+            "spec-work orchestrator tasks."
+        )
+    )
+    subparsers = root.add_subparsers(dest="operation", required=True)
+    for operation in (
+        "release", "attach-review", "attach-implementation",
+        "adopt-implementation", "verify-review",
+        "observe-pre-pr-implementation", "adopt-review-head",
+    ):
+        command = subparsers.add_parser(operation)
+        command.add_argument(
+            "--work-kind", required=True, choices=("feature", "bug_fix")
+        )
+        command.add_argument("--work-id", required=True)
+        command.add_argument("--work-bundle", required=True)
+        command.add_argument("--slice-id", required=True)
+        command.add_argument(
+            "--role", required=True, choices=("implementation", "review")
+        )
+        command.add_argument("--attempt", required=True, type=int)
+        command.add_argument("--revision-epoch", required=True, type=int)
+        command.add_argument("--launch-marker", required=True)
+        command.add_argument("--thread-id")
+        command.add_argument("--client-thread-id")
+        command.add_argument("--worktree", required=True)
+        command.add_argument("--git-common-dir", required=True)
+        command.add_argument("--branch", required=True)
+        command.add_argument("--bound-sha", required=True)
+        command.add_argument(
+            "--observed-remote-sha",
+            required=operation != "observe-pre-pr-implementation",
+        )
+        command.add_argument("--observation-epoch", required=True, type=int)
+        if operation in {
+            "release", "attach-review", "attach-implementation",
+            "adopt-implementation",
+            "observe-pre-pr-implementation", "adopt-review-head",
+        }:
+            command.add_argument("--bundle-root", required=True)
+            command.add_argument("--receipt", required=True)
+        command.add_argument("--release-receipt-digest")
+        command.add_argument("--release-receipt")
+        command.add_argument("--release-observation-epoch", type=int)
+        command.add_argument("--owned-path", action="append")
+        command.add_argument("--reauthorization-digest")
+        command.add_argument("--snapshot-slice-id")
+        command.add_argument("--snapshot-commit")
+        command.add_argument("--snapshot-path")
+        command.add_argument(
+            "--snapshot-classification", choices=sorted(SNAPSHOT_CLASSIFICATIONS)
+        )
+        command.add_argument("--snapshot-manifest-digest")
+        if operation == "verify-review":
+            command.add_argument("--expected-receipt-digest", required=True)
+        if operation == "observe-pre-pr-implementation":
+            command.add_argument("--base-sha", required=True)
+            command.add_argument("--state-revision", required=True, type=int)
+            command.add_argument("--terminal-receipt", required=True)
+            command.add_argument("--terminal-receipt-digest", required=True)
+            command.add_argument("--plan-checkpoint-sha", required=True)
+            command.add_argument("--plan-digest", required=True)
+            command.add_argument("--authorization-digest", required=True)
+            command.add_argument("--specification-digest", required=True)
+            command.add_argument("--acceptance-digest", required=True)
+            command.add_argument("--prerequisite-delivery-receipt")
+        if operation in {"adopt-implementation", "adopt-review-head"}:
+            command.add_argument("--base-ref", required=True)
+            command.add_argument("--base-sha", required=True)
+            command.add_argument("--pr", required=True, type=int)
+        if operation == "adopt-implementation":
+            command.add_argument("--adoption-start-sha", required=True)
+        if operation == "adopt-review-head":
+            command.add_argument("--observed-base-sha", required=True)
+    return root
+
+
+def main() -> int:
+    argument_parser = parser()
+    arguments = argument_parser.parse_args()
+    if arguments.attempt < 1:
+        argument_parser.error("--attempt must be positive")
+    if arguments.revision_epoch < 1:
+        argument_parser.error("--revision-epoch must be positive")
+    if arguments.observation_epoch < 1:
+        argument_parser.error("--observation-epoch must be positive")
+    if (
+        arguments.operation == "observe-pre-pr-implementation"
+        and arguments.state_revision < 1
+    ):
+        argument_parser.error("--state-revision must be positive")
+    if arguments.operation == "release" and arguments.role not in {
+        "implementation", "review"
+    }:
+        argument_parser.error("release requires an orchestrated task role")
+    try:
+        payload = execute(arguments)
+    except BindingError as error:
+        print(
+            json.dumps({
+                "schema": "spec-work-task-git-binding-error",
+                "operation": arguments.operation,
+                "result": "ERROR",
+                "error": str(error),
+            }, sort_keys=True),
+            file=sys.stderr,
+        )
+        return 2
+    print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

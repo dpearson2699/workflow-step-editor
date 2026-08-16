@@ -1,0 +1,59 @@
+{
+  "skill": "project-debugging",
+  "version": 1,
+  "content_evals": [
+    {
+      "id": "diagnosis-only",
+      "prompt": "The API sometimes returns stale records. Diagnose it but do not fix it.",
+      "expected": [
+        "classifies diagnose_only and keeps product/test code read-only",
+        "uses an executable or live-service trace to identify the owning seam",
+        "does not create a bundle, planner pass, PR, or publication flow"
+      ],
+      "forbidden": ["edits production code", "initializes spec-work state"]
+    },
+    {
+      "id": "fast-fix",
+      "prompt": "Fix the deterministic parser defect. One owning seam and the regression invariant are already confirmed; it is one cohesive PR.",
+      "expected": [
+        "runs the deterministic bug-fix classifier",
+        "uses the fast lane only if every predicate passes",
+        "publishes a compact bug record and uses an independent exact-head review owner"
+      ],
+      "forbidden": ["starts ChatGPT Pro planning for a passing fast fix"]
+    },
+    {
+      "id": "full-fix",
+      "prompt": "Repair this data-loss bug; it spans two repositories and requires an unresolved migration decision.",
+      "expected": [
+        "confirms evidence and completes the regression abstraction before edits",
+        "selects fix_full because fast predicates fail",
+        "initializes a bug_fix bundle and hands control to the shared core"
+      ],
+      "forbidden": ["improvises a hybrid fast/full workflow"]
+    },
+    {
+      "id": "issue-during-work",
+      "prompt": "While implementing a feature, you find a reachable pre-existing defect outside the slice.",
+      "expected": [
+        "uses the repository fingerprint policy",
+        "fetches every exact candidate authoritatively and reuses only a unique verified open owner",
+        "creates one follow-up when no exact open owner exists and leaves it outside branch scope"
+      ],
+      "forbidden": ["suppresses the issue because a title looks similar", "leaves the defect only in chat"]
+    }
+  ],
+  "trigger_evals": [
+    {"id":"train-1","split":"train","should_trigger":true,"prompt":"Diagnose why saved records disappear after restart."},
+    {"id":"train-2","split":"train","should_trigger":true,"prompt":"Fix this intermittent deadlock and open a PR."},
+    {"id":"train-3","split":"train","should_trigger":true,"prompt":"The dashboard shows the wrong value from the API."},
+    {"id":"train-4","split":"train","should_trigger":true,"prompt":"Investigate this memory growth without changing code."},
+    {"id":"train-5","split":"train","should_trigger":false,"prompt":"Add CSV export."},
+    {"id":"train-6","split":"train","should_trigger":false,"prompt":"Review pull request 42."},
+    {"id":"train-7","split":"train","should_trigger":false,"prompt":"Rename this local variable."},
+    {"id":"validation-1","split":"validation","should_trigger":true,"prompt":"Why does navigation sometimes return to the wrong page?"},
+    {"id":"validation-2","split":"validation","should_trigger":true,"prompt":"Repair this concurrency bug and ship it."},
+    {"id":"validation-3","split":"validation","should_trigger":false,"prompt":"Plan a new authentication feature."},
+    {"id":"validation-4","split":"validation","should_trigger":false,"prompt":"Run the existing unit tests."}
+  ]
+}
