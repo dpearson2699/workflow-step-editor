@@ -16,10 +16,17 @@ export default function VariantD(p: VariantProps & {
 
   return (
     <div className="vb-root">
+      {p.recording && (
+        <div className="rec-overlay">
+          <span className="rec-dot">●</span>
+          <span>Recording — {p.steps.length} steps captured</span>
+          <button className="stop-big" onClick={p.toggleRecording}>■ Stop Recording</button>
+        </div>
+      )}
       <aside className="vb-side">
         <div className="vb-side-head">
           <div>
-            {p.onBack && <button className="vb-back" onClick={p.onBack}>‹ Workflows</button>}
+            {p.onBack && !p.recording && <button className="vb-back" onClick={p.onBack}>‹ Workflows</button>}
             <div className="vb-brand">
               {p.recording && <span className="rec-dot">●</span>} {p.wfName ?? 'Approve invoice'}
               {p.draft && <span className="draft-badge">draft</span>}
@@ -30,13 +37,13 @@ export default function VariantD(p: VariantProps & {
               <button className="discard-btn" onClick={p.onDiscardDraft}>Discard</button>
               <button className="save-btn" onClick={p.onSaveDraft}>Save…</button>
             </div>
-          ) : (
+          ) : p.recording ? null : (
             <button
-              className={p.recording ? 'rec-btn on' : 'rec-btn'}
+              className="rec-btn"
               disabled={!p.perms.input || !p.perms.accessibility || !p.perms.screen}
               onClick={p.toggleRecording}
             >
-              {p.recording ? '■ Stop' : '● Record'}
+              ● Record
             </button>
           )}
         </div>
