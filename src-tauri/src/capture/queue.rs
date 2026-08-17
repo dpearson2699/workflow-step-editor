@@ -62,8 +62,13 @@ pub struct QueueDepth {
 
 impl QueueDepth {
     fn on_enqueue(&self) {
-        let depth = self.current.fetch_add(1, Ordering::SeqCst) + 1;
+        let depth = self.current.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
         self.max.fetch_max(depth, Ordering::SeqCst);
+    }
+
+    /// Reverses `on_enqueue` for a job the channel rejected.
+    fn on_rejected(&self) {
+        self.current.fetch_sub(1, Ordering::SeqCst);
     }
 
     fn on_dequeue(&self) {
@@ -93,13 +98,23 @@ pub struct JobSender {
 impl JobSender {
     /// Nonblocking enqueue.
     pub fn enqueue(&self, job: CaptureJob) -> Result<(), EnqueueError> {
+        // Account the depth before publishing the job: the worker can
+        // receive and decrement immediately after `try_send` returns,
+        // so the increment must already be visible or the counter
+        // underflows. A rejected job rolls its increment back (the
+        // maximum may transiently include one rejected job at the
+        // saturation boundary, which the fail-stop makes moot).
+        self.depth.on_enqueue();
         match self.tx.try_send(job) {
-            Ok(()) => {
-                self.depth.on_enqueue();
-                Ok(())
+            Ok(()) => Ok(()),
+            Err(TrySendError::Full(_)) => {
+                self.depth.on_rejected();
+                Err(EnqueueError::Saturated)
             }
-            Err(TrySendError::Full(_)) => Err(EnqueueError::Saturated),
-            Err(TrySendError::Disconnected(_)) => Err(EnqueueError::Closed),
+            Err(TrySendError::Disconnected(_)) => {
+                self.depth.on_rejected();
+                Err(EnqueueError::Closed)
+            }
         }
     }
 

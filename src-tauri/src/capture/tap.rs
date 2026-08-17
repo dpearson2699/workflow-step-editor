@@ -196,7 +196,13 @@ pub fn start_event_tap(
                 ));
                 return;
             }
-            let _ = ready_tx.send(Ok((SendPort(port), SendRunLoop(runloop))));
+            if ready_tx.send(Ok((SendPort(port), SendRunLoop(runloop)))).is_err() {
+                // The caller timed out and abandoned this tap: return
+                // instead of entering the run loop, so the tap (and the
+                // enqueue closure's job sender) cannot outlive the
+                // failed start and wedge the capture worker.
+                return;
+            }
             CFRunLoop::run_current();
             // The tap (and its port retain) drops here, on its thread.
         })

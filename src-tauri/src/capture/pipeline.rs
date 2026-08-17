@@ -160,7 +160,12 @@ impl CapturePipeline for MacosCapturePipeline {
         let Some(mut running) = self.running.take() else {
             return;
         };
-        // Stop input and frame sources first: no new jobs are enqueued.
+        // Stop the health monitor first: its probe reads the tap's mach
+        // port, which `tap.stop()` invalidates and releases, so the
+        // probe must quiesce before the tap thread joins (see the
+        // `TapHealthProbe` safety contract).
+        running.health.stop();
+        // Stop input and frame sources: no new jobs are enqueued.
         if let Some(tap) = running.tap.take() {
             tap.stop();
         }
@@ -173,7 +178,6 @@ impl CapturePipeline for MacosCapturePipeline {
         // Stopping the tap dropped the only job sender; the worker
         // drains the queue and exits. Join it so every accepted packet
         // is emitted before the guard closes.
-        running.health.stop();
         if let Some(worker) = running.worker.take() {
             let _ = worker.join();
         }
