@@ -2,7 +2,10 @@
 
 ## Result
 
-- Status: pr_open
+- Status: merged (merge commit
+  `f3a587659533ad366c6c8cedd10f4d08a8ad8752` on `main`; final head
+  `3b0d0b0` after review remediation; REST merge with
+  `--match-head-commit` during a GitHub GraphQL outage)
 - Branch, base, head, and PR: `feat/pr-01-scaffold-permissions` from
   `origin/main` base `30ef40f33bfc7bd1c46f3968d4b117da4a498720`, synchronized
   with observed main `919b77da67a50b6cd194f106ccff8225fa840fe8`, head
@@ -72,7 +75,13 @@
 
 ## Review and Deviations
 
-- Review pending; exact-head review task not yet attached.
+- Exact-head review: CLEAN at final head `3b0d0b0c` on final base
+  `3aa43fe4` (gitnexus-pr-review through the Claude review task; four
+  lease rotations; typed `spec-work-review-clean` receipt in
+  `evidence/review-clean.json`).
+- Delivery: the user waived the advanced-main freshness re-review round
+  (`evidence/merge-freshness-waiver.md`); merged as
+  `f3a587659533ad366c6c8cedd10f4d08a8ad8752`.
 - No owned-path or plan deviations.
 
 ## Follow-ups
