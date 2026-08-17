@@ -3,25 +3,25 @@
 
 - Work kind: `feature`
 - Work ID: `2026-08-17-capture-pipeline-and-backend-foundation`
-- Phase: `plan`
-- Revision: `8`
-- Observed origin/main: `not recorded`
+- Phase: `delivery`
+- Revision: `15`
+- Observed origin/main: `30ef40f33bfc7bd1c46f3968d4b117da4a498720`
 - Task roster: `1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e`
 - Active slices: `none`
-- Last update: `2026-08-17T14:53:11Z`
+- Last update: `2026-08-17T16:02:02Z`
 
 ## ChatGPT Pro Planning Evidence
 
-- Current specification digest: `c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32`
-- Current source commit: `902c158a146b1a4c8b507804d17fd6f026cc75ff`
+- Current specification digest: `b7ee3357e73086c538e8503546af7fc266034353111740f046814bbe0041a3c3`
+- Current source commit: `30ef40f33bfc7bd1c46f3968d4b117da4a498720`
 - Active response: `fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08`
 - Generated for: `96e8bf0cba5a9551af77fdbf4dfd562e3e1f90728afc9974cb61e0f7477e3e50`
-- Accepted for: `c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32`
+- Accepted for: `b7ee3357e73086c538e8503546af7fc266034353111740f046814bbe0041a3c3`
 - Disposition: `clean`
 - Latest applicability: `prior_evidence_applicable`
 - Fresh primary required: `no`
 - Explicit Pro primary waiver: `not recorded`
-- Blind completeness: `required (required_multi_slice_reconciliation)`
+- Blind completeness: `recorded (required_multi_slice_reconciliation)`
 
 ## Slices
 

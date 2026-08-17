@@ -66,24 +66,28 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": null,
-  "observation_epoch_high_water": 1,
-  "observed_main_sha": null,
+  "observation_epoch_high_water": 3,
+  "observed_main_sha": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
   "parallel_assessments": [],
-  "phase": "plan",
+  "phase": "delivery",
   "planning": {
     "active_response_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
-    "blind_completeness": null,
+    "blind_completeness": {
+      "epoch": 3,
+      "receipt": "discovery/blind-completeness-0001.json",
+      "receipt_digest": "7b0ee4d92b269617932f5fe42a8d018c6565f8e73b67221eaa24ee24655c1338"
+    },
     "blind_requirement": {
-      "plan_digest": "732c7ab3654292610dfb4654766f0db1f0d3ea09b068d6da7c5a2a6b7ea0dec6",
+      "plan_digest": "860ca87269d59a3af4f6dd34e4dae61af3c30f6e6ba353ad3f39929c8e991608",
       "requirement": "required_multi_slice_reconciliation"
     },
-    "current_plan_digest": "732c7ab3654292610dfb4654766f0db1f0d3ea09b068d6da7c5a2a6b7ea0dec6",
-    "current_source_commit": "902c158a146b1a4c8b507804d17fd6f026cc75ff",
-    "current_specification_digest": "c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32",
+    "current_plan_digest": "860ca87269d59a3af4f6dd34e4dae61af3c30f6e6ba353ad3f39929c8e991608",
+    "current_source_commit": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
+    "current_specification_digest": "b7ee3357e73086c538e8503546af7fc266034353111740f046814bbe0041a3c3",
     "evidence": [
       {
-        "accepted_for_digest": "c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32",
-        "accepted_source_commit": "902c158a146b1a4c8b507804d17fd6f026cc75ff",
+        "accepted_for_digest": "b7ee3357e73086c538e8503546af7fc266034353111740f046814bbe0041a3c3",
+        "accepted_source_commit": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
         "annotations": [],
         "answer_artifact": "discovery/pro-lifecycle-evidence/fc3c1b33d7245cf3a2173c6b5437e3a5ec7375982d56f7ada750646c741aff32.md",
         "applicability": [
@@ -114,6 +118,30 @@
             "to_digest": "c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32",
             "to_source_commit": "902c158a146b1a4c8b507804d17fd6f026cc75ff",
             "validation_result": "prior_evidence_applicable"
+          },
+          {
+            "changed_paths": [
+              "FEATURE.md"
+            ],
+            "classification": "non_material",
+            "correction_receipt": null,
+            "correction_receipt_digest": null,
+            "epoch": 2,
+            "evidence_anchors": [
+              "FEATURE.md",
+              "pr/PR-03/PLAN.md"
+            ],
+            "from_digest": "c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32",
+            "from_source_commit": "902c158a146b1a4c8b507804d17fd6f026cc75ff",
+            "implementation_slices_changed": false,
+            "original_receipt": null,
+            "original_receipt_digest": null,
+            "receipt": "discovery/pro-applicability-0002.json",
+            "receipt_digest": "e7df56902091ada890221bd6c9de202f883f09e6c01b28fda6ee40fa3d356c91",
+            "recommendations_changed": false,
+            "to_digest": "b7ee3357e73086c538e8503546af7fc266034353111740f046814bbe0041a3c3",
+            "to_source_commit": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
+            "validation_result": "prior_evidence_applicable"
           }
         ],
         "contract_disposition": "clean",
@@ -131,13 +159,13 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 8,
+  "revision": 15,
   "schema": "spec-workflow-state",
   "slices": [
     {
-      "base_ref": null,
-      "base_sha": null,
-      "branch": null,
+      "base_ref": "origin/main",
+      "base_sha": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
+      "branch": "feat/pr-01-scaffold-permissions",
       "depends_on": [],
       "execution_mode": "serial",
       "head_sha": null,
@@ -472,7 +500,7 @@
       ],
       "plan": "pr/PR-03/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "cbb04243b46977f6d173f1477e1014a351ed96ac68f3937475e7fc2bf23e871c",
+      "plan_digest": "bbc1ef452f55b8a553925b35ac4e8b87885b1ebe79cda3cd2c16b05b8d67c5e5",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -616,7 +644,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T14:53:11Z",
+  "updated_at": "2026-08-17T16:02:02Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }
