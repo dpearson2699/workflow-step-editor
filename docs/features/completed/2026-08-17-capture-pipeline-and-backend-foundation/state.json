@@ -9,55 +9,71 @@
       "evidence_digests": {
         "review/proven-gate-run.md": "ff1f9164eb8932629da0ddb36fb81ad0d4b9e171f0200faef7b9619eac3eacf5"
       },
-      "locked": false,
+      "locked": true,
       "producer_head_sha": null,
       "producer_slice": null,
       "scope": "feature",
       "status": "passed"
     },
     "AC-002": {
-      "assignment_digest": null,
+      "assignment_digest": "debe5c8fe10934c38d22cbb6b25e755ef1cd2325f7ab065e9609940f70cb76ab",
       "criterion_digest": "c307222ae286dc4c8bc9048eaf45f2aed7a98e9c69b9645b735ac87f194e15fd",
-      "evidence": [],
-      "evidence_digests": {},
-      "locked": false,
-      "producer_head_sha": null,
-      "producer_slice": null,
-      "scope": null,
-      "status": "pending"
+      "evidence": [
+        "pr/PR-02/evidence/implementation-terminal-report.md"
+      ],
+      "evidence_digests": {
+        "pr/PR-02/evidence/implementation-terminal-report.md": "ff23483677f0e7e9485bf98c030f97eaacc6577bbc783e0adf58a1948d731a2d"
+      },
+      "locked": true,
+      "producer_head_sha": "c70e985658aede2b3025ce8b692e5fa51db1acef",
+      "producer_slice": "PR-02",
+      "scope": "slice",
+      "status": "passed"
     },
     "AC-003": {
-      "assignment_digest": null,
+      "assignment_digest": "670d98cb1577a1140749354464ab159890491ddeb8762e6b1e508a9d47fe42e9",
       "criterion_digest": "afd02ec389d3c3e400c92b5f525d39642373f2198a591b75a3e71b0a1777b5ed",
-      "evidence": [],
-      "evidence_digests": {},
-      "locked": false,
-      "producer_head_sha": null,
-      "producer_slice": null,
-      "scope": null,
-      "status": "pending"
+      "evidence": [
+        "pr/PR-02/evidence/implementation-terminal-report.md"
+      ],
+      "evidence_digests": {
+        "pr/PR-02/evidence/implementation-terminal-report.md": "ff23483677f0e7e9485bf98c030f97eaacc6577bbc783e0adf58a1948d731a2d"
+      },
+      "locked": true,
+      "producer_head_sha": "c70e985658aede2b3025ce8b692e5fa51db1acef",
+      "producer_slice": "PR-02",
+      "scope": "slice",
+      "status": "passed"
     },
     "AC-004": {
-      "assignment_digest": null,
+      "assignment_digest": "01210c445fc8d9aa28d5c3f2d40fdbf78121f276ef0c9a04cb308751de36ff17",
       "criterion_digest": "19df9339c40d6e7c063c5811b78395354f2618353388e7de11230162eddbd124",
-      "evidence": [],
-      "evidence_digests": {},
-      "locked": false,
-      "producer_head_sha": null,
-      "producer_slice": null,
-      "scope": null,
-      "status": "pending"
+      "evidence": [
+        "pr/PR-02/evidence/implementation-terminal-report.md"
+      ],
+      "evidence_digests": {
+        "pr/PR-02/evidence/implementation-terminal-report.md": "ff23483677f0e7e9485bf98c030f97eaacc6577bbc783e0adf58a1948d731a2d"
+      },
+      "locked": true,
+      "producer_head_sha": "c70e985658aede2b3025ce8b692e5fa51db1acef",
+      "producer_slice": "PR-02",
+      "scope": "slice",
+      "status": "passed"
     },
     "AC-005": {
-      "assignment_digest": null,
+      "assignment_digest": "15c2e2af3b887ddf342e4f9d07dadc9d31a572e28db04ab3b5067387929d9a3a",
       "criterion_digest": "9099ac0f109858ebaadcbab42c4c97fdce62bd9824f8141e6d45be56e588a186",
-      "evidence": [],
-      "evidence_digests": {},
-      "locked": false,
-      "producer_head_sha": null,
-      "producer_slice": null,
-      "scope": null,
-      "status": "pending"
+      "evidence": [
+        "pr/PR-02/evidence/implementation-terminal-report.md"
+      ],
+      "evidence_digests": {
+        "pr/PR-02/evidence/implementation-terminal-report.md": "ff23483677f0e7e9485bf98c030f97eaacc6577bbc783e0adf58a1948d731a2d"
+      },
+      "locked": true,
+      "producer_head_sha": "c70e985658aede2b3025ce8b692e5fa51db1acef",
+      "producer_slice": "PR-02",
+      "scope": "slice",
+      "status": "passed"
     }
   },
   "artifacts": {
@@ -69,11 +85,11 @@
   },
   "blockers": [],
   "completion_binding": null,
-  "completion_specification_digest": null,
+  "completion_specification_digest": "b7ee3357e73086c538e8503546af7fc266034353111740f046814bbe0041a3c3",
   "observation_epoch_high_water": 21,
   "observed_main_sha": "7ba62c7cfba6e2e91dc014e9f415fb5557005d75",
   "parallel_assessments": [],
-  "phase": "delivery",
+  "phase": "complete",
   "planning": {
     "active_response_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
     "blind_completeness": null,
@@ -159,7 +175,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 62,
+  "revision": 67,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -644,7 +660,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T21:06:44Z",
+  "updated_at": "2026-08-17T21:11:31Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }
