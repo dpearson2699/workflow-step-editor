@@ -18,6 +18,13 @@ not authorize an agent to send email, submit the project, contact people, or
 publish external artifacts. Perform those actions only when the user requests
 them.
 
+## Memory vault
+
+This project's MuninnDB vault is `workflow-step-editor`. Use it for all durable
+project-specific memory. Branches and Git worktrees of this repository inherit
+the same vault and never get their own. Use `default` only for cross-project
+developer knowledge.
+
 ## Project context discovery
 
 The project goal declares product requirements but does not define a project
