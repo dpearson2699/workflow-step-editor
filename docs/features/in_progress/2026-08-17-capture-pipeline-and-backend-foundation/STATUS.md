@@ -4,11 +4,11 @@
 - Work kind: `feature`
 - Work ID: `2026-08-17-capture-pipeline-and-backend-foundation`
 - Phase: `delivery`
-- Revision: `61`
+- Revision: `62`
 - Observed origin/main: `7ba62c7cfba6e2e91dc014e9f415fb5557005d75`
 - Task roster: `1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e`
 - Active slices: `PR-03`
-- Last update: `2026-08-17T20:31:12Z`
+- Last update: `2026-08-17T21:06:44Z`
 
 ## ChatGPT Pro Planning Evidence
 
@@ -34,10 +34,10 @@
 
 ## Acceptance
 
-- Passed: 0
+- Passed: 1
 - Failed: 0
 - Waived: 0
-- Pending: 5
+- Pending: 4
 
 ## Tasks
 

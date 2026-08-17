@@ -1,15 +1,19 @@
 {
   "acceptance": {
     "AC-001": {
-      "assignment_digest": null,
+      "assignment_digest": "0a22bc38b764c57cee7d4997520a9290a7f626a25e862dcbf397489d0149788f",
       "criterion_digest": "6d80d9e4c44adf7bf823c7c5cd5bf229616e1cb458ae9741d1bb3bcecd789a42",
-      "evidence": [],
-      "evidence_digests": {},
+      "evidence": [
+        "review/proven-gate-run.md"
+      ],
+      "evidence_digests": {
+        "review/proven-gate-run.md": "ff1f9164eb8932629da0ddb36fb81ad0d4b9e171f0200faef7b9619eac3eacf5"
+      },
       "locked": false,
       "producer_head_sha": null,
       "producer_slice": null,
-      "scope": null,
-      "status": "pending"
+      "scope": "feature",
+      "status": "passed"
     },
     "AC-002": {
       "assignment_digest": null,
@@ -155,7 +159,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 61,
+  "revision": 62,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -640,7 +644,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T20:31:12Z",
+  "updated_at": "2026-08-17T21:06:44Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }
