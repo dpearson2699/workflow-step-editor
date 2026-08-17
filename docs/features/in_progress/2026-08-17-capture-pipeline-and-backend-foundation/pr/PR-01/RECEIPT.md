@@ -2,7 +2,10 @@
 
 ## Result
 
-- Status: pr_open
+- Status: merged (merge commit
+  `f3a587659533ad366c6c8cedd10f4d08a8ad8752` on `main`; final head
+  `3b0d0b0` after review remediation; REST merge with
+  `--match-head-commit` during a GitHub GraphQL outage)
 - Branch, base, head, and PR: `feat/pr-01-scaffold-permissions` from
   `origin/main` base `30ef40f33bfc7bd1c46f3968d4b117da4a498720`, synchronized
   with observed main `919b77da67a50b6cd194f106ccff8225fa840fe8`, head
@@ -72,9 +75,23 @@
 
 ## Review and Deviations
 
-- Review pending; exact-head review task not yet attached.
+- Exact-head review: CLEAN at final head `3b0d0b0c` on final base
+  `3aa43fe4` (gitnexus-pr-review through the Claude review task; four
+  lease rotations; typed `spec-work-review-clean` receipt in
+  `evidence/review-clean.json`).
+- Delivery: the user waived the advanced-main freshness re-review round
+  (`evidence/merge-freshness-waiver.md`); merged as
+  `f3a587659533ad366c6c8cedd10f4d08a8ad8752`.
 - No owned-path or plan deviations.
 
 ## Follow-ups
 
-- none
+- https://github.com/dpearson2699/workflow-step-editor/issues/18 |
+  fingerprint 534966ce73c17dcf7d9dec3de1fbc3c2e2345995c92f4a2fe6a077877e747662 |
+  type harness | verified state CLOSED | fingerprint comparison exact |
+  severity P2 | labels verified | disposition closed-complete |
+  labels reconciled yes | source root gh refetch after closure (marker
+  search unique; authoritative view shows CLOSED with harness+P2).
+  Harness defect found operationally during review startup; fixed straight
+  to main (1f4891a guard, a860c29 audit reduction) per the user's
+  time-crunch direction.

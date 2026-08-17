@@ -1,0 +1,16 @@
+{
+  "schema": "spec-work-blind-completeness",
+  "workKind": "feature",
+  "workId": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "workBundle": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "planDigest": "860ca87269d59a3af4f6dd34e4dae61af3c30f6e6ba353ad3f39929c8e991608",
+  "approvedSourcePackDigest": "1edcf6990db997f1dea4cf03450406901b4bf03f4327e658e8a4b5de3472971f",
+  "verdict": "CLEAN",
+  "materialFindings": [],
+  "limitations": [
+    "Re-binding of the 2026-08-17 blind audit after a Plan round-trip for merged-delivery reconciliation cleared the prior binding: the audited plan digest and approved source pack digest are byte-identical to that audit's inputs, so its CLEAN result remains current; no bytes changed and no fresh audit content was produced."
+  ],
+  "descendantQuiescenceVerdict": "QUIESCENT",
+  "descendantQuiescenceDigest": "db347ba68d82045a566c7ed6b582ddfa2feda2a3829f7266c163efdb74bd857b",
+  "auditEpoch": 10
+}
