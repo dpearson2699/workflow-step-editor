@@ -142,10 +142,17 @@ this loop for its PR while its lease is live:
   "_🤖 Addressed by [Claude Code](https://claude.com/claude-code)_" so
   reviewers can see it was automated. Then resolve the thread. Skip
   replies for comments you didn't act on.
-- Feedback the reviewer judges invalid or out of slice scope is not
-  silently dropped: reply on the thread with the reason (same attribution
-  line), and route genuine out-of-scope defects through the label-policy
-  issue lifecycle.
+- Remediation triage (operator policy, 2026-08-17, MVP time budget):
+  act only on critical blockers — verified correctness, data-loss,
+  security, or launch-blocking defects — and on quick fixes verifiable in
+  minutes. Everything else, especially architecture, generality, or
+  hardening suggestions beyond the accepted plan, is declined with a
+  reasoned reply, not implemented; automated reviewers tend to
+  overengineer and the MVP scope wins.
+- Feedback the reviewer judges invalid, out of slice scope, or below the
+  triage bar is not silently dropped: reply on the thread with the reason
+  (same attribution line), and route genuine deferred defects through the
+  label-policy issue lifecycle.
 - Top-level bot report comments without a comment_id (dependency tables,
   review summaries) need no reply; fold their material findings into the
   review verdict instead.
