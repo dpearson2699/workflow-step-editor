@@ -5,6 +5,7 @@ const NAMES: Record<string, string> = {
   A: 'Timeline feed',
   B: 'Master–detail',
   C: 'Filmstrip',
+  D: 'Master–detail + triple',
 };
 
 export default function PrototypeSwitcher(props: {

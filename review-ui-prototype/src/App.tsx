@@ -8,8 +8,9 @@ import PrototypeSwitcher from './PrototypeSwitcher';
 import VariantA from './variants/VariantA';
 import VariantB from './variants/VariantB';
 import VariantC from './variants/VariantC';
+import VariantD from './variants/VariantD';
 
-const VARIANTS = ['A', 'B', 'C'];
+const VARIANTS = ['A', 'B', 'C', 'D'];
 
 export default function App() {
   const [variant, setVariantState] = useState(() =>
@@ -37,7 +38,8 @@ export default function App() {
       setTimeout(() => setPerms(pp => ({ ...pp, [k]: true })), 600) && undefined,
   };
 
-  const v = variant === 'B' ? <VariantB {...p} /> : variant === 'C' ? <VariantC {...p} /> : <VariantA {...p} />;
+  const v = variant === 'B' ? <VariantB {...p} /> : variant === 'C' ? <VariantC {...p} /> :
+    variant === 'D' ? <VariantD {...p} /> : <VariantA {...p} />;
   return (
     <>
       {v}

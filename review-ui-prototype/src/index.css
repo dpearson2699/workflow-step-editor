@@ -122,6 +122,18 @@ input, textarea, select { font: inherit; color: inherit; }
 .vb-meta { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; margin-top: 12px; font-size: 13px; }
 .vb-meta dt { color: #8b8b93; } .vb-meta dd { margin: 0; }
 
+/* ---------- Variant D: master–detail + always-visible triple ---------- */
+.vd-shotwrap { display: flex; gap: 12px; align-items: stretch; }
+.vd-big { flex: 1; min-width: 0; max-height: 56vh; object-fit: contain; border-radius: 10px; background: #111; }
+.vd-thumbcol { width: 168px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+.vd-thumb { margin: 0; cursor: pointer; }
+.vd-thumb img {
+  width: 100%; height: 96px; object-fit: cover; border-radius: 8px;
+  border: 2px solid transparent; background: #111; display: block;
+}
+.vd-thumb.sel img { border-color: #4670d8; }
+.vd-thumb figcaption { font-size: 11px; color: #999; text-align: center; margin-top: 2px; }
+
 /* ---------- Variant C: filmstrip ---------- */
 .vc-root { height: 100vh; display: flex; flex-direction: column; }
 .vc-top { display: flex; align-items: center; gap: 12px; padding: 10px 16px; }
