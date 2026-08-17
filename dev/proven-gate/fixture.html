@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WSE Proven Gate — Chromium Fixture</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #f4f4f5;
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #18181b;
+      }
+      /* One large, plain content region. Chromium exposes the page as a
+         single coarse AXWebArea-class element with no fine child frames
+         at the click point, so the capture pipeline's implausible-frame
+         rule triggers and the element crop is the fixed-size fallback
+         (source: "fallback"). This is the exact contrast with a native
+         AppKit app, where AXUIElementCopyElementAtPosition returns a
+         tight control frame (source: "ax"). */
+      main {
+        box-sizing: border-box;
+        min-height: 100vh;
+        padding: 6vh 8vw;
+      }
+      h1 {
+        font-size: 2rem;
+        margin: 0 0 1rem;
+      }
+      p {
+        font-size: 1.1rem;
+        line-height: 1.7;
+        max-width: 60ch;
+      }
+      .plain-region {
+        margin-top: 3rem;
+        min-height: 60vh;
+        border: 1px dashed #a1a1aa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: #52525b;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Workflow Step Editor — Chromium capture fixture</h1>
+      <p>
+        This page is the frozen Chromium target for the proven capture gate
+        (AC-001). Record a short session with the signed dev build, then click
+        anywhere inside the large plain region below and type a few characters.
+      </p>
+      <p>
+        The recorded event for a click or key-down on this page must show
+        <code>element.source: "fallback"</code> with a fixed-size element crop,
+        because Chromium exposes only a coarse AXWebArea-class element here. On a
+        native macOS app (TextEdit or Finder) the same actions must instead show
+        <code>element.source: "ax"</code> with a tight control frame.
+      </p>
+      <div class="plain-region">Click and type inside this plain region.</div>
+    </main>
+  </body>
+</html>
