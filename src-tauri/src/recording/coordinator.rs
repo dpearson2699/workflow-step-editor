@@ -13,7 +13,7 @@
 //! event line and all three screenshots are committed.
 
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 
 use crate::domain::parser::parse_step;
@@ -60,6 +60,9 @@ pub enum RecordingError {
     PermissionsMissing(PermissionReport),
     Store(StoreError),
     PipelineStart(String),
+    /// The recording stopped, but finalization could not persist the
+    /// manifest; committed events and screenshots remain on disk.
+    FinalizationFailed(String),
     Internal(String),
 }
 
@@ -78,6 +81,9 @@ impl std::fmt::Display for RecordingError {
             ),
             Self::Store(error) => write!(f, "storage error: {error}"),
             Self::PipelineStart(error) => write!(f, "capture pipeline failed to start: {error}"),
+            Self::FinalizationFailed(error) => {
+                write!(f, "recording finalization failed: {error}")
+            }
             Self::Internal(error) => write!(f, "internal recording error: {error}"),
         }
     }
@@ -105,11 +111,40 @@ enum SessionMsg {
 
 type SharedPipeline = Arc<Mutex<Box<dyn CapturePipeline>>>;
 
+/// Signal set once `start_recording` has installed the session in the
+/// phase. The worker waits on it before its first ownership check, so a
+/// pipeline failure arriving during startup cannot finalize against a
+/// not-yet-installed session and leave a dead session behind.
+#[derive(Default)]
+struct InstallSignal {
+    installed: Mutex<bool>,
+    condvar: Condvar,
+}
+
+impl InstallSignal {
+    fn set(&self) {
+        *self.installed.lock().expect("install signal mutex poisoned") = true;
+        self.condvar.notify_all();
+    }
+
+    fn wait(&self) {
+        let mut installed = self.installed.lock().expect("install signal mutex poisoned");
+        while !*installed {
+            installed = self
+                .condvar
+                .wait(installed)
+                .expect("install signal mutex poisoned");
+        }
+    }
+}
+
 struct Session {
     workflow_id: String,
     tx: Sender<SessionMsg>,
     worker: JoinHandle<()>,
     pipeline: SharedPipeline,
+    /// Set by the worker when finalization could not save the manifest.
+    save_failure: Arc<Mutex<Option<String>>>,
 }
 
 enum Phase {
@@ -164,8 +199,13 @@ impl RecordingCoordinator {
             }
         }
         match self.start_session(name, sink) {
-            Ok((session, guard)) => {
+            Ok((session, guard, install)) => {
                 *self.lock_state() = Phase::Recording(session);
+                // The worker defers its first ownership check until the
+                // session is installed, so an immediate pipeline failure
+                // finalizes against the installed session instead of
+                // leaving a dead one behind.
+                install.set();
                 // Publish only after the session is installed; every
                 // earlier failure rolled the folder back via the guard.
                 Ok(guard.publish())
@@ -181,7 +221,14 @@ impl RecordingCoordinator {
         &self,
         name: Option<&str>,
         sink: Box<dyn StepSink>,
-    ) -> Result<(Session, crate::recording::store::UnpublishedWorkflow), RecordingError> {
+    ) -> Result<
+        (
+            Session,
+            crate::recording::store::UnpublishedWorkflow,
+            Arc<InstallSignal>,
+        ),
+        RecordingError,
+    > {
         let report = self.gate.report();
         if !all_granted(&report) {
             return Err(RecordingError::PermissionsMissing(report));
@@ -209,6 +256,8 @@ impl RecordingCoordinator {
             .map_err(RecordingError::PipelineStart)?;
         let pipeline: SharedPipeline = Arc::new(Mutex::new(pipeline));
 
+        let install = Arc::new(InstallSignal::default());
+        let save_failure: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let context = WorkerContext {
             rx,
             store: self.store.clone(),
@@ -217,6 +266,8 @@ impl RecordingCoordinator {
             manifest,
             state: self.state.clone(),
             pipeline: pipeline.clone(),
+            install: install.clone(),
+            save_failure: save_failure.clone(),
         };
         let worker = thread::Builder::new()
             .name("recording-worker".into())
@@ -235,8 +286,10 @@ impl RecordingCoordinator {
                 tx,
                 worker,
                 pipeline,
+                save_failure,
             },
             guard,
+            install,
         ))
     }
 
@@ -266,6 +319,7 @@ impl RecordingCoordinator {
             tx,
             worker,
             pipeline,
+            save_failure,
         } = session;
 
         pipeline.lock().expect("pipeline mutex poisoned").stop();
@@ -275,7 +329,16 @@ impl RecordingCoordinator {
         drop(tx);
         let _ = worker.join();
         *self.lock_state() = Phase::Idle;
-        Ok(workflow_id)
+        // The worker records a manifest-save failure; surface it instead
+        // of reporting a successful stop for a stale manifest.
+        let failure = save_failure
+            .lock()
+            .expect("save failure mutex poisoned")
+            .take();
+        match failure {
+            Some(error) => Err(RecordingError::FinalizationFailed(error)),
+            None => Ok(workflow_id),
+        }
     }
 
     pub fn list_workflows(&self) -> Result<Vec<WorkflowSummary>, RecordingError> {
@@ -309,6 +372,8 @@ struct WorkerContext {
     manifest: Manifest,
     state: Arc<Mutex<Phase>>,
     pipeline: SharedPipeline,
+    install: Arc<InstallSignal>,
+    save_failure: Arc<Mutex<Option<String>>>,
 }
 
 enum Outcome {
@@ -326,6 +391,8 @@ fn run_worker(context: WorkerContext) {
         mut manifest,
         state,
         pipeline,
+        install,
+        save_failure,
     } = context;
     let workflow_id = manifest.id.clone();
 
@@ -394,6 +461,11 @@ fn run_worker(context: WorkerContext) {
         return;
     };
 
+    // Wait until `start_recording` has installed the session, so an
+    // immediate pipeline failure cannot finalize against Phase::Starting
+    // and leave a dead session installed afterwards.
+    install.wait();
+
     // Fail-stop initiated here: mirror the stop path by moving the phase
     // to Failed before finalizing. When a concurrent stop already owns
     // the session (Stopping), that stop keeps state ownership.
@@ -411,6 +483,11 @@ fn run_worker(context: WorkerContext) {
 
     manifest.steps = steps;
     let save_result = store.save_manifest(&workflow_id, &manifest);
+    if let Err(error) = &save_result {
+        // Recorded for the stop path, which surfaces it to its caller.
+        *save_failure.lock().expect("save failure mutex poisoned") =
+            Some(format!("manifest save failed: {error}"));
+    }
     let terminal = match outcome {
         Outcome::Failed(error) => LiveEnvelope::Failed { workflow_id, error },
         Outcome::Stopped => match save_result {
@@ -798,6 +875,48 @@ mod tests {
         harness.coordinator.stop_recording().unwrap();
     }
 
+    /// The fail-during-start race: the pipeline reports Failed through
+    /// the emitter before `start` even returns. The worker must wait for
+    /// session installation, own the fail-stop, and converge to Idle
+    /// with exactly one terminal — no dead session, no user stop needed.
+    #[test]
+    fn pipeline_failure_during_startup_converges_to_idle_with_one_terminal() {
+        let harness = harness(2);
+        harness.controllers[0].fail_after_start("tap died during start");
+
+        let (sink, log) = TestSink::recording();
+        let id = harness
+            .coordinator
+            .start_recording(Some("doomed"), Box::new(sink))
+            .unwrap();
+
+        // Convergence: a fresh start succeeds without any explicit stop
+        // of the failed session.
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                let (retry_sink, _retry_log) = TestSink::recording();
+                harness
+                    .coordinator
+                    .start_recording(Some("recovers"), Box::new(retry_sink))
+                    .is_ok()
+            }),
+            "coordinator did not return to Idle after the startup failure",
+        );
+        harness.coordinator.stop_recording().unwrap();
+
+        // Exactly one terminal on the failed session's channel, and the
+        // worker-owned fail-stop stopped its pipeline.
+        let items = log.items();
+        assert_eq!(
+            items,
+            vec![LiveEnvelope::Failed {
+                workflow_id: id,
+                error: "tap died during start".into(),
+            }],
+        );
+        assert_eq!(harness.controllers[0].stop_count(), 1);
+    }
+
     #[test]
     fn pipeline_failure_fail_stops_with_one_terminal_and_preserves_committed_data() {
         let harness = harness(1);
@@ -928,6 +1047,87 @@ mod tests {
         fn list(&self) -> Result<Vec<WorkflowSummary>, StoreError> {
             self.inner.list()
         }
+    }
+
+    /// Store wrapper whose `save_manifest` always fails.
+    struct FailingSaveStore {
+        inner: JsonWorkflowStore,
+    }
+
+    impl WorkflowStore for FailingSaveStore {
+        fn create(&self, name: &str) -> Result<crate::recording::store::CreatedWorkflow, StoreError> {
+            self.inner.create(name)
+        }
+
+        fn append_event(
+            &self,
+            workflow_id: &str,
+            event: &Event,
+            shots: &crate::recording::store::ShotPayloads,
+        ) -> Result<(), StoreError> {
+            self.inner.append_event(workflow_id, event, shots)
+        }
+
+        fn load(&self, workflow_id: &str) -> Result<LoadedWorkflow, StoreError> {
+            self.inner.load(workflow_id)
+        }
+
+        fn save_manifest(&self, _workflow_id: &str, _manifest: &Manifest) -> Result<(), StoreError> {
+            Err(StoreError::Io {
+                context: "injected save failure".to_owned(),
+                source: std::io::Error::from(std::io::ErrorKind::Other),
+            })
+        }
+
+        fn list(&self) -> Result<Vec<WorkflowSummary>, StoreError> {
+            self.inner.list()
+        }
+    }
+
+    #[test]
+    fn stop_surfaces_a_manifest_save_failure_instead_of_ok() {
+        let temp = tempfile::tempdir().unwrap();
+        let clock = fixed_clock(
+            chrono::Utc
+                .with_ymd_and_hms(2026, 8, 16, 22, 31, 5)
+                .unwrap(),
+        );
+        let store: Arc<dyn WorkflowStore> = Arc::new(FailingSaveStore {
+            inner: JsonWorkflowStore::new(temp.path().to_path_buf(), clock),
+        });
+        let harness = harness_with(1, granted_gate(), Some(store));
+
+        let (sink, log) = TestSink::recording();
+        let id = harness
+            .coordinator
+            .start_recording(Some("w"), Box::new(sink))
+            .unwrap();
+        harness.controllers[0].emit(click_packet());
+
+        let error = harness.coordinator.stop_recording().unwrap_err();
+        assert!(
+            matches!(
+                &error,
+                RecordingError::FinalizationFailed(e) if e.contains("injected save failure")
+            ),
+            "got {error}",
+        );
+        // The channel still carries the committed step and one Failed
+        // terminal, and the coordinator is back to Idle.
+        let items = log.items();
+        assert_eq!(items.len(), 2, "got {items:?}");
+        assert!(matches!(items[0], LiveEnvelope::Step { .. }));
+        assert!(
+            matches!(
+                &items[1],
+                LiveEnvelope::Failed { workflow_id, error }
+                    if *workflow_id == id && error.contains("injected save failure")
+            ),
+            "got {:?}",
+            items[1],
+        );
+        let after = harness.coordinator.stop_recording().unwrap_err();
+        assert!(matches!(after, RecordingError::NotRecording), "got {after}");
     }
 
     #[test]

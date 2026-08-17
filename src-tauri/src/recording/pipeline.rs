@@ -82,7 +82,11 @@ impl std::fmt::Debug for PacketEmitter {
 /// emitting ordered packets, or returns an error and retains nothing.
 /// `stop` is idempotent, may be called after a reported failure, and
 /// stops further emission; packets already handed to the emitter stay
-/// valid. One pipeline instance serves one recording session.
+/// valid. `stop` must not return while any emitter call is still in
+/// flight on another thread: the adapter quiesces its emitting threads
+/// first, so no packet can lose the race against the coordinator's
+/// stop message and be silently dropped. One pipeline instance serves
+/// one recording session.
 pub trait CapturePipeline: Send {
     fn start(&mut self, emitter: PacketEmitter) -> Result<(), String>;
     fn stop(&mut self);

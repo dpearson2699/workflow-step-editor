@@ -130,6 +130,9 @@ pub fn key_packet() -> CapturePacket {
 struct ControllerState {
     emitter: Mutex<Option<PacketEmitter>>,
     start_error: Mutex<Option<String>>,
+    /// A failure the pipeline reports through the emitter immediately
+    /// after `start` succeeds, before `start` returns.
+    failure_after_start: Mutex<Option<String>>,
     start_gate: StartGate,
     stop_count: AtomicU32,
 }
@@ -156,6 +159,13 @@ impl FakeController {
     /// Scripts the next `start` call to fail with `error`.
     pub fn fail_start(&self, error: impl Into<String>) {
         *self.state.start_error.lock().unwrap() = Some(error.into());
+    }
+
+    /// Scripts the next `start` call to succeed and then immediately
+    /// report `error` through the emitter, before `start` returns:
+    /// the fail-during-start race.
+    pub fn fail_after_start(&self, error: impl Into<String>) {
+        *self.state.failure_after_start.lock().unwrap() = Some(error.into());
     }
 
     /// Makes the next `start` call block until [`Self::release_start`].
@@ -238,7 +248,10 @@ impl CapturePipeline for FakeCapturePipeline {
         if let Some(error) = self.state.start_error.lock().unwrap().take() {
             return Err(error);
         }
-        *self.state.emitter.lock().unwrap() = Some(emitter);
+        *self.state.emitter.lock().unwrap() = Some(emitter.clone());
+        if let Some(error) = self.state.failure_after_start.lock().unwrap().take() {
+            emitter.failed(error);
+        }
         Ok(())
     }
 
