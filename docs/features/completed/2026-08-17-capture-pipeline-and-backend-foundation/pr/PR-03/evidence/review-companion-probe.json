@@ -1,0 +1,21 @@
+{
+  "schema": "spec-work-task-observation",
+  "kind": "companion_probe",
+  "workKind": "feature",
+  "workId": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "workBundle": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "sliceId": "PR-03",
+  "role": "review",
+  "taskType": "slice_review",
+  "attempt": 1,
+  "launchMarker": "feature/PR-03/review/1",
+  "threadId": null,
+  "clientThreadId": null,
+  "branch": "feat/pr-03-capture-pipeline",
+  "headSha": "bfa95c635824b88e83df2a2ec80b10d629eacedb",
+  "predicate": "gitnexus-pr-review available",
+  "priorAttempt": 0,
+  "priorThreadId": null,
+  "result": "AVAILABLE",
+  "observationEpoch": 24
+}

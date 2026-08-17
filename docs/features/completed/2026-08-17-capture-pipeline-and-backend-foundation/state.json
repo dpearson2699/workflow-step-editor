@@ -86,13 +86,17 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": "b7ee3357e73086c538e8503546af7fc266034353111740f046814bbe0041a3c3",
-  "observation_epoch_high_water": 21,
-  "observed_main_sha": "7ba62c7cfba6e2e91dc014e9f415fb5557005d75",
+  "observation_epoch_high_water": 28,
+  "observed_main_sha": "41648c0458993f4877d48186953660863df4fa4b",
   "parallel_assessments": [],
   "phase": "complete",
   "planning": {
     "active_response_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
-    "blind_completeness": null,
+    "blind_completeness": {
+      "epoch": 28,
+      "receipt": "discovery/blind-completeness-0006.json",
+      "receipt_digest": "9384815f5539594e4ea370898c9b3ca03a46ac0922fe4f412b36e9c4f5bed420"
+    },
     "blind_requirement": {
       "plan_digest": "860ca87269d59a3af4f6dd34e4dae61af3c30f6e6ba353ad3f39929c8e991608",
       "requirement": "required_multi_slice_reconciliation"
@@ -175,7 +179,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 67,
+  "revision": 82,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -445,19 +449,19 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "7ba62c7cfba6e2e91dc014e9f415fb5557005d75",
+      "base_sha": "d0cad2f567d6a2c3af4cc4a0a671a4429974e68c",
       "branch": "feat/pr-03-capture-pipeline",
       "depends_on": [
         "PR-02"
       ],
       "execution_mode": "serial",
-      "head_sha": "bc1fc6557081a231a56fd207caf41cf8863e9e42",
+      "head_sha": "754f1a101baa041f07121f6bd96de2bc9e9b8f69",
       "id": "PR-03",
       "implementation_task": {
-        "adoption_start_sha": "7ba62c7cfba6e2e91dc014e9f415fb5557005d75",
-        "attempt": 1,
-        "authorization_digest": "579cd94d25cfc2065b1e6307ba78d9dac96113fa7210211b4951eb303b307a2c",
-        "bound_sha": "7ba62c7cfba6e2e91dc014e9f415fb5557005d75",
+        "adoption_start_sha": null,
+        "attempt": 0,
+        "authorization_digest": null,
+        "bound_sha": null,
         "branch_attachment_digest": null,
         "branch_attachment_epoch": null,
         "branch_attachment_receipt": null,
@@ -465,7 +469,7 @@
         "branch_release_epoch": null,
         "branch_release_receipt": null,
         "changed_paths_digest": null,
-        "client_thread_id": "a94db493ae95babb8",
+        "client_thread_id": null,
         "companion_probe_digest": null,
         "companion_probe_epoch": null,
         "companion_probe_receipt": null,
@@ -476,7 +480,7 @@
         "head_adoption_terminal_lineage": [],
         "implementation_receipt": null,
         "implementation_receipt_digest": null,
-        "launch_marker": "feature/PR-03/implementation/1",
+        "launch_marker": null,
         "output_head_sha": null,
         "output_pr": null,
         "replacement_observation_digest": null,
@@ -490,18 +494,18 @@
         "review_receipt_digest": null,
         "review_task_quiescence_digest": null,
         "snapshot_authorization": null,
-        "state": "active",
+        "state": "unbound",
         "stop_proof_digest": null,
         "stop_proof_epoch": null,
         "stop_proof_receipt": null,
-        "task_worktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a94db493ae95babb8",
+        "task_worktree": null,
         "terminal_result": null,
-        "thread_id": "local_agent:a94db493ae95babb8",
+        "thread_id": null,
         "verification_digest": null,
         "verification_verdict": null
       },
       "merge_epoch": null,
-      "merge_main_sha": null,
+      "merge_main_sha": "7cd3c36a1ed2ac42ead98a5b9deb36948b6e61e9",
       "merge_receipt": null,
       "merge_receipt_digest": null,
       "owned_paths": [
@@ -519,7 +523,7 @@
       "plan_digest": "bbc1ef452f55b8a553925b35ac4e8b87885b1ebe79cda3cd2c16b05b8d67c5e5",
       "pr": 23,
       "premerge_drift": null,
-      "receipt": "pr/PR-03/RECEIPT.md",
+      "receipt": null,
       "replacement_lineage": null,
       "review_task": {
         "adoption_start_sha": null,
@@ -570,7 +574,7 @@
       },
       "revision_epoch": 1,
       "revision_history": [],
-      "status": "pr_open",
+      "status": "merged",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Real macOS capture adapter, dev trigger, and proven-gate readiness",
@@ -660,7 +664,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T21:11:31Z",
+  "updated_at": "2026-08-17T22:11:27Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }
