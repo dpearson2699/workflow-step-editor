@@ -6874,14 +6874,7 @@ def live_pull_request_delivery(pull: int, label: str) -> dict[str, object]:
         raise StateError(f"{label} cannot resolve the GitHub repository")
     try:
         result = subprocess.run(
-            [
-                "gh", "pr", "view", str(pull),
-                "--repo", repository,
-                "--json", (
-                    "number,state,mergedAt,mergeCommit,headRefOid,headRefName,"
-                    "headRepository,baseRefName,isCrossRepository"
-                ),
-            ],
+            ["gh", "api", f"repos/{repository}/pulls/{pull}"],
             cwd=REPO,
             check=False,
             capture_output=True,
@@ -6897,15 +6890,58 @@ def live_pull_request_delivery(pull: int, label: str) -> dict[str, object]:
             f"{label} cannot query authoritative pull-request delivery"
         )
     try:
-        value = json.loads(result.stdout)
+        raw = json.loads(result.stdout)
     except json.JSONDecodeError as error:
         raise StateError(
             f"{label} returned malformed pull-request delivery"
         ) from error
-    merge_commit = value.get("mergeCommit") if isinstance(value, dict) else None
-    head_repository = (
-        value.get("headRepository") if isinstance(value, dict) else None
-    )
+    # REST projection of the same authoritative fields; the REST endpoint
+    # stays available while GitHub GraphQL (behind `gh pr view`) degrades.
+    value: dict[str, object] = {}
+    if isinstance(raw, dict):
+        head_obj = raw.get("head")
+        base_obj = raw.get("base")
+        head_repo = (
+            head_obj.get("repo") if isinstance(head_obj, dict) else None
+        )
+        base_repo = (
+            base_obj.get("repo") if isinstance(base_obj, dict) else None
+        )
+        value = {
+            "number": raw.get("number"),
+            "state": (
+                "MERGED"
+                if raw.get("merged") is True and raw.get("state") == "closed"
+                else raw.get("state")
+            ),
+            "mergedAt": raw.get("merged_at"),
+            "mergeCommit": (
+                {"oid": raw["merge_commit_sha"]}
+                if isinstance(raw.get("merge_commit_sha"), str)
+                else None
+            ),
+            "headRefOid": (
+                head_obj.get("sha") if isinstance(head_obj, dict) else None
+            ),
+            "headRefName": (
+                head_obj.get("ref") if isinstance(head_obj, dict) else None
+            ),
+            "headRepository": (
+                {"nameWithOwner": head_repo.get("full_name")}
+                if isinstance(head_repo, dict)
+                else None
+            ),
+            "baseRefName": (
+                base_obj.get("ref") if isinstance(base_obj, dict) else None
+            ),
+            "isCrossRepository": (
+                head_repo.get("full_name") != base_repo.get("full_name")
+                if isinstance(head_repo, dict) and isinstance(base_repo, dict)
+                else None
+            ),
+        }
+    merge_commit = value.get("mergeCommit")
+    head_repository = value.get("headRepository")
     if (
         not isinstance(value, dict)
         or value.get("number") != pull

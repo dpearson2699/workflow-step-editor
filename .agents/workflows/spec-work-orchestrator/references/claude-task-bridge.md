@@ -154,8 +154,14 @@ this loop for its PR while its lease is live:
   (same attribution line), and route genuine deferred defects through the
   label-policy issue lifecycle.
 - Top-level bot report comments without a comment_id (dependency tables,
-  review summaries) need no reply; fold their material findings into the
-  review verdict instead.
+  review summaries) need no per-thread reply, but they are not
+  fold-and-wait material: the review task triages their findings the
+  moment they arrive and remediates or declines each one under the same
+  triage bar as inline comments, then posts one summary reply on the PR
+  recording every disposition (same attribution line). A severity-labeled
+  bot finding (P1/P2) is presumed material until triage says otherwise.
+  Sitting on a bot review until the final verdict is a defect (operator
+  correction, 2026-08-17).
 
 ## Callback policy
 
