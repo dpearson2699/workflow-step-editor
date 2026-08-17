@@ -48,12 +48,19 @@ this bundle's command surface.
   before any Accessibility API call, plus Screen Recording. Permission
   commands (`check_permissions`, `request_permission(kind)`) for the UI.
 - Capture-lifecycle commands and the live capture channel:
-  `start_recording(name, channel) -> workflow_id`,
-  `stop_recording() -> workflow_id`, `list_workflows()`, `get_workflow(id)`.
+  `start_recording(name?, channel) -> workflow_id` (name optional; missing
+  or blank defaults to a timestamp), `stop_recording() -> workflow_id`,
+  `list_workflows()`, `get_workflow(id)`. The channel envelope is tagged:
+  `Step` items plus terminal `Stopped`/`Failed`, terminal-last.
+- Edge clarifications per DEC-011: `window: null` when no window resolves
+  (schema null pattern extended; element records `role: null`,
+  `title: null`, the fallback crop frame, `source: "fallback"`);
+  out-of-order permission requests return `blocked_by_prerequisite`.
 - A bare dev-only trigger to start and stop recording.
 - Every key-down gets a full screenshot triple through a bounded async queue
-  (literal must-have compliance; degradation under typing load is a recorded
-  tradeoff only if measured).
+  (literal must-have compliance). Queue saturation fail-stops the recording
+  with one explicit capture-overloaded error, preserving committed data
+  (DEC-009); no event is silently dropped.
 
 ## Non-Goals
 
@@ -66,7 +73,9 @@ this bundle's command surface.
 - SQLite or any non-JSON store.
 - Non-macOS capture backends. The platform boundary is the single
   `CapturePipeline` trait.
-- Workflow deletion in any form (owned by issue #13's hard-delete record).
+- User-facing deletion of saved workflows (owned by issue #13's
+  hard-delete record). Store-internal rollback of a never-published
+  folder during failed startup is not workflow deletion.
 
 ## Doc Authority
 
@@ -77,7 +86,7 @@ this bundle's command surface.
 | Ubiquitous language (event, step, screenshot triple, workflow, classification, shortcut, hotkey) | `CONTEXT.md` | new terms crystallising during build | `CONTEXT.md` |
 | Window crop is a bounds crop, not an isolated window image | ADR 0001 consequences | README must state the caveat | `README.md` (created in this bundle) |
 | macOS-only support | capability split, issue #11 | README must state the limitation | `README.md` (created in this bundle) |
-| Schema v1 field shapes | issue #7 decision record | none — fields fixed by the record | none |
+| Schema v1 field shapes | issue #7 decision record plus DEC-011 edge clarifications | none — fields fixed by the record; DEC-011 covers only unaddressed null-window and optional-name cases | none |
 
 ## Open decision IDs
 

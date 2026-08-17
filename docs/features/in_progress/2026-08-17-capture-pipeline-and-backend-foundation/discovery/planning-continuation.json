@@ -1,0 +1,42 @@
+{
+  "current_pass_id": "fc3c1b33d7245cf3a2173c6b5437e3a5ec7375982d56f7ada750646c741aff32",
+  "parent_cursor": {
+    "blind_receipt_digest": null,
+    "bundle_revision": 3,
+    "candidate_plan_digest": null,
+    "consultation_id": "fc3c1b33d7245cf3a2173c6b5437e3a5ec7375982d56f7ada750646c741aff32",
+    "expected_successor": null,
+    "replacement_heartbeat": null,
+    "stage": "resolve_material_findings"
+  },
+  "passes": [
+    {
+      "attempt_ordinal": 1,
+      "consultation_id": "fc3c1b33d7245cf3a2173c6b5437e3a5ec7375982d56f7ada750646c741aff32",
+      "conversation_binding_digest": "ca0b8f8369283a1e7f4d1cecc87c8e9adb682081e40168680568e60e0fc27a0d",
+      "conversation_generation_id": "8126641e-b736-486c-802c-8870628a3529",
+      "conversation_origin_anchor_digest": "e037c2eef11c0532f89d0acb9d4c8e947a55b2b0d69e88341dafd90fd0838398",
+      "conversation_ref_digest": "2af902f140f44f43cfa8510f178285e8dafe64c7f8f61b1ee46ed3a67202d886",
+      "invalidation": null,
+      "invoking_automation_ref_digest": "d31bf91ce164f26ada299428f84f90932d20ac43617f84d06042619a8348d9fa",
+      "pass_id": "689d07526eda71c59e3fd389b318823a5d0704b71bea4f0ca45708e257a446f2",
+      "prompt_digest": "423e4a458c5544fbd2dbd39c746e88a338577e142541fc3639c095edf8bb50a1",
+      "repository": "dpearson2699/workflow-step-editor",
+      "response_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
+      "response_evidence": "discovery/pro-lifecycle-evidence/fc3c1b33d7245cf3a2173c6b5437e3a5ec7375982d56f7ada750646c741aff32.md",
+      "response_evidence_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
+      "source_branch": "main",
+      "source_commit": "d5467958edb31a31e743f7801f8d93bcc3252840",
+      "specification_digest": "96e8bf0cba5a9551af77fdbf4dfd562e3e1f90728afc9974cb61e0f7477e3e50",
+      "status": "consumed",
+      "terminal_candidate_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08"
+    }
+  ],
+  "repository": "dpearson2699/workflow-step-editor",
+  "revision": 1,
+  "schema": "planning-continuation",
+  "updated_at": "2026-08-17T06:50:00.584015Z",
+  "work_bundle": "/Users/dpearson/repos/workflow-step-editor/docs/features/in_progress/2026-08-17-capture-pipeline-and-backend-foundation",
+  "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "work_kind": "feature"
+}

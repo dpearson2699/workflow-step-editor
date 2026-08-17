@@ -12,10 +12,23 @@ reports and requests all three TCC permissions in the decided order.
 - Behavior: Project scaffold (Vite + React + TypeScript, Rust backend in
   `src-tauri/`); fixed bundle identifier `com.dpearson.workflow-step-editor`;
   dev-build signing with "Apple Development: dpearson2699@gmail.com
-  (86K7G9BGZ7)"; permission module with kinds `input_monitoring`,
-  `accessibility`, `screen_recording`; commands `check_permissions()` and
-  `request_permission(kind)`; minimal README with setup commands, the
-  macOS-only limitation, and the window-crop bounds caveat.
+  (86K7G9BGZ7)" injected through the local build environment so a clone
+  without that certificate still builds with standard Tauri commands;
+  permission module with kinds `input_monitoring`, `accessibility`,
+  `screen_recording` and a status model rich enough to express
+  "Accessibility deliberately not checked yet" (for example `granted`,
+  `denied`, `not_requested`, `blocked_by_prerequisite`) — verify the
+  native Input Monitoring status API first and let it fix the final shape;
+  ordered status aggregation so no Accessibility API call happens before
+  Input Monitoring has been requested, with permission operations
+  serialized so concurrent commands cannot violate that order; an
+  out-of-order `request_permission(accessibility)` returns
+  `blocked_by_prerequisite` without touching the Accessibility API
+  (DEC-011), covered by a direct out-of-order test; commands
+  `check_permissions()` and `request_permission(kind)`; minimal README
+  with setup commands, the macOS-only limitation, and the window-crop
+  bounds caveat. This module is the sole production permission
+  implementation for the bundle; later slices consume it unchanged.
 - Owned paths: `package.json`, `package-lock.json`, `tsconfig.json`,
   `tsconfig.node.json`, `vite.config.ts`, `index.html`, `src/`, `src-tauri/`,
   `README.md`, `.gitignore`
@@ -31,7 +44,9 @@ reports and requests all three TCC permissions in the decided order.
 - Primary acceptance criterion: Explicit observable criterion — the signed
   build launches cleanly and `check_permissions` returns a status for each of
   the three permission kinds; `request_permission(kind)` triggers the
-  matching system request path.
+  matching system request path, except that an out-of-order request
+  returns `blocked_by_prerequisite` without touching the Accessibility
+  API.
 - Regression guards: none
 - New high-cost verification mechanism: none
 - Independent execution flows: no
@@ -65,16 +80,22 @@ reports and requests all three TCC permissions in the decided order.
 
 - Owns no acceptance criterion. It contributes the permission-module
   foundation and ordered request paths that the recording-gating criterion
-  (owned by PR-03) completes, and the signed dev build the feature-owned
+  (owned by PR-02) completes, and the signed dev build the feature-owned
   proven gate runs on.
 
 ## Verification
 
 - `npm run tauri build` succeeds and the bundle identifier and signing
-  identity are visible in the built app (`codesign -dv`).
+  identity are visible in the built app (`codesign -dv`); the build also
+  succeeds without the personal certificate present.
 - `npm run tauri dev` starts cleanly.
-- Focused Rust unit tests for permission-kind mapping where the seam is
-  fakeable; the real TCC prompts are exercised manually in AC-001.
+- Focused Rust unit tests against a fake permission source: query order,
+  first-launch/unknown Input Monitoring state, a spy assertion that no
+  Accessibility call precedes the Input Monitoring request, one native
+  request path per kind, invalid kind. The real TCC prompts are exercised
+  manually through the feature-owned proven gate.
+- A real built-app manual check invokes each request path in order (do
+  not rely solely on `tauri dev`, whose TCC attribution is undocumented).
 - Verify live crate versions on crates.io before locking dependencies
   (research observed 2026-08-16: tauri 2.11.5).
 - Independent command: `npm run tauri build`
@@ -89,7 +110,7 @@ reports and requests all three TCC permissions in the decided order.
 - Requested model and effort: claude-fable-5 medium
 - Selection predicates: localized known seams; decision-complete behavior;
   focused tests
-- Binding: codex_task_request
+- Binding: claude_task_request (Claude task adapter)
 
 ## Parallelization Assessment
 

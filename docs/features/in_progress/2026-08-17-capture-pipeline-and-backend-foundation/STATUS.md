@@ -4,22 +4,22 @@
 - Work kind: `feature`
 - Work ID: `2026-08-17-capture-pipeline-and-backend-foundation`
 - Phase: `plan`
-- Revision: `2`
+- Revision: `4`
 - Observed origin/main: `not recorded`
 - Task roster: `1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e`
 - Active slices: `none`
-- Last update: `2026-08-17T06:19:04Z`
+- Last update: `2026-08-17T06:51:30Z`
 
 ## ChatGPT Pro Planning Evidence
 
-- Current specification digest: `not recorded`
-- Current source commit: `not recorded`
-- Active response: `not recorded`
-- Generated for: `not recorded`
-- Accepted for: `not recorded`
-- Disposition: `not recorded`
+- Current specification digest: `96e8bf0cba5a9551af77fdbf4dfd562e3e1f90728afc9974cb61e0f7477e3e50`
+- Current source commit: `d5467958edb31a31e743f7801f8d93bcc3252840`
+- Active response: `fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08`
+- Generated for: `96e8bf0cba5a9551af77fdbf4dfd562e3e1f90728afc9974cb61e0f7477e3e50`
+- Accepted for: `96e8bf0cba5a9551af77fdbf4dfd562e3e1f90728afc9974cb61e0f7477e3e50`
+- Disposition: `clean`
 - Latest applicability: `not recorded`
-- Fresh primary required: `yes`
+- Fresh primary required: `no`
 - Explicit Pro primary waiver: `not recorded`
 - Blind completeness: `decision required`
 

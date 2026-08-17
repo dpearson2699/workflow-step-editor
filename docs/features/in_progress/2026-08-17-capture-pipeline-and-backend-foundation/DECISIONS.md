@@ -44,8 +44,10 @@ owners are the cited tickets and ADRs; this file does not amend them.
   the capture channel. No re-parse, no synthetic `wait`/`assert` steps.
   Click -> `click`, key-down -> `type`. Titles:
   `Click "{element title | role | 'at (x, y)'}" — {app}` and
-  `Press {character or key name}{" + modifiers" when present} — {app}`.
-  Description defaults to empty.
+  `Press {modifier prefixes}{character or key name} — {app}`, with
+  modifier prefixes joined by `+` in the order Fn, Ctrl, Opt, Shift, Cmd
+  when present — the form the accepted examples use
+  (`Press Cmd+S — TextEdit`). Description defaults to empty.
 - Rationale: Satisfies "understandable steps" inside the MVP line while the
   lossless log keeps grouping possible later.
 - Rejected alternatives: Batch parsing at stop; burst collapsing in the MVP.
@@ -118,3 +120,66 @@ owners are the cited tickets and ADRs; this file does not amend them.
   resolution for key-downs.
 - Canonical docs: none; slice plan carries the behavior.
 
+
+## DEC-009: Queue-saturation fail-stop
+
+- Status: accepted
+- Decision: When the bounded capture queue between the ListenOnly tap and
+  the screenshot worker saturates, the recording fail-stops with one
+  explicit capture-overloaded error. Every event and screenshot already
+  committed is preserved. The tap callback never blocks, and no event is
+  silently dropped or coalesced.
+- Rationale: The per-event screenshot-triple guarantee is literal
+  (AC-001); silent loss would pass superficial checks while violating it,
+  and blocking the tap risks timeout-driven disablement. Extends DEC-007's
+  fail-stop posture to overload.
+- Rejected alternatives: Silent drop with a degraded marker; blocking the
+  tap; unbounded queue.
+- Canonical docs: none; the PR-03 plan carries the tested invariant.
+
+## DEC-010: Non-UI classification of the dev-only trigger
+
+- Status: accepted
+- Decision: This bundle is classified non-UI-affecting. The bare dev-only
+  trigger (start/stop control with minimal live output) is developer
+  scaffolding outside product UI; the bundle declares no UI Acceptance
+  Policy, and every slice uses `UI gate: not_applicable`. The proven gate
+  (AC-001) is the bundle's human acceptance. The review-UI capability
+  (issue #13) owns the product UI and its design gate.
+- Rationale: The user's capability split (#11, #12) excluded product UI
+  from this bundle; Tauri's UI automation driver does not support macOS,
+  so a truthful automated UI proof route is not available inside the
+  budget. Decided by the user as interview Q-003 after the plan-consensus
+  reviewer raised the contract-literal reading.
+- Rejected alternatives: `final_pr_design_gate` on PR-03 with an
+  automated trigger proof and final human design acceptance.
+- Canonical docs: none.
+
+## DEC-011: Command and schema edge-case clarifications (coordinator)
+
+- Status: accepted
+- Decision: Four clarifications of unaddressed edge cases inside accepted
+  contracts. (1) `request_permission(kind)` returns
+  `blocked_by_prerequisite` without touching the Accessibility API when
+  the ordering prerequisite (Input Monitoring requested) is not yet
+  satisfied; AC-005 carries the matching clause. (2) The schema's
+  existing null pattern for inapplicable fields (`key: null` on clicks,
+  `button: null` on key-downs) extends to `window: null` when no window
+  resolves (desktop clicks, focusless key-downs); the named fields from
+  issue #7 are unchanged. For a null window: the display is the one
+  containing the click point, or the main display for key-downs; the
+  window crop is the full display frame; the element crop is the
+  fixed-size fallback centered at the click point or display center; the
+  serialized element records `role: null`, `title: null`, the fallback
+  crop rectangle as `frame`, and `source: "fallback"`; the title's
+  `{app}` is the frontmost application name, else `Unknown`.
+  (3) `start_recording` takes an optional name; a missing or blank name
+  defaults to a timestamp, per issue #7 decision 5. (4) `KeySemantics`
+  chord presentation order is Fn, Ctrl, Opt, Shift, Cmd around the key.
+- Rationale: Each case was unaddressed by the decision records; the
+  clarifications keep every user-fixed field and invariant unchanged and
+  were surfaced by the cross-model plan consensus loop.
+- Rejected alternatives: Synthetic window metadata for unresolvable
+  windows; refusing out-of-order permission requests with an opaque
+  error; making the name mandatory.
+- Canonical docs: none.

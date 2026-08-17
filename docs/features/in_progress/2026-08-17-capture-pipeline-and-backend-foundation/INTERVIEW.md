@@ -45,11 +45,12 @@
   the review-UI capability (#13) with its own acceptance line; #11 decision 1
   and #12 scope allow only "a bare dev-only trigger" here and state "the
   product UI is the next capability". The bundle's human acceptance is the
-  proven gate (file inspection), not a design checkpoint. Classified
-  non-UI-affecting; the UI Acceptance Policy section is omitted per the
-  bundle contract.
+  proven gate (file inspection), not a design checkpoint. Initially
+  classified non-UI-affecting from those records; the cross-model plan
+  consensus reviewer twice read the UI contract literally against that
+  classification, so the choice went to the user as Q-003.
 - Confidence: high
-- Question: none
+- Question: Q-003
 
 ## GA-004: External crate and API facts
 
@@ -128,3 +129,70 @@
 - Decision: DEC-008
 - Canonical-doc impact: none; behavior recorded in DEC-008, FEATURE.md
   scope, and the owning slice plan.
+
+## GA-007: Bounded-queue saturation policy
+
+- Status: closed
+- Kind: decision
+- Uncertainty: The accepted architecture requires a bounded async queue and
+  a nonblocking tap, but no record chose what happens when the queue fills.
+  A bounded queue cannot simultaneously never block, never drop, and never
+  exceed its bound under arbitrary load.
+- Why it matters: The policy decides recording completeness, memory use,
+  and user-visible failure behavior; the per-event triple guarantee is
+  literal in AC-001.
+- Evidence inspected: Issue #6 decision 7 (bounded queue; degradation is a
+  deliberate recorded tradeoff); DEC-007 (fail-stop posture); the Pro
+  planning response's queue-saturation analysis (immutable artifact under
+  discovery/pro-lifecycle-evidence/). Exposed during Plan by the Pro
+  primary; asked as Q-002.
+- Confidence: high
+- Question: Q-002
+
+## Q-002: What happens when the bounded screenshot queue fills?
+
+- Status: answered
+- Recommendation: Fail-stop with one explicit capture-overloaded error,
+  preserving every event and screenshot already committed. Never silently
+  drop or coalesce events.
+- Options and tradeoffs:
+  1. Fail-stop on overload (recommended): literal per-event triple
+     guarantee; a too-fast burst ends the recording visibly.
+  2. Drop events under overload: keeps recordings alive but breaks the
+     literal three-screenshots-per-event requirement and hides gaps.
+  3. Defer until measured: implement fail-stop provisionally and revisit
+     with PR-03 measurements.
+- If wrong: Silent loss would make the proven gate look healthy while
+  violating per-event capture; blocking would risk timeout-driven tap
+  disablement.
+- Answer/source: User selected option 1, fail-stop on overload
+  (interview answer, 2026-08-17).
+- Closure reason: Consequential recording-completeness policy decided by
+  the user.
+- Decision: DEC-009
+- Canonical-doc impact: none; recorded in DEC-009 and the PR-03 plan
+  invariants.
+
+## Q-003: Does the dev-only trigger make this bundle UI-affecting?
+
+- Status: answered
+- Recommendation: Keep the non-UI classification. The dev-only trigger is
+  developer scaffolding excluded from product UI by the accepted
+  capability split, the proven gate is the bundle's human acceptance, and
+  Tauri's UI automation driver does not support macOS, so the alternative
+  automated UI proof route would be hard or blocking in the budget.
+- Options and tradeoffs:
+  1. Keep non-UI (recommended): proven gate remains the human acceptance;
+     contract classification recorded as an explicit user decision.
+  2. Add final_pr_design_gate on PR-03: contract-literal; requires a
+     truthful macOS UI proof route that may block the bundle.
+- If wrong: A reviewer could block the final PR on the missing UI gate;
+  conversely adding the gate could block the bundle on an unavailable
+  proof route.
+- Answer/source: User selected option 1, keep non-UI
+  (interview answer, 2026-08-17).
+- Closure reason: Acceptance-structure classification decided by the
+  user.
+- Decision: DEC-010
+- Canonical-doc impact: none; FEATURE.md continues to omit the UI
+  Acceptance Policy section.

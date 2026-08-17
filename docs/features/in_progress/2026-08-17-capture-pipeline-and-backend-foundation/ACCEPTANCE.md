@@ -63,8 +63,11 @@
 - Ownership: slice
 - Invariant: `check_permissions` reports each of Input Monitoring,
   Accessibility, and Screen Recording; `request_permission(kind)` triggers
-  the matching system request. No Accessibility API call happens before
-  Input Monitoring has been requested (prompt-suppression caveat).
+  the matching system request, except that a request whose ordering
+  prerequisite has not yet been requested returns a
+  `blocked_by_prerequisite` status without touching the Accessibility
+  API. No Accessibility API call happens before Input Monitoring has been
+  requested (prompt-suppression caveat).
   `start_recording` refuses to start unless all three permissions pass, and
   exactly one recording can be active at a time.
 - Owning seam: The permission module and the Tauri command layer.
