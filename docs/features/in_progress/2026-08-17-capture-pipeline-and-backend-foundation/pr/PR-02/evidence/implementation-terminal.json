@@ -1,0 +1,23 @@
+{
+  "schema": "spec-work-implementation-terminal",
+  "workKind": "feature",
+  "workId": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "workBundle": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "implementationWorktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a976542c5ed8e5794",
+  "sliceId": "PR-02",
+  "branch": "feat/pr-02-domain-core",
+  "baseSha": "f3a587659533ad366c6c8cedd10f4d08a8ad8752",
+  "boundSha": "f3a587659533ad366c6c8cedd10f4d08a8ad8752",
+  "taskType": "slice_implementation",
+  "attempt": 1,
+  "revisionEpoch": 1,
+  "threadId": "local_agent:a976542c5ed8e5794",
+  "outputHeadSha": "c9e38c46dcebdda2df707154dc0d341d86f0c49f",
+  "pr": 19,
+  "result": "SUCCEEDED",
+  "verificationVerdict": "PASS",
+  "verificationDigest": "ff23483677f0e7e9485bf98c030f97eaacc6577bbc783e0adf58a1948d731a2d",
+  "changedPathsDigest": "81cd2624a9937bd7ff9334ceb61bc8618da043e3f6db88c17bef76663cd66111",
+  "descendantQuiescenceVerdict": "PASS",
+  "descendantQuiescenceDigest": "7a0d437aad0838ea18bb7cc52128040bd416f4b9d1b11e2c6ddb85808a13b400"
+}
