@@ -103,6 +103,13 @@ pub enum StoreError {
     InvalidShotPaths { event_id: String },
     NotFound(String),
     SymlinkRejected(PathBuf),
+    /// The manifest's own `id` does not name the workflow folder the save
+    /// targets, so writing it would overwrite one workflow with another's
+    /// identity and steps.
+    ManifestIdMismatch {
+        workflow_id: String,
+        manifest_id: String,
+    },
     UnsupportedSchemaVersion(u64),
     CorruptManifest { workflow_id: String, detail: String },
     CorruptEvents { workflow_id: String, line: usize, detail: String },
@@ -120,6 +127,15 @@ impl std::fmt::Display for StoreError {
             Self::NotFound(id) => write!(f, "workflow not found: {id}"),
             Self::SymlinkRejected(path) => {
                 write!(f, "refusing symlinked store path: {}", path.display())
+            }
+            Self::ManifestIdMismatch {
+                workflow_id,
+                manifest_id,
+            } => {
+                write!(
+                    f,
+                    "manifest id {manifest_id:?} does not match workflow {workflow_id:?}",
+                )
             }
             Self::UnsupportedSchemaVersion(version) => {
                 write!(
@@ -173,10 +189,13 @@ pub trait WorkflowStore: Send + Sync {
     /// Loads the manifest and the event log. A torn final JSONL line
     /// (no trailing newline, incomplete JSON) is skipped; a corrupt
     /// newline-terminated line is an error. A manifest whose
-    /// `schema_version` is not 1 is an explicit error.
+    /// `schema_version` is not 1 is an explicit error, and so is a
+    /// missing event log: `create` always writes one.
     fn load(&self, workflow_id: &str) -> Result<LoadedWorkflow, StoreError>;
 
-    /// Atomically replaces `workflow.json` (temp file plus rename).
+    /// Atomically replaces `workflow.json` (temp file plus rename). The
+    /// manifest must carry the target workflow's own `id` and schema
+    /// version 1; a mismatch is rejected before any write.
     fn save_manifest(&self, workflow_id: &str, manifest: &Manifest) -> Result<(), StoreError>;
 
     /// Lists readable workflows sorted by id. Folders that fail to load
@@ -261,11 +280,10 @@ impl JsonWorkflowStore {
     }
 
     fn load_events(&self, workflow_id: &str, dir: &Path) -> Result<Vec<Event>, StoreError> {
-        let path = dir.join(EVENTS_FILE);
-        if fs::symlink_metadata(&path).is_err() {
-            return Ok(Vec::new());
-        }
-        let raw = read_no_follow(&path)?;
+        // `create` always writes the event log, so a missing or unreadable
+        // `events.jsonl` is damage, not an empty recording; the error must
+        // surface rather than silently dangling the manifest's event_ids.
+        let raw = read_no_follow(&dir.join(EVENTS_FILE))?;
         let text = String::from_utf8_lossy(&raw);
 
         let mut lines: Vec<&str> = text.split('\n').collect();
@@ -423,6 +441,17 @@ impl WorkflowStore for JsonWorkflowStore {
 
     fn save_manifest(&self, workflow_id: &str, manifest: &Manifest) -> Result<(), StoreError> {
         let dir = self.workflow_dir(workflow_id)?;
+        if manifest.id != workflow_id {
+            return Err(StoreError::ManifestIdMismatch {
+                workflow_id: workflow_id.to_owned(),
+                manifest_id: manifest.id.clone(),
+            });
+        }
+        if manifest.schema_version != SCHEMA_VERSION {
+            return Err(StoreError::UnsupportedSchemaVersion(u64::from(
+                manifest.schema_version,
+            )));
+        }
         let bytes = manifest_bytes(manifest)?;
         self.write_via_temp(&dir, &dir.join(MANIFEST_FILE), &bytes)
     }
@@ -715,6 +744,59 @@ mod tests {
         let loaded = store.load(&id).unwrap();
         assert_eq!(loaded.manifest, manifest);
         assert_eq!(loaded.manifest.steps[0].event_ids, vec!["evt_0001"]);
+    }
+
+    #[test]
+    fn save_manifest_rejects_a_manifest_for_a_different_workflow() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id_a, manifest_a) = created(&store, "a");
+        let (id_b, manifest_b) = created(&store, "b");
+
+        let error = store.save_manifest(&id_a, &manifest_b).unwrap_err();
+        assert!(
+            matches!(&error, StoreError::ManifestIdMismatch { workflow_id, manifest_id }
+                if *workflow_id == id_a && *manifest_id == id_b),
+            "got {error}",
+        );
+        // Both manifests are untouched.
+        assert_eq!(store.load(&id_a).unwrap().manifest, manifest_a);
+        assert_eq!(store.load(&id_b).unwrap().manifest, manifest_b);
+    }
+
+    #[test]
+    fn save_manifest_rejects_a_non_v1_schema_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, mut manifest) = created(&store, "w");
+        manifest.schema_version = 2;
+
+        let error = store.save_manifest(&id, &manifest).unwrap_err();
+        assert!(
+            matches!(error, StoreError::UnsupportedSchemaVersion(2)),
+            "got {error}",
+        );
+        // The stored manifest keeps version 1 and stays loadable.
+        assert_eq!(store.load(&id).unwrap().manifest.schema_version, 1);
+    }
+
+    #[test]
+    fn a_missing_event_log_fails_load_instead_of_reporting_empty() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, _) = created(&store, "w");
+        store
+            .append_event(&id, &sample_click_event("evt_0001"), &sample_shots())
+            .unwrap();
+        fs::remove_file(temp.path().join(&id).join(EVENTS_FILE)).unwrap();
+
+        let error = store.load(&id).unwrap_err();
+        assert!(matches!(error, StoreError::Io { .. }), "got {error}");
+        // The listing still shows the workflow: its name and creation time
+        // come from the intact manifest.
+        let list = store.list().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, id);
     }
 
     #[test]
