@@ -122,6 +122,27 @@ input, textarea, select { font: inherit; color: inherit; }
 .vb-meta { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; margin-top: 12px; font-size: 13px; }
 .vb-meta dt { color: #8b8b93; } .vb-meta dd { margin: 0; }
 
+/* ---------- Save-recording modal ---------- */
+.modal-scrim {
+  position: fixed; inset: 0; background: #000a; display: grid; place-items: center; z-index: 50;
+}
+.modal {
+  background: #2a2a2f; border: 1px solid #3c3c42; border-radius: 14px;
+  padding: 22px 24px; width: 420px; box-shadow: 0 12px 40px #000c;
+}
+.modal h3 { margin: 0 0 8px; }
+.modal p { margin: 0 0 14px; color: #a8a8b0; font-size: 13px; line-height: 1.45; }
+.modal input {
+  width: 100%; background: #1c1c1f; border: 1px solid #444; border-radius: 8px;
+  padding: 9px 11px; font-size: 15px; font-weight: 600;
+}
+.modal-save {
+  margin-top: 14px; width: 100%; background: #4670d8; color: #fff; border: none;
+  border-radius: 8px; padding: 10px; font-weight: 700; font-size: 15px;
+}
+.rec-dot { color: #ff5252; animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+
 /* ---------- Landing page ---------- */
 .home-root { min-height: 100%; }
 .home-bar {

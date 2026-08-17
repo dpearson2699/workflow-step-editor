@@ -1,7 +1,7 @@
-// PROTOTYPE — throwaway. Three variants of the workflow step review UI,
-// switchable via ?variant= on this single route. Branch: prototype/map-1-8.
-// Wayfinder ticket: dpearson2699/workflow-step-editor#8.
-import { useState } from 'react';
+// PROTOTYPE — throwaway. Review-UI variants (?variant=) plus the D app flow:
+// landing → record (live streaming rows) → stop → naming dialog → review.
+// Branch: prototype/map-1-8. Wayfinder ticket: dpearson2699/workflow-step-editor#8.
+import { useRef, useState } from 'react';
 import type { Permissions, StepData } from './data';
 import { initialSteps } from './data';
 import Home from './Home';
@@ -12,6 +12,21 @@ import VariantC from './variants/VariantC';
 import VariantD from './variants/VariantD';
 
 const VARIANTS = ['A', 'B', 'C', 'D'];
+
+function NameModal(props: { stepCount: number; onSave: (name: string) => void }) {
+  const [name, setName] = useState(() =>
+    'Recording — ' + new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }));
+  return (
+    <div className="modal-scrim">
+      <div className="modal">
+        <h3>Save recording</h3>
+        <p>{props.stepCount} steps captured. Events are already on disk — naming finishes the save, and edits save automatically from here on.</p>
+        <input autoFocus value={name} onChange={e => setName(e.target.value)} onFocus={e => e.target.select()} />
+        <button className="modal-save" onClick={() => props.onSave(name)}>Save</button>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [variant, setVariantState] = useState(() =>
@@ -33,8 +48,29 @@ export default function App() {
   };
 
   const [steps, setSteps] = useState<StepData[]>(initialSteps);
+  const [wfName, setWfName] = useState('Approve invoice');
   const [recording, setRecording] = useState(false);
+  const [naming, setNaming] = useState(false);
   const [perms, setPerms] = useState<Permissions>({ input: true, accessibility: true, screen: false });
+  const recTimer = useRef<number | null>(null);
+
+  const startRecording = () => {
+    setSteps([]);
+    setWfName('New Recording');
+    setView('detail');
+    setRecording(true);
+    let i = 0;
+    recTimer.current = window.setInterval(() => {
+      i += 1;
+      if (i <= initialSteps.length) setSteps(ss => [...ss, initialSteps[i - 1]]);
+      if (i >= initialSteps.length && recTimer.current) clearInterval(recTimer.current);
+    }, 1400);
+  };
+  const stopRecording = () => {
+    if (recTimer.current) clearInterval(recTimer.current);
+    setRecording(false);
+    setNaming(true);
+  };
 
   const p = {
     steps,
@@ -42,23 +78,30 @@ export default function App() {
       setSteps(ss => ss.map(s => (s.id === id ? { ...s, ...patch } : s))),
     deleteStep: (id: string) => setSteps(ss => ss.filter(s => s.id !== id)),
     recording,
-    toggleRecording: () => setRecording(r => !r),
+    toggleRecording: () => (recording ? stopRecording() : startRecording()),
     perms,
     requestPerm: (k: keyof Permissions) =>
       setTimeout(() => setPerms(pp => ({ ...pp, [k]: true })), 600) && undefined,
   };
 
+  const openWorkflow = () => {
+    setSteps(initialSteps);
+    setWfName('Approve invoice');
+    setView('detail');
+  };
+
   const v =
     variant === 'D' && view === 'home'
-      ? <Home openWorkflow={() => setView('detail')} recording={recording}
+      ? <Home openWorkflow={openWorkflow} recording={recording}
           toggleRecording={p.toggleRecording} perms={perms} requestPerm={p.requestPerm} />
       : variant === 'B' ? <VariantB {...p} />
       : variant === 'C' ? <VariantC {...p} />
-      : variant === 'D' ? <VariantD {...p} onBack={() => setView('home')} />
+      : variant === 'D' ? <VariantD {...p} wfName={wfName} onBack={() => setView('home')} />
       : <VariantA {...p} />;
   return (
     <>
       {v}
+      {naming && <NameModal stepCount={steps.length} onSave={n => { setWfName(n); setNaming(false); }} />}
       <PrototypeSwitcher variants={VARIANTS} current={VARIANTS.includes(variant) ? variant : 'A'} onChange={setVariant} />
     </>
   );
