@@ -121,6 +121,19 @@ Reject before activation on any of:
 - Unproved recovery wake
 - Unavailable requested route
 
+## Early review start (operator correction, 2026-08-17)
+
+Do not leave an open PR unreviewed while a serial post-handoff step runs.
+The exact-head review task launches at the implementation attention
+handoff, bound to the published code head — in parallel with any
+user-run gate and before the bundle-snapshot carry. When the snapshot
+carry later advances the PR head, the review does not restart: it
+verifies the carry diff is confined to the authenticated lifecycle path,
+rotates its lease to the new head, and folds gate results into its
+verdict when they arrive. Only a code-changing remediation resets review
+depth. Serializing review behind a gate or carry that does not change
+reviewable code is a defect.
+
 ## Review-comment and CI feedback loop
 
 Captured live from Claude Code's native "Auto-fix CI & address comments"
