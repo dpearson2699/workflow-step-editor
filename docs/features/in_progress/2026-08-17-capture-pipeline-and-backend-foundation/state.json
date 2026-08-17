@@ -155,7 +155,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 58,
+  "revision": 61,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -431,7 +431,7 @@
         "PR-02"
       ],
       "execution_mode": "serial",
-      "head_sha": null,
+      "head_sha": "bc1fc6557081a231a56fd207caf41cf8863e9e42",
       "id": "PR-03",
       "implementation_task": {
         "adoption_start_sha": "7ba62c7cfba6e2e91dc014e9f415fb5557005d75",
@@ -497,9 +497,9 @@
       "plan": "pr/PR-03/PLAN.md",
       "plan_checkpoint_sha": "d7f0b55d5aa5261f0b664cecd90ef774d16716f9",
       "plan_digest": "bbc1ef452f55b8a553925b35ac4e8b87885b1ebe79cda3cd2c16b05b8d67c5e5",
-      "pr": null,
+      "pr": 23,
       "premerge_drift": null,
-      "receipt": null,
+      "receipt": "pr/PR-03/RECEIPT.md",
       "replacement_lineage": null,
       "review_task": {
         "adoption_start_sha": null,
@@ -550,7 +550,7 @@
       },
       "revision_epoch": 1,
       "revision_history": [],
-      "status": "in_progress",
+      "status": "pr_open",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Real macOS capture adapter, dev trigger, and proven-gate readiness",
@@ -640,7 +640,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T19:39:41Z",
+  "updated_at": "2026-08-17T20:31:12Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }
