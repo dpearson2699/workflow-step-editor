@@ -66,17 +66,14 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": null,
-  "observation_epoch_high_water": 3,
-  "observed_main_sha": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
+  "observation_epoch_high_water": 7,
+  "observed_main_sha": "f3a587659533ad366c6c8cedd10f4d08a8ad8752",
   "parallel_assessments": [],
-  "phase": "delivery",
+  "phase": "plan",
   "planning": {
     "active_response_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
     "blind_completeness": null,
-    "blind_requirement": {
-      "plan_digest": "860ca87269d59a3af4f6dd34e4dae61af3c30f6e6ba353ad3f39929c8e991608",
-      "requirement": "required_multi_slice_reconciliation"
-    },
+    "blind_requirement": null,
     "current_plan_digest": "860ca87269d59a3af4f6dd34e4dae61af3c30f6e6ba353ad3f39929c8e991608",
     "current_source_commit": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
     "current_specification_digest": "b7ee3357e73086c538e8503546af7fc266034353111740f046814bbe0041a3c3",
@@ -155,22 +152,22 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 21,
+  "revision": 33,
   "schema": "spec-workflow-state",
   "slices": [
     {
       "base_ref": "origin/main",
-      "base_sha": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
+      "base_sha": "029bbe6c6524befd4d62be7f38f8d80a6ed6691d",
       "branch": "feat/pr-01-scaffold-permissions",
       "depends_on": [],
       "execution_mode": "serial",
-      "head_sha": "7788bbf70410336fbe20e2a8c7b9433a32f2687e",
+      "head_sha": "3b0d0b0c7afd5ca4f55f435a773694514207f6f8",
       "id": "PR-01",
       "implementation_task": {
-        "adoption_start_sha": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
-        "attempt": 1,
-        "authorization_digest": "0137973e5a36357c51ad09319929111939c542f183e80e4cede95ffe6a5411be",
-        "bound_sha": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
+        "adoption_start_sha": null,
+        "attempt": 0,
+        "authorization_digest": null,
+        "bound_sha": null,
         "branch_attachment_digest": null,
         "branch_attachment_epoch": null,
         "branch_attachment_receipt": null,
@@ -178,7 +175,7 @@
         "branch_release_epoch": null,
         "branch_release_receipt": null,
         "changed_paths_digest": null,
-        "client_thread_id": "a6352089879840c52",
+        "client_thread_id": null,
         "companion_probe_digest": null,
         "companion_probe_epoch": null,
         "companion_probe_receipt": null,
@@ -189,7 +186,7 @@
         "head_adoption_terminal_lineage": [],
         "implementation_receipt": null,
         "implementation_receipt_digest": null,
-        "launch_marker": "feature/PR-01/implementation/1",
+        "launch_marker": null,
         "output_head_sha": null,
         "output_pr": null,
         "replacement_observation_digest": null,
@@ -203,18 +200,18 @@
         "review_receipt_digest": null,
         "review_task_quiescence_digest": null,
         "snapshot_authorization": null,
-        "state": "active",
+        "state": "unbound",
         "stop_proof_digest": null,
         "stop_proof_epoch": null,
         "stop_proof_receipt": null,
-        "task_worktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a6352089879840c52",
+        "task_worktree": null,
         "terminal_result": null,
-        "thread_id": "local_agent:a6352089879840c52",
+        "thread_id": null,
         "verification_digest": null,
         "verification_verdict": null
       },
       "merge_epoch": null,
-      "merge_main_sha": null,
+      "merge_main_sha": "f3a587659533ad366c6c8cedd10f4d08a8ad8752",
       "merge_receipt": null,
       "merge_receipt_digest": null,
       "owned_paths": [
@@ -234,7 +231,7 @@
       "plan_digest": "bdd21fad07d1e80e23a7a08d6b95e01b31dfacfa7b540322c8939f8c866e7205",
       "pr": 17,
       "premerge_drift": null,
-      "receipt": "pr/PR-01/RECEIPT.md",
+      "receipt": null,
       "replacement_lineage": null,
       "review_task": {
         "adoption_start_sha": null,
@@ -285,16 +282,16 @@
       },
       "revision_epoch": 1,
       "revision_history": [],
-      "status": "pr_open",
+      "status": "merged",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Tauri scaffold, signed dev build, and permission commands",
       "wave": 1
     },
     {
-      "base_ref": null,
-      "base_sha": null,
-      "branch": null,
+      "base_ref": "origin/main",
+      "base_sha": "f3a587659533ad366c6c8cedd10f4d08a8ad8752",
+      "branch": "feat/pr-02-domain-core",
       "depends_on": [
         "PR-01"
       ],
@@ -424,9 +421,9 @@
       "wave": 2
     },
     {
-      "base_ref": null,
-      "base_sha": null,
-      "branch": null,
+      "base_ref": "origin/main",
+      "base_sha": "f3a587659533ad366c6c8cedd10f4d08a8ad8752",
+      "branch": "feat/pr-03-capture-pipeline",
       "depends_on": [
         "PR-02"
       ],
@@ -550,7 +547,7 @@
       },
       "revision_epoch": 0,
       "revision_history": [],
-      "status": "pending",
+      "status": "blocked",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Real macOS capture adapter, dev trigger, and proven-gate readiness",
@@ -640,7 +637,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T16:21:53Z",
+  "updated_at": "2026-08-17T17:15:34Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }

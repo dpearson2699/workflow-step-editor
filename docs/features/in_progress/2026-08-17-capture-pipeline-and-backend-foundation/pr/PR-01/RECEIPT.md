@@ -77,4 +77,12 @@
 
 ## Follow-ups
 
-- none
+- https://github.com/dpearson2699/workflow-step-editor/issues/18 |
+  fingerprint 534966ce73c17dcf7d9dec3de1fbc3c2e2345995c92f4a2fe6a077877e747662 |
+  type harness | verified state CLOSED | fingerprint comparison exact |
+  severity P2 | labels verified | disposition closed-complete |
+  labels reconciled yes | source root gh refetch after closure (marker
+  search unique; authoritative view shows CLOSED with harness+P2).
+  Harness defect found operationally during review startup; fixed straight
+  to main (1f4891a guard, a860c29 audit reduction) per the user's
+  time-crunch direction.
