@@ -1,0 +1,19 @@
+#!/bin/zsh
+# Retry wrapper for work-state calls. Retries ONLY transient GitHub/network
+# failures; deterministic validation rejections fail fast on first sight.
+# Usage: ws-retry.sh <max_tries> <sleep_seconds> -- <command...>
+max=$1; pause=$2; shift 3
+for i in $(seq 1 "$max"); do
+  out=$("$@" 2>&1)
+  if printf '%s' "$out" | grep -q '"revision"'; then
+    printf '%s\n' "$out"
+    exit 0
+  fi
+  if ! printf '%s' "$out" | grep -qE 'cannot query|unknown owner type|HTTP 5[0-9][0-9]|timed out|Could not resolve host|connection reset'; then
+    printf 'non-retryable: %s\n' "$(printf '%s' "$out" | head -1)" >&2
+    exit 2
+  fi
+  printf 'retry %s/%s: %s\n' "$i" "$max" "$(printf '%s' "$out" | head -1)" >&2
+  [ "$i" -lt "$max" ] && sleep "$pause"
+done
+exit 1
