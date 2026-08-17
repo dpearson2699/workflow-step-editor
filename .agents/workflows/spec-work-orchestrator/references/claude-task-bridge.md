@@ -121,6 +121,28 @@ Reject before activation on any of:
 - Unproved recovery wake
 - Unavailable requested route
 
+## Native CI monitoring and auto-fix
+
+Claude Code's PR panel offers an operator-side "Auto-fix CI & address
+comments" control on a PR the root session tracks. Only the operator can
+enable it; no model-facing tool toggles it. Under this adapter it is the
+preferred owner for CI-failure remediation and review-comment addressing on
+slice PRs, replacing any review-task CI-fix loop:
+
+- After a slice PR opens, the root surfaces the PR to the operator so they
+  can enable the control. When it is enabled, the review task does not run
+  its own CI-wait or CI-fix machinery; it reviews, remediates its own
+  semantic findings inside its lease, and leaves CI failures and external
+  comments to the native feature.
+- A native auto-fix push is a coordinator-side head advance. Before clean
+  finalization the review task adopts it through the existing
+  `review-lease advance` path (ancestry-checked); head-bound evidence goes
+  stale per the normal rule, and an advance that fails ancestry or
+  frozen-path checks fails closed instead of being force-resolved.
+- When the control is not enabled or the panel is unavailable, the
+  existing review-owned behavior stands unchanged. The Codex adapter has
+  no equivalent feature and is unaffected.
+
 ## Callback policy
 
 `work-state` remains the state authority. UI notifications and hooks are wake
