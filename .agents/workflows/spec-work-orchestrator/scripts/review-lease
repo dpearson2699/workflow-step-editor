@@ -546,10 +546,6 @@ def lease_lock(path: Path):
         raise LeaseError(f"cannot lock review lease: {error}") from error
     finally:
         if "descriptor" in locals():
-            try:
-                os.unlink(lock_path)
-            except FileNotFoundError:
-                pass
             os.close(descriptor)
 
 
