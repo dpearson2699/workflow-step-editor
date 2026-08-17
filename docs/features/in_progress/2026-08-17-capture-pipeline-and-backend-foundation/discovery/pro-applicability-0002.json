@@ -1,0 +1,25 @@
+{
+  "schema": "spec-work-pro-applicability",
+  "workKind": "feature",
+  "workId": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "workBundle": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "responseDigest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
+  "fromDigest": "c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32",
+  "toDigest": "b7ee3357e73086c538e8503546af7fc266034353111740f046814bbe0041a3c3",
+  "fromSourceCommit": "902c158a146b1a4c8b507804d17fd6f026cc75ff",
+  "toSourceCommit": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
+  "classification": "non_material",
+  "changedPaths": [
+    "FEATURE.md"
+  ],
+  "recommendationsChanged": false,
+  "implementationSlicesChanged": false,
+  "validationResult": "prior_evidence_applicable",
+  "evidenceAnchors": [
+    "FEATURE.md",
+    "pr/PR-03/PLAN.md"
+  ],
+  "semanticDiffSummary": "One Doc Authority row clarification: the coordinator root, not a slice, writes any new product-language glossary term, and implementation vocabulary stays out of CONTEXT.md. The same commit also carries plan-only edits (PR-03 no-eligible-frame policy) that are outside the approved source inventory.",
+  "applicabilityRationale": "The clarification assigns an existing documentation obligation to its existing owner (the root's decision-closure transaction) without changing any goal, scope, behavior, acceptance outcome, or architectural recommendation the captured response analyzed; the prior response remains fully applicable.",
+  "assessmentEpoch": 2
+}
