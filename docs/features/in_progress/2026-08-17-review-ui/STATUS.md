@@ -4,24 +4,24 @@
 - Work kind: `feature`
 - Work ID: `2026-08-17-review-ui`
 - Phase: `plan`
-- Revision: `4`
-- Observed origin/main: `not recorded`
+- Revision: `9`
+- Observed origin/main: `439ecaae197e005874771694358a65b923cb4bd7`
 - Task roster: `efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18`
 - Active slices: `none`
-- Last update: `2026-08-17T23:07:51Z`
+- Last update: `2026-08-17T23:46:01Z`
 
 ## ChatGPT Pro Planning Evidence
 
-- Current specification digest: `7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6`
-- Current source commit: `1b659697b3bf5e7fb2b4bf909d377392e162b0f3`
+- Current specification digest: `cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e`
+- Current source commit: `439ecaae197e005874771694358a65b923cb4bd7`
 - Active response: `3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833`
 - Generated for: `7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6`
-- Accepted for: `7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6`
+- Accepted for: `cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e`
 - Disposition: `clean`
-- Latest applicability: `not recorded`
+- Latest applicability: `prior_evidence_applicable`
 - Fresh primary required: `no`
 - Explicit Pro primary waiver: `not recorded`
-- Blind completeness: `decision required`
+- Blind completeness: `required (required_multi_slice_reconciliation)`
 
 ## Slices
 

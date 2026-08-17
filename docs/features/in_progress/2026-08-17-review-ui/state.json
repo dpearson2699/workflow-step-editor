@@ -35,7 +35,7 @@
     },
     "AC-004": {
       "assignment_digest": null,
-      "criterion_digest": "8adccd767b123828fcd088e1af5da99996572a8a6597324858b0968ae866c1af",
+      "criterion_digest": "8a98119b4b2f94935f0dfd8a6cd12ab902c2224c8eb7b4439c4ac2033632d0a1",
       "evidence": [],
       "evidence_digests": {},
       "locked": false,
@@ -46,7 +46,7 @@
     },
     "AC-005": {
       "assignment_digest": null,
-      "criterion_digest": "a94326bcae54f48ba396271a657890fcbbee06f305155723f45b8faa13959347",
+      "criterion_digest": "347d05a71d0e13ddb842ab01d0f0dfba0b1e06bad6a65b95e1552ff3fc11b057",
       "evidence": [],
       "evidence_digests": {},
       "locked": false,
@@ -66,24 +66,56 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": null,
-  "observation_epoch_high_water": 0,
-  "observed_main_sha": null,
+  "observation_epoch_high_water": 1,
+  "observed_main_sha": "439ecaae197e005874771694358a65b923cb4bd7",
   "parallel_assessments": [],
   "phase": "plan",
   "planning": {
     "active_response_digest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833",
     "blind_completeness": null,
-    "blind_requirement": null,
-    "current_plan_digest": null,
-    "current_source_commit": "1b659697b3bf5e7fb2b4bf909d377392e162b0f3",
-    "current_specification_digest": "7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6",
+    "blind_requirement": {
+      "plan_digest": "a2280dd871308524c49210cbbfa1e25223597388be2e14cf7748e5d697e0531a",
+      "requirement": "required_multi_slice_reconciliation"
+    },
+    "current_plan_digest": "a2280dd871308524c49210cbbfa1e25223597388be2e14cf7748e5d697e0531a",
+    "current_source_commit": "439ecaae197e005874771694358a65b923cb4bd7",
+    "current_specification_digest": "cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e",
     "evidence": [
       {
-        "accepted_for_digest": "7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6",
-        "accepted_source_commit": "1b659697b3bf5e7fb2b4bf909d377392e162b0f3",
+        "accepted_for_digest": "cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e",
+        "accepted_source_commit": "439ecaae197e005874771694358a65b923cb4bd7",
         "annotations": [],
         "answer_artifact": "discovery/pro-lifecycle-evidence/aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5.md",
-        "applicability": [],
+        "applicability": [
+          {
+            "changed_paths": [
+              "ACCEPTANCE.md",
+              "DECISIONS.md",
+              "FEATURE.md",
+              "INTERVIEW.md"
+            ],
+            "classification": "non_material",
+            "correction_receipt": null,
+            "correction_receipt_digest": null,
+            "epoch": 1,
+            "evidence_anchors": [
+              "DECISIONS.md",
+              "review/plan-consensus-log.md",
+              "discovery/pro-lifecycle-evidence/aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5.md"
+            ],
+            "from_digest": "7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6",
+            "from_source_commit": "1b659697b3bf5e7fb2b4bf909d377392e162b0f3",
+            "implementation_slices_changed": false,
+            "original_receipt": null,
+            "original_receipt_digest": null,
+            "receipt": "discovery/pro-applicability-0001.json",
+            "receipt_digest": "5e74f8cdfa79e6486aed1d486d5732d0ad8b71f3d5a3c75a3183600dd9ab9d49",
+            "recommendations_changed": false,
+            "to_digest": "cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e",
+            "to_source_commit": "439ecaae197e005874771694358a65b923cb4bd7",
+            "validation_result": "prior_evidence_applicable"
+          }
+        ],
         "contract_disposition": "clean",
         "generated_for_digest": "7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6",
         "generated_source_commit": "1b659697b3bf5e7fb2b4bf909d377392e162b0f3",
@@ -99,13 +131,13 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 4,
+  "revision": 9,
   "schema": "spec-workflow-state",
   "slices": [
     {
-      "base_ref": null,
-      "base_sha": null,
-      "branch": null,
+      "base_ref": "origin/main",
+      "base_sha": "439ecaae197e005874771694358a65b923cb4bd7",
+      "branch": "feat/pr-01-landing-page",
       "depends_on": [],
       "execution_mode": "serial",
       "head_sha": null,
@@ -167,14 +199,18 @@
         "package-lock.json",
         "package.json",
         "src",
-        "src-tauri",
+        "src-tauri/Cargo.lock",
+        "src-tauri/Cargo.toml",
+        "src-tauri/capabilities",
+        "src-tauri/src",
+        "src-tauri/tauri.conf.json",
         "tsconfig.json",
         "tsconfig.node.json",
         "vite.config.ts"
       ],
       "plan": "pr/PR-01/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "b32752f7a4963b5aa62b4986645da2ea657e7c1e03a7870319779dc089ca88d2",
+      "plan_digest": "fac1c511a04f6e60070081fe89a741c0c4cbb1183194757f9a74a8d561dead9a",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -235,9 +271,9 @@
       "wave": 1
     },
     {
-      "base_ref": null,
-      "base_sha": null,
-      "branch": null,
+      "base_ref": "origin/main",
+      "base_sha": "439ecaae197e005874771694358a65b923cb4bd7",
+      "branch": "feat/pr-02-detail-review",
       "depends_on": [
         "PR-01"
       ],
@@ -301,7 +337,7 @@
       ],
       "plan": "pr/PR-02/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "49d2a7c6e0bae0d37bcea5a8dc3de365f948f4916ae1470082bf4182d88c09e9",
+      "plan_digest": "7d5fc2552c24430ea50b8bc18b34f68a7864a5bcc844872e78d36a175fbc1228",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -358,13 +394,13 @@
       "status": "pending",
       "task_history": [],
       "terminal_freshness": null,
-      "title": "Detail review view with editing",
+      "title": "Detail review, editing, and saved-workflow deletion",
       "wave": 2
     },
     {
-      "base_ref": null,
-      "base_sha": null,
-      "branch": null,
+      "base_ref": "origin/main",
+      "base_sha": "439ecaae197e005874771694358a65b923cb4bd7",
+      "branch": "feat/pr-03-record-flow",
       "depends_on": [
         "PR-02"
       ],
@@ -423,12 +459,13 @@
       "merge_receipt": null,
       "merge_receipt_digest": null,
       "owned_paths": [
+        "README.md",
         "src",
         "src-tauri/src"
       ],
       "plan": "pr/PR-03/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "8196689b9deee1ef2f7faef770db249af1a883a2f5def4f0c0effc2bde590553",
+      "plan_digest": "9c7ce154a708e2f1c1336baaddf6cb8798a8cf7ac0e97e75212a1fbbac5d6e8d",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -485,7 +522,7 @@
       "status": "pending",
       "task_history": [],
       "terminal_freshness": null,
-      "title": "Record flow, draft save/discard, and hard deletion",
+      "title": "Record flow and draft save/discard",
       "wave": 3
     }
   ],
@@ -572,7 +609,7 @@
     ],
     "primary_digest": "efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18"
   },
-  "updated_at": "2026-08-17T23:07:51Z",
+  "updated_at": "2026-08-17T23:46:01Z",
   "work_id": "2026-08-17-review-ui",
   "work_kind": "feature"
 }

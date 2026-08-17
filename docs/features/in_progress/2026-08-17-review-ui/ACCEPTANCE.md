@@ -3,12 +3,14 @@
 ## AC-001: Full record-review-save-delete loop on a real recording
 
 - Ownership: slice
-- Invariant: With the dev build, a user can record across two apps while
-  steps stream live, stop, review the draft, save it with a name, reopen it
-  from the landing list, edit titles, descriptions, and classifications,
-  delete a step, delete a saved workflow through the confirmation, and
-  reveal a workflow in Finder — and the UI matches the pinned prototype
-  direction (`prototype/map-1-8` variant D).
+- Invariant: With the locally built signed app (the same signed-artifact
+  path the capture proven gate used, because macOS TCC binds permission
+  grants to the signed bundle identity), a user can record across two apps
+  while steps stream live, stop, review the draft, save it with a name,
+  reopen it from the landing list, edit titles, descriptions, and
+  classifications, delete a step, delete a saved workflow through the
+  confirmation, and reveal a workflow in Finder — and the UI matches the
+  pinned prototype direction (`prototype/map-1-8` variant D).
 - Owning seam: The running app end to end — capture channel, storage, and
   the review UI together.
 - Evidence required: User-run final design acceptance under

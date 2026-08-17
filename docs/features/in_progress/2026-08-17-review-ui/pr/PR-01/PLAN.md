@@ -29,9 +29,11 @@ with `‹ Workflows` back. The dev-only capture trigger is replaced.
   `src-tauri/tauri.conf.json` to fit the variant D composition. Introduce
   the frontend component-test harness (vitest, @testing-library/react,
   jsdom) used by this and later slices, and establish the
-  repository-native UI-proof route (candidate direction: launch the real
-  dev build and observe the proof target through unchanged production
-  composition — for example through the app's macOS accessibility tree —
+  repository-native UI-proof route (candidate direction: launch the
+  locally built signed app — the signed artifact, not an unsigned debug
+  binary, because macOS TCC binds permission grants to the signed bundle
+  identity — and observe the proof target through unchanged production
+  composition, for example through the app's macOS accessibility tree,
   emitting the typed `project-ui-proof` artifact; component tests do not
   satisfy this gate). Summary DTO guidance: duration is integer
   milliseconds and optional; the screenshot read is a command taking

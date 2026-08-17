@@ -31,9 +31,15 @@ and names the workflow. The app is demoable end to end.
   incomplete); the frontend decides reviewability by loading the
   workflow, not by extra envelope fields, and a load failure surfaces the
   error on the landing page.
+  Add the bundle-qualified final-gate material under `dev/review-ui-gate/`
+  (the scripted final human loop for AC-001 on the locally built signed
+  app — macOS TCC binds permission grants to the signed bundle identity)
+  and add a one-line header note to `dev/proven-gate/script.md` naming it
+  as the capture-pipeline bundle's historical gate so its AC-001/PR-03
+  labels cannot be confused with this bundle's.
   Complete the final product documentation (README feature summary and
   usage walkthrough) against the actually shipped behavior.
-- Owned paths: `README.md`, `src`, `src-tauri/src`
+- Owned paths: `README.md`, `dev`, `src`, `src-tauri/src`
 
 ## Slice Cohesion
 

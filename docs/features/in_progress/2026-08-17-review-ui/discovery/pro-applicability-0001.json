@@ -1,0 +1,29 @@
+{
+  "schema": "spec-work-pro-applicability",
+  "workKind": "feature",
+  "workId": "2026-08-17-review-ui",
+  "workBundle": "2026-08-17-review-ui",
+  "responseDigest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833",
+  "fromDigest": "7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6",
+  "toDigest": "cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e",
+  "fromSourceCommit": "1b659697b3bf5e7fb2b4bf909d377392e162b0f3",
+  "toSourceCommit": "439ecaae197e005874771694358a65b923cb4bd7",
+  "classification": "non_material",
+  "changedPaths": [
+    "ACCEPTANCE.md",
+    "DECISIONS.md",
+    "FEATURE.md",
+    "INTERVIEW.md"
+  ],
+  "recommendationsChanged": false,
+  "implementationSlicesChanged": false,
+  "validationResult": "prior_evidence_applicable",
+  "evidenceAnchors": [
+    "DECISIONS.md",
+    "review/plan-consensus-log.md",
+    "discovery/pro-lifecycle-evidence/aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5.md"
+  ],
+  "semanticDiffSummary": "The specification delta adopts the captured Pro response's own recommendations and the cross-model consensus corrections: DEC-005 sharpened to the narrow crash guarantee the response identified in run_worker; new DEC-006 summary presentation defaults, DEC-007 scoped backend screenshot read, DEC-008 manifest-mutation serialization with an active-workflow guard, DEC-009 live-row timestamps and the failed-recording draft destination; FEATURE.md backend-delta synchronization; AC-004 gains the decided failure destinations and draft failure contracts; AC-005 evidence corrected to tests plus the AC-001 human loop; interview entries GA-005/GA-006 record the closures.",
+  "applicabilityRationale": "Every change implements what the immutable Pro response itself recommended (mutation lock, UI-proof route obligation, presentation defaults, crash-semantics narrowing) or folds consensus-loop corrections inside the same accepted goal and three-slice delivery; no accepted goal, scope boundary, or architectural recommendation the response analyzed was altered, so the prior response remains fully applicable to the revised specification without a fresh primary.",
+  "assessmentEpoch": 1
+}
