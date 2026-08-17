@@ -403,7 +403,7 @@ launching, observing, steering, replacing, reviewing, or closing a task:
 - Verify focused gates before broader gates. Record typed implementation,
   branch, review, merge, acceptance, and quiescence evidence through the bridge.
 - Give each review task one initial exact attachment and one task-local rolling
-  lease. Remediation and clean base-sync pushes advance that lease without
+  lease, held at a path outside the task worktree. Remediation and clean base-sync pushes advance that lease without
   parent reattachment; the root consumes one terminal lease receipt.
 - If an ownerless PR receives an exact clean base-sync merge after release but
   before initial review attachment, consume the typed head-adoption receipt into

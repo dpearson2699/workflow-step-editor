@@ -404,6 +404,16 @@ def require_clean(root: Path) -> None:
         raise LeaseError("review worktree is not clean")
 
 
+def require_lease_outside_worktree(lease: Path, root: Path) -> None:
+    target = lease.expanduser().absolute()
+    if target.is_relative_to(root):
+        raise LeaseError(
+            "review lease must live outside the review worktree so its own "
+            "lease and lock files can never dirty the checkout it validates; "
+            "pass a task-local --lease path outside the worktree"
+        )
+
+
 def remote_url(root: Path, remote: str) -> str:
     value = run_git(root, "remote", "get-url", remote).stdout.strip()
     if not value:
@@ -536,6 +546,10 @@ def lease_lock(path: Path):
         raise LeaseError(f"cannot lock review lease: {error}") from error
     finally:
         if "descriptor" in locals():
+            try:
+                os.unlink(lock_path)
+            except FileNotFoundError:
+                pass
             os.close(descriptor)
 
 
@@ -670,6 +684,7 @@ def command_activate(arguments: argparse.Namespace) -> dict:
     attachment_path = Path(arguments.attachment)
     attachment, activation_digest = validate_attachment(attachment_path)
     root = Path(attachment["taskWorktree"]).resolve(strict=True)
+    require_lease_outside_worktree(Path(arguments.lease), root)
     require_clean(root)
     if common_dir(root) != attachment["gitCommonDir"]:
         raise LeaseError("activation Git common directory mismatch")
