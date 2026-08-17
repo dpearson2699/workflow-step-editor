@@ -6,7 +6,10 @@ import { useState } from 'react';
 import type { VariantProps } from '../data';
 import { CLASSIFICATIONS, fmtTime } from '../data';
 
-export default function VariantD(p: VariantProps & { onBack?: () => void; wfName?: string }) {
+export default function VariantD(p: VariantProps & {
+  onBack?: () => void; wfName?: string; draft?: boolean;
+  onSaveDraft?: () => void; onDiscardDraft?: () => void;
+}) {
   const [selId, setSelId] = useState(p.steps[0]?.id ?? '');
   const [shot, setShot] = useState<'full' | 'window' | 'element'>('full');
   const sel = p.steps.find(s => s.id === selId) ?? p.steps[0];
@@ -17,15 +20,25 @@ export default function VariantD(p: VariantProps & { onBack?: () => void; wfName
         <div className="vb-side-head">
           <div>
             {p.onBack && <button className="vb-back" onClick={p.onBack}>‹ Workflows</button>}
-            <div className="vb-brand">{p.recording && <span className="rec-dot">●</span>} {p.wfName ?? 'Approve invoice'}</div>
+            <div className="vb-brand">
+              {p.recording && <span className="rec-dot">●</span>} {p.wfName ?? 'Approve invoice'}
+              {p.draft && <span className="draft-badge">draft</span>}
+            </div>
           </div>
-          <button
-            className={p.recording ? 'rec-btn on' : 'rec-btn'}
-            disabled={!p.perms.input || !p.perms.accessibility || !p.perms.screen}
-            onClick={p.toggleRecording}
-          >
-            {p.recording ? '■ Stop' : '● Record'}
-          </button>
+          {p.draft ? (
+            <div className="draft-actions">
+              <button className="discard-btn" onClick={p.onDiscardDraft}>Discard</button>
+              <button className="save-btn" onClick={p.onSaveDraft}>Save…</button>
+            </div>
+          ) : (
+            <button
+              className={p.recording ? 'rec-btn on' : 'rec-btn'}
+              disabled={!p.perms.input || !p.perms.accessibility || !p.perms.screen}
+              onClick={p.toggleRecording}
+            >
+              {p.recording ? '■ Stop' : '● Record'}
+            </button>
+          )}
         </div>
         <ul className="vb-list">
           {p.steps.map((s, i) => (

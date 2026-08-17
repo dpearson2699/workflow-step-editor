@@ -50,6 +50,7 @@ export default function App() {
   const [steps, setSteps] = useState<StepData[]>(initialSteps);
   const [wfName, setWfName] = useState('Approve invoice');
   const [recording, setRecording] = useState(false);
+  const [draft, setDraft] = useState(false);
   const [naming, setNaming] = useState(false);
   const [perms, setPerms] = useState<Permissions>({ input: true, accessibility: true, screen: false });
   const recTimer = useRef<number | null>(null);
@@ -69,7 +70,14 @@ export default function App() {
   const stopRecording = () => {
     if (recTimer.current) clearInterval(recTimer.current);
     setRecording(false);
-    setNaming(true);
+    setDraft(true);
+  };
+  const discardDraft = () => {
+    if (window.confirm('Discard this recording? Its captured events and screenshots will be removed.')) {
+      setDraft(false);
+      setSteps([]);
+      setView('home');
+    }
   };
 
   const p = {
@@ -96,12 +104,14 @@ export default function App() {
           toggleRecording={p.toggleRecording} perms={perms} requestPerm={p.requestPerm} />
       : variant === 'B' ? <VariantB {...p} />
       : variant === 'C' ? <VariantC {...p} />
-      : variant === 'D' ? <VariantD {...p} wfName={wfName} onBack={() => setView('home')} />
+      : variant === 'D' ? <VariantD {...p} wfName={wfName} draft={draft}
+          onSaveDraft={() => setNaming(true)} onDiscardDraft={discardDraft}
+          onBack={() => setView('home')} />
       : <VariantA {...p} />;
   return (
     <>
       {v}
-      {naming && <NameModal stepCount={steps.length} onSave={n => { setWfName(n); setNaming(false); }} />}
+      {naming && <NameModal stepCount={steps.length} onSave={n => { setWfName(n); setNaming(false); setDraft(false); }} />}
       <PrototypeSwitcher variants={VARIANTS} current={VARIANTS.includes(variant) ? variant : 'A'} onChange={setVariant} />
     </>
   );
