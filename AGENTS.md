@@ -62,8 +62,11 @@ harness project.
 - Use `.agents/skills/wayfinder/SKILL.md` only when the user explicitly asks
   to chart or work a wayfinder map: a fog-wrapped effort too big for one
   session, planned as decision tickets on GitHub. It is planning only and
-  never starts a bundle; route each cleared, nameable capability into the
-  spec-work workflow.
+  never starts a bundle. At map completion it mints one `enhancement`
+  backlog issue per user-confirmed cleared capability and projects them
+  onto the Spec Work board, creating the board when absent; bundle
+  initialization later adopts each as its owning issue. Route each
+  cleared, nameable capability into the spec-work workflow.
 - Narrow standalone edits and review-only requests do not start a spec-work
   bundle merely because the workflow is available.
 

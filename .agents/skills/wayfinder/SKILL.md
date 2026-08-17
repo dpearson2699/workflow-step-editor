@@ -8,7 +8,9 @@ description: >-
   breadth-first, and creates the map issue plus child decision tickets with
   native blocking edges. Working claims one frontier ticket per session,
   resolves it by its type (grilling, research, prototype, task), and
-  graduates fog into new tickets. Planning only: it produces decisions, not
+  graduates fog into new tickets. At map completion it mints one
+  enhancement backlog issue per confirmed capability onto the Spec Work
+  board. Planning only: it produces decisions, not
   deliverables; route the cleared way into the spec-work workflow. Do not
   use it for a nameable single feature (spec orchestrator), a defect
   (project-debugging), or an architecture survey
@@ -319,13 +321,33 @@ to be editing the tracker concurrently.
 
 ### Reaching the destination
 
-An empty frontier is not by itself completion. After resolving a ticket,
+An empty frontier is not by itself completion. After resolving a ticket
+— or immediately, when a loaded map has nothing left to resolve —
 classify the map:
 
 - **Complete** — no open child tickets, **Not yet specified** is empty, and
-  the destination is answerable from Decisions-so-far. Post a closing
-  comment on the map summarizing the destination and pointing at the exit
-  route, then close the map issue.
+  the destination is answerable from Decisions-so-far. Then exit in three
+  steps. First, derive the cleared, nameable capabilities from
+  Decisions-so-far and present the list to the user — each capability's
+  name, one-line scope, and the decision tickets it rests on — for one
+  confirmation; the user may rename, merge, split, or drop entries. A
+  capability the user keeps but marks optional is still in scope and
+  stays on the list; **Out of scope** entries never mint. When marker
+  discovery finds issues already minted for this map, present them as
+  already-minted entries: dropping one, or renaming it to a different
+  slug, closes the old issue with an explanatory comment rather than
+  leaving an orphan, while a rename that keeps the same slug edits the
+  existing issue's title in place. Second,
+  mint and project the confirmed list per the map-exit contract in
+  `../../workflows/spec-work-orchestrator/references/github-board-sync.md`:
+  one `enhancement` backlog issue per capability as a `Backlog` card on
+  the Spec Work board, creating the board first when the repository has
+  none; an empty confirmed list skips this step entirely. Third, post a
+  closing comment on the map — its first line is
+  `map-closed: <destination gist>`, and an existing `map-closed:`
+  comment means this step is already done — summarizing the destination
+  and linking each minted backlog issue by name, then close the map
+  issue.
 - **Blocked** — every open ticket is claimed by another session, or is
   blocked and no open blocker is on the frontier (a dependency cycle). A
   claim older than 24 hours is stale and the session releases it itself
@@ -336,18 +358,27 @@ classify the map:
   close; report the fog and stop for the session.
 
 Only a Complete map hands off. A closed map issue is the terminal marker;
-an open map is in progress regardless of frontier size.
+an open map is in progress regardless of frontier size. A session that
+finds an open map already classifying Complete re-runs the exit steps:
+each is idempotent, so an exit interrupted between minting and closing
+converges on retry.
 
 ## Workflow binding
 
 - Planning only, enforced: this skill never starts a spec-work bundle and
   never edits production code. A `task` ticket does enablement work
-  (provisioning, access, data moves), never product implementation.
+  (provisioning, access, data moves), never product implementation. The
+  map-exit minting projects accepted decisions onto the tracker and
+  board; it starts no bundle and edits no code.
 - Labels follow the `wayfinder` contract in
   `.github/issue-label-policy.json`: exactly one `wayfinder:*` label per
   issue, never a creation issue type or severity. Wayfinder issues are a
   planning class; the defect lifecycle ignores them, and this skill never
-  mutates defect issues.
+  mutates defect issues. Backlog issues minted at map exit are spec-work
+  owning issues, not wayfinder issues: they carry `enhancement`, no
+  `wayfinder:*` label, and are never sub-issues of the map — parentage
+  is what keeps them out of the frontier query and the derived decision
+  index, which read only the map's sub-issues.
 - The research sub-agent brief (AFK, read-only):
 
   ```text
@@ -361,10 +392,14 @@ an open map is in progress regardless of frontier size.
 
   The root turns the receipt into the ticket's resolution comment with
   citations and confidence.
-- When the map's destination is reached and the way is clear, route each
-  cleared, nameable capability into
-  `../spec-driven-feature-orchestrator/SKILL.md`, and charter the map's
-  decisions into that capability's Discuss:
+- When the map's destination is reached and the way is clear, each
+  confirmed capability already has its minted backlog issue (see
+  Reaching the destination). Route each capability into
+  `../spec-driven-feature-orchestrator/SKILL.md` by naming that issue
+  when the bundle starts: bundle initialization adopts it as the owning
+  issue through the user-supplied-owner path, creates no new issue, and
+  its first board sync moves the card from `Backlog` to `Discuss`.
+  Charter the map's decisions into that capability's Discuss:
   - The root cites each decision ticket the capability rests on by URL as a
     durable **primary source** — in the feature artifact and in the matching
     `INTERVIEW.md` gray areas — so the agent can go and read the ticket when

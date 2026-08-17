@@ -5,7 +5,8 @@ lifecycle state — the cross-feature sibling of `STATUS.md`. It is never
 authority. `state.json` remains the sole operational authority; the
 `work-state` bridge stays GitHub-free; board identifiers never enter
 `state.json`. A sync fault is a structured recoverable warning, never a
-lifecycle blocker. Its durable home is `review/board-sync.md` in the
+lifecycle blocker. For bundle-scoped syncs its durable home is
+`review/board-sync.md` in the
 bundle (outside the approved-source inventory): the root appends one line
 per fault — timestamp, intended Status, error — and reconciles that file
 at three points: on every resume, before every later sync, and before the
@@ -17,12 +18,16 @@ phase alone — performs one sync to that value, and on success truncates
 the file to empty — so a stale fault can never move the card backward or
 forward past publication. A fault that
 survives the completion handoff is reported to the user as the one
-remaining manual step, so the board can never stay silently stale.
+remaining manual step, so the board can never stay silently stale. The
+map-exit projection below runs with no bundle and records its faults on
+the map issue instead.
 
-Verification status: every operation below was exercised end to end on
-2026-08-14 (gh 2.97.0) against a live repository: creation, linking, column
-rewrite, board layout switch, card add, and the full Discuss -> Blocked ->
-Delivery -> Complete status walk.
+Verification status: every bundle-lifecycle operation below was exercised
+end to end on 2026-08-14 (gh 2.97.0) against a live repository: creation,
+linking, column rewrite, board layout switch, card add, and the full
+Discuss -> Blocked -> Delivery -> Complete status walk. The map-exit
+projection composes those same verified operations; its Backlog option
+and marker guard were not part of that exercise.
 
 ## Tooling rules
 
@@ -80,6 +85,7 @@ than creating a second project. Close the bootstrap issue after step 5.
    ```sh
    gh api graphql -f query='mutation($f:ID!){updateProjectV2Field(input:{
      fieldId:$f, singleSelectOptions:[
+       {name:"Backlog",  color:GRAY,   description:"Cleared capability awaiting a bundle"},
        {name:"Discuss",  color:BLUE,   description:"Interview and spec in progress"},
        {name:"Plan",     color:PURPLE, description:"Slice DAG and Pro planning"},
        {name:"Delivery", color:YELLOW, description:"Implementation, review, merges"},
@@ -122,13 +128,76 @@ creation); more than one is a fail-closed condition — record a recoverable
 warning naming the project numbers and perform no mutation until the
 operator removes the duplicate marker.
 
+## Map-exit backlog projection (wayfinder repositories)
+
+When a wayfinder map classifies **Complete**, the same closing session
+projects the cleared way onto the board before the map issue closes — so
+the finished map hands off as visible backlog cards, not prose in a
+closed issue. This is root-owned semantic receipt work in a live HITL
+session; the user confirms the capability list first (the wayfinder
+skill's Reaching-the-destination step owns that confirmation). A map
+whose confirmed list is empty — a pure-decision map — skips this whole
+section, including board bootstrap, and proceeds to its closing comment.
+
+1. Run the board rediscovery above; when zero marked boards exist, run
+   first-time creation.
+2. For each confirmed capability, mint one `enhancement` issue: inspect
+   any repository issue template first and mirror it; the title is the
+   capability name; the body names the goal, cites the map issue and
+   every decision ticket the capability rests on by URL, and carries
+   exactly one marker
+   `<!-- spec-work-backlog:<map-number>/<capability-slug> -->`
+   (kebab-case of the confirmed name; slugs must be unique within the
+   map — disambiguate colliding names at confirmation). Mint it as a
+   top-level issue, never with `--parent`: the wayfinder frontier query
+   and derived decision index read only the map's sub-issues, so
+   parentage — not labels — is what keeps backlog issues out of them.
+   Minting is guarded by marker discovery: before creating, search all
+   issue states for `spec-work-backlog:<map-number>/` and skip every
+   capability whose exact marker already exists — open means already
+   minted; closed means delivered or dropped, never re-mint. Issue
+   search is eventually consistent, so after an unknown create result,
+   confirm through a consistent read — list the repository's most
+   recently created issues (the GraphQL `issues` connection ordered by
+   `CREATED_AT`) and inspect their bodies for the marker — before
+   creating again. These are spec-work owning issues, not wayfinder
+   issues: no `wayfinder:*` label, no severity, no defect fingerprint.
+3. Project every **open** issue carrying this map's
+   `spec-work-backlog:<map-number>/` marker — not only those minted in
+   this run — as a card with Status `Backlog`, using the same item-add
+   and item-edit commands as the card contract below. Both commands are
+   safe to repeat, so a rerun after a crash between mint and projection
+   converges; closed-marker issues get no card.
+
+A backlog card's issue becomes a feature bundle's owning issue at bundle
+initialization through the user-supplied-owner path in the card contract
+below. Cards are ordered manually within the column; the workflow
+assigns no priority. For a minted issue not yet adopted by any bundle,
+the recomputed desired Status is always `Backlog`.
+
+A wayfinder session has no bundle, so `review/board-sync.md` is not
+available as the fault home. Record a board fault (including a missing
+`project` scope) as one comment on the map issue naming the fault — and,
+for scope, the operator command `gh auth refresh -s project` — then
+continue: minting requires only the `repo` scope and proceeds
+regardless. Deferred projection has a durable owner: every later
+root-owned board sync in this repository — ordinarily the next bundle
+initialization — first sweeps every open `spec-work-backlog:` issue
+that lacks a card into `Backlog`, then performs its own sync.
+
 ## The card: one owning issue per bundle
 
 - `feature` bundles: a feature bundle has exactly one owning issue, and
   its identity is mandatory. At bundle initialization the root first
   checks for a user-supplied owner: an issue the user named, verified as
-  open in this repository, is the owner and no issue is created. Otherwise
-  the root creates the feature issue — inspect any repository issue
+  open in this repository, is the owner and no issue is created. A
+  backlog issue minted at map exit is the ordinary case: name it when
+  starting the bundle, and verification and adoption follow this same
+  path. Otherwise, before creating, the root checks the open issues
+  carrying a `spec-work-backlog:` marker for one whose capability
+  matches the accepted goal and surfaces a match to the user for
+  adoption instead of creating a duplicate. Only when none matches does
+  the root create the feature issue — inspect any repository issue
   template first and mirror it; label it `enhancement`; title is the
   accepted goal gist; body names the goal and carries the exact marker
   `<!-- spec-work-feature:<work_id> -->`. Creation is guarded by
@@ -178,6 +247,10 @@ Map bundle state to the Status column:
 | any active bundle blocker | Blocked |
 | blocker cleared | back to the phase column |
 | `complete` after `verify-publication` proves REACHABLE | Complete |
+
+A pre-minted backlog card needs no special transition: bundle
+initialization's first sync computes the phase column from this mapping
+and moves the card out of `Backlog`.
 
 Sync immediately after each successful bridge mutation that changes phase
 or records or clears a bundle blocker — never before it commits. The one

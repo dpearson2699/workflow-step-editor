@@ -618,8 +618,8 @@ publication also closes the issue lifecycle, branched by `workKind`. For
 `FEATURE.md`'s `Source / Issue`: fetch the issue, append a completion
 comment linking the merged PRs only when no existing comment already
 carries that exact merged-PR evidence, then close it if still open — the
-step is idempotent under retry or resume. It carries no fingerprint,
-marker, or severity. For `bug_fix`, apply
+step is idempotent under retry or resume. Its closure involves no defect
+fingerprint, severity, or marker reconciliation. For `bug_fix`, apply
 `.github/issue-label-policy.json`: authoritatively refetch the owner and exact
 fingerprint inventory, preserve existing prose, append only missing verified
 completion evidence, add the canonical marker when absent, reconcile exact
