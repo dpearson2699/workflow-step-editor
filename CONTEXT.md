@@ -28,3 +28,14 @@ _Avoid_: recording, session, script
 **Classification**:
 The step's kind, one of `click`, `type`, `wait`, or `assert`.
 _Avoid_: type, category, label
+
+**Shortcut**:
+A captured key-down that occurs while the user holds a non-Shift modifier
+key. Each such key-down is one shortcut; detection uses modifier state, never
+timing.
+_Avoid_: chord, key combo
+
+**Hotkey**:
+A key combination the app itself listens for, such as the global record
+toggle.
+_Avoid_: app shortcut
