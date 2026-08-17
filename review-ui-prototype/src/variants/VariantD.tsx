@@ -6,7 +6,7 @@ import { useState } from 'react';
 import type { VariantProps } from '../data';
 import { CLASSIFICATIONS, fmtTime } from '../data';
 
-export default function VariantD(p: VariantProps) {
+export default function VariantD(p: VariantProps & { onBack?: () => void }) {
   const [selId, setSelId] = useState(p.steps[0]?.id ?? '');
   const [shot, setShot] = useState<'full' | 'window' | 'element'>('full');
   const sel = p.steps.find(s => s.id === selId) ?? p.steps[0];
@@ -15,7 +15,10 @@ export default function VariantD(p: VariantProps) {
     <div className="vb-root">
       <aside className="vb-side">
         <div className="vb-side-head">
-          <div className="vb-brand">Approve invoice</div>
+          <div>
+            {p.onBack && <button className="vb-back" onClick={p.onBack}>‹ Workflows</button>}
+            <div className="vb-brand">Approve invoice</div>
+          </div>
           <button
             className={p.recording ? 'rec-btn on' : 'rec-btn'}
             disabled={!p.perms.input || !p.perms.accessibility || !p.perms.screen}

@@ -131,3 +131,29 @@ export interface VariantProps {
   perms: Permissions;
   requestPerm: (k: keyof Permissions) => void;
 }
+
+// --- Landing-page stub data ---
+export interface WorkflowMeta {
+  id: string; name: string; createdAt: string; stepCount: number; durationSec: number; thumb: string;
+}
+
+const wfThumb = (hue: number) => uri(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+  <rect width="320" height="200" fill="hsl(${hue},18%,26%)"/>
+  <rect width="320" height="10" fill="hsl(${hue},14%,16%)"/>
+  <rect x="52" y="30" width="216" height="140" rx="6" fill="hsl(${hue},22%,38%)"/>
+  <rect x="52" y="30" width="216" height="14" rx="6" fill="hsl(${hue},20%,30%)"/>
+  <rect x="66" y="60" width="150" height="8" rx="3" fill="hsl(${hue},22%,52%)"/>
+  <rect x="66" y="80" width="180" height="8" rx="3" fill="hsl(${hue},22%,48%)"/>
+  <rect x="66" y="110" width="70" height="34" rx="5" fill="hsl(${hue},28%,46%)"/>
+</svg>`);
+
+export const workflows: WorkflowMeta[] = [
+  { id: 'wf_01', name: 'Approve invoice', createdAt: '2026-08-16T22:31:00Z', stepCount: 10, durationSec: 18, thumb: wfThumb(215) },
+  { id: 'wf_02', name: 'Export payroll report', createdAt: '2026-08-15T14:02:00Z', stepCount: 23, durationSec: 61, thumb: wfThumb(150) },
+  { id: 'wf_03', name: 'Onboard new vendor', createdAt: '2026-08-12T09:47:00Z', stepCount: 41, durationSec: 187, thumb: wfThumb(20) },
+];
+
+export const fmtDate = (ts: string) => new Date(ts).toLocaleString('en-US', {
+  month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+});
+export const fmtDur = (s: number) => s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;

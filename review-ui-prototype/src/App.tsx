@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import type { Permissions, StepData } from './data';
 import { initialSteps } from './data';
+import Home from './Home';
 import PrototypeSwitcher from './PrototypeSwitcher';
 import VariantA from './variants/VariantA';
 import VariantB from './variants/VariantB';
@@ -22,6 +23,15 @@ export default function App() {
     setVariantState(v);
   };
 
+  const [view, setViewState] = useState(() =>
+    new URLSearchParams(window.location.search).get('view') ?? 'home');
+  const setView = (w: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', w);
+    history.replaceState(null, '', url);
+    setViewState(w);
+  };
+
   const [steps, setSteps] = useState<StepData[]>(initialSteps);
   const [recording, setRecording] = useState(false);
   const [perms, setPerms] = useState<Permissions>({ input: true, accessibility: true, screen: false });
@@ -38,8 +48,14 @@ export default function App() {
       setTimeout(() => setPerms(pp => ({ ...pp, [k]: true })), 600) && undefined,
   };
 
-  const v = variant === 'B' ? <VariantB {...p} /> : variant === 'C' ? <VariantC {...p} /> :
-    variant === 'D' ? <VariantD {...p} /> : <VariantA {...p} />;
+  const v =
+    variant === 'D' && view === 'home'
+      ? <Home openWorkflow={() => setView('detail')} recording={recording}
+          toggleRecording={p.toggleRecording} perms={perms} requestPerm={p.requestPerm} />
+      : variant === 'B' ? <VariantB {...p} />
+      : variant === 'C' ? <VariantC {...p} />
+      : variant === 'D' ? <VariantD {...p} onBack={() => setView('home')} />
+      : <VariantA {...p} />;
   return (
     <>
       {v}

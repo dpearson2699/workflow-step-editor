@@ -122,6 +122,46 @@ input, textarea, select { font: inherit; color: inherit; }
 .vb-meta { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; margin-top: 12px; font-size: 13px; }
 .vb-meta dt { color: #8b8b93; } .vb-meta dd { margin: 0; }
 
+/* ---------- Landing page ---------- */
+.home-root { min-height: 100%; }
+.home-bar {
+  display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+  background: #232327; border-bottom: 1px solid #333;
+}
+.home-brand { font-weight: 700; font-size: 16px; margin-right: auto; }
+.home-main { max-width: 760px; margin: 0 auto; padding: 26px 18px 90px; }
+.home-hero { display: flex; align-items: center; gap: 14px; margin-bottom: 30px; }
+.home-rec {
+  background: #2d2d31; color: #ff5252; border: 2px solid #ff5252aa;
+  border-radius: 12px; padding: 12px 22px; font-weight: 700; font-size: 16px;
+}
+.home-rec.on { background: #ff5252; color: #fff; }
+.home-rec:disabled { opacity: 0.4; cursor: not-allowed; }
+.home-live { color: #ff8f8f; font-size: 13px; }
+.home-hint { color: #d8b45a; font-size: 13px; }
+.home-h2 { font-size: 18px; margin: 0 0 10px; }
+.home-list { list-style: none; margin: 0; padding: 0; }
+.home-row {
+  display: flex; align-items: center; gap: 14px; background: #232327;
+  border: 1px solid #313136; border-radius: 12px; padding: 10px 14px;
+  margin-bottom: 10px; cursor: pointer;
+}
+.home-row:hover { border-color: #4670d8; }
+.home-thumb { width: 96px; height: 60px; object-fit: cover; border-radius: 8px; background: #111; }
+.home-info { flex: 1; min-width: 0; }
+.home-name { font-weight: 600; font-size: 15px; }
+.home-meta { color: #9a9aa2; font-size: 12px; margin-top: 3px; }
+.home-reveal {
+  background: none; border: 1px solid #444; border-radius: 8px; color: #aaa;
+  padding: 5px 10px; font-size: 12px; visibility: hidden;
+}
+.home-row:hover .home-reveal { visibility: visible; }
+.home-chev { color: #666; font-size: 22px; }
+.vb-back {
+  background: none; border: none; color: #6fb4ff; font-size: 13px; padding: 0;
+  margin-right: 6px;
+}
+
 /* ---------- Variant D: master–detail + always-visible triple ---------- */
 .vd-shotwrap { display: flex; gap: 12px; align-items: stretch; }
 .vd-big { flex: 1; min-width: 0; max-height: 56vh; object-fit: contain; border-radius: 10px; background: #111; }
