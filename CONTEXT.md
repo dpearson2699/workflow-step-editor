@@ -29,6 +29,11 @@ _Avoid_: recording, session, script
 The step's kind, one of `click`, `type`, `wait`, or `assert`.
 _Avoid_: type, category, label
 
+**Draft**:
+A workflow that has been recorded and stopped but not yet saved through the
+naming dialog. Saving names it; discarding removes it.
+_Avoid_: unsaved recording, temp workflow
+
 **Shortcut**:
 A captured key-down that occurs while the user holds a non-Shift modifier
 key. Each such key-down is one shortcut; detection uses modifier state, never
