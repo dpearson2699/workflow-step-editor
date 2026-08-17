@@ -121,6 +121,35 @@ Reject before activation on any of:
 - Unproved recovery wake
 - Unavailable requested route
 
+## Review-comment and CI feedback loop
+
+Captured live from Claude Code's native "Auto-fix CI & address comments"
+injection (2026-08-17) and transplanted here so review threads run it
+autonomously, with no operator button-press. The active review task owns
+this loop for its PR while its lease is live:
+
+- Trigger: the review task watches its PR with an automation-drivable
+  watch — a Monitor (or bounded `gh` polling at 60s+ intervals) over new
+  review comments and check results since its last cursor. The root relays
+  any feedback that instead arrives at the main session to the owning
+  review task; the root never pushes to the slice branch.
+- Instruction payload (verbatim contract from the captured injection):
+  address the feedback and push a fix — inside the frozen owned paths,
+  every push advancing the lease. Then, for each inline comment addressed
+  (those with a comment_id), post a one-line reply on the thread via
+  `gh api` saying what you changed (or why you didn't). End each reply
+  with the line
+  "_🤖 Addressed by [Claude Code](https://claude.com/claude-code)_" so
+  reviewers can see it was automated. Then resolve the thread. Skip
+  replies for comments you didn't act on.
+- Feedback the reviewer judges invalid or out of slice scope is not
+  silently dropped: reply on the thread with the reason (same attribution
+  line), and route genuine out-of-scope defects through the label-policy
+  issue lifecycle.
+- Top-level bot report comments without a comment_id (dependency tables,
+  review summaries) need no reply; fold their material findings into the
+  review verdict instead.
+
 ## Callback policy
 
 `work-state` remains the state authority. UI notifications and hooks are wake
