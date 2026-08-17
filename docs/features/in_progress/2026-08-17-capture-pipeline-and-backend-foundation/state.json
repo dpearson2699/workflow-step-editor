@@ -72,11 +72,7 @@
   "phase": "delivery",
   "planning": {
     "active_response_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
-    "blind_completeness": {
-      "epoch": 21,
-      "receipt": "discovery/blind-completeness-0003.json",
-      "receipt_digest": "f9332a6c288a5ddae06a1dfb5c5964c9b1468eba01f83a2a8e7dca616ff3b934"
-    },
+    "blind_completeness": null,
     "blind_requirement": {
       "plan_digest": "860ca87269d59a3af4f6dd34e4dae61af3c30f6e6ba353ad3f39929c8e991608",
       "requirement": "required_multi_slice_reconciliation"
@@ -159,7 +155,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 55,
+  "revision": 58,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -438,10 +434,10 @@
       "head_sha": null,
       "id": "PR-03",
       "implementation_task": {
-        "adoption_start_sha": null,
-        "attempt": 0,
-        "authorization_digest": null,
-        "bound_sha": null,
+        "adoption_start_sha": "7ba62c7cfba6e2e91dc014e9f415fb5557005d75",
+        "attempt": 1,
+        "authorization_digest": "579cd94d25cfc2065b1e6307ba78d9dac96113fa7210211b4951eb303b307a2c",
+        "bound_sha": "7ba62c7cfba6e2e91dc014e9f415fb5557005d75",
         "branch_attachment_digest": null,
         "branch_attachment_epoch": null,
         "branch_attachment_receipt": null,
@@ -449,7 +445,7 @@
         "branch_release_epoch": null,
         "branch_release_receipt": null,
         "changed_paths_digest": null,
-        "client_thread_id": null,
+        "client_thread_id": "a94db493ae95babb8",
         "companion_probe_digest": null,
         "companion_probe_epoch": null,
         "companion_probe_receipt": null,
@@ -460,7 +456,7 @@
         "head_adoption_terminal_lineage": [],
         "implementation_receipt": null,
         "implementation_receipt_digest": null,
-        "launch_marker": null,
+        "launch_marker": "feature/PR-03/implementation/1",
         "output_head_sha": null,
         "output_pr": null,
         "replacement_observation_digest": null,
@@ -474,13 +470,13 @@
         "review_receipt_digest": null,
         "review_task_quiescence_digest": null,
         "snapshot_authorization": null,
-        "state": "unbound",
+        "state": "active",
         "stop_proof_digest": null,
         "stop_proof_epoch": null,
         "stop_proof_receipt": null,
-        "task_worktree": null,
+        "task_worktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a94db493ae95babb8",
         "terminal_result": null,
-        "thread_id": null,
+        "thread_id": "local_agent:a94db493ae95babb8",
         "verification_digest": null,
         "verification_verdict": null
       },
@@ -499,7 +495,7 @@
         "src-tauri/tauri.conf.json"
       ],
       "plan": "pr/PR-03/PLAN.md",
-      "plan_checkpoint_sha": null,
+      "plan_checkpoint_sha": "d7f0b55d5aa5261f0b664cecd90ef774d16716f9",
       "plan_digest": "bbc1ef452f55b8a553925b35ac4e8b87885b1ebe79cda3cd2c16b05b8d67c5e5",
       "pr": null,
       "premerge_drift": null,
@@ -552,9 +548,9 @@
         "verification_digest": null,
         "verification_verdict": null
       },
-      "revision_epoch": 0,
+      "revision_epoch": 1,
       "revision_history": [],
-      "status": "pending",
+      "status": "in_progress",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Real macOS capture adapter, dev trigger, and proven-gate readiness",
@@ -644,7 +640,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T19:37:46Z",
+  "updated_at": "2026-08-17T19:39:41Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }
