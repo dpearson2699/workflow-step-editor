@@ -155,7 +155,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 40,
+  "revision": 43,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -299,7 +299,7 @@
         "PR-01"
       ],
       "execution_mode": "serial",
-      "head_sha": null,
+      "head_sha": "0b83e96e98281cec0bb2e4e76098781155d617ea",
       "id": "PR-02",
       "implementation_task": {
         "adoption_start_sha": "f3a587659533ad366c6c8cedd10f4d08a8ad8752",
@@ -364,9 +364,9 @@
       "plan": "pr/PR-02/PLAN.md",
       "plan_checkpoint_sha": "037539eae1baef98d56a37ea3b451e95795a5a22",
       "plan_digest": "f134a577f2f5557f1274b4a3d4084e8416fadadc832fa285458043aeccb59a2b",
-      "pr": null,
+      "pr": 19,
       "premerge_drift": null,
-      "receipt": null,
+      "receipt": "pr/PR-02/RECEIPT.md",
       "replacement_lineage": null,
       "review_task": {
         "adoption_start_sha": null,
@@ -417,7 +417,7 @@
       },
       "revision_epoch": 1,
       "revision_history": [],
-      "status": "in_progress",
+      "status": "pr_open",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Recording domain core, persistence seam, and fake-driven recording coordinator",
@@ -640,7 +640,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T17:40:44Z",
+  "updated_at": "2026-08-17T18:18:04Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }
