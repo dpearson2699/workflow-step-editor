@@ -52,7 +52,10 @@
   editing, Discard behind a confirmation, and Save…; Save opens a naming
   dialog with a pre-selected timestamp default and saving names the
   workflow; Discard removes the draft folder and returns to the landing
-  page.
+  page. A recording that ends in failure enters draft review behind an
+  error banner when its workflow still loads, and surfaces the error on
+  the landing page when it does not; a failed Save or Discard keeps the
+  draft state and shows the error instead of exiting draft.
 - Owning seam: The review UI over the production `start_recording` channel,
   `stop_recording`, `rename_workflow`, and the shared folder-removal
   primitive.
@@ -72,5 +75,5 @@
 - Owning seam: The `delete_workflow` command and the store's removal
   primitive over the real filesystem root.
 - Evidence required: Rust store/command tests covering the validation and
-  missing-directory invariants; frontend confirmation-flow test; automated
-  UI proof.
+  missing-directory invariants; frontend confirmation-flow tests. The
+  deletion flow is also exercised live inside AC-001's final human loop.

@@ -40,8 +40,10 @@ workflow rename.
 - Workflow rename.
 - Backend surface the foundation did not ship: `update_step`, `delete_step`,
   `rename_workflow`, `reveal_workflow`, `delete_workflow`; workflow-summary
-  data the landing rows need (step count, duration, thumbnail); a path for
-  the webview to display screenshot files from app storage.
+  data the landing rows need (step count, duration, thumbnail); a scoped
+  backend screenshot read for the webview (DEC-007); an event timestamp on
+  the live channel's step payload (DEC-009); manifest-mutation
+  serialization with an active-workflow guard (DEC-008).
 
 ## Non-Goals
 

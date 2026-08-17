@@ -74,3 +74,43 @@ decision. Every gray area below closed from those sources.
 - Closure: Additive summary extension computed from stored artifacts at
   list time; thumbnail source matches the pinned prototype direction. No
   schema change; details are coordinator-owned in Plan.
+
+## GA-005: Post-Pro presentation and concurrency defaults
+
+- Status: closed
+- Kind: decision
+- Uncertainty: The Pro planning pass surfaced unbound defaults — duration
+  semantics, thumbnail selection, landing order, damaged-log fallback,
+  live-row content, failed-recording destination, screenshot transport,
+  and manifest-mutation concurrency.
+- Why it matters: They shape backend DTOs, tests, and the landing/record
+  views.
+- Evidence inspected: the immutable Pro response
+  (`discovery/pro-lifecycle-evidence/aedd5850….md`); prototype
+  `Home.tsx`/`data.ts` (newest-first rows, `date · step count ·
+  duration`, row thumbnails); `src-tauri/src/recording/coordinator.rs`
+  (`run_worker` finalization); `src-tauri/src/recording/channel.rs`
+  (step payload without timestamp).
+- Confidence: high
+- Question: none
+- Closure: Coordinator-owned engineering defaults inside accepted scope,
+  recorded as DEC-006 through DEC-009. None contradicts a user-accepted
+  decision.
+
+## GA-006: Active-recording crash semantics
+
+- Status: closed
+- Kind: decision
+- Uncertainty: Whether DEC-005's crash guarantee covers reviewable
+  manifest steps or raw capture data only.
+- Why it matters: The stronger reading would require incremental manifest
+  persistence or re-parse — an accepted-scope change.
+- Evidence inspected: issue #8 resolution ("events stream to disk
+  crash-safely" — events, not steps);
+  `src-tauri/src/recording/coordinator.rs` `run_worker` (steps persist at
+  finalization); FEATURE.md Non-Goals (re-parse excluded).
+- Confidence: high
+- Question: none
+- Closure: Narrow interpretation adopted and DEC-005 sharpened: the crash
+  guarantee covers events and screenshots; steps persist at stop. This
+  matches the issue #8 source wording, so no user re-ask is needed.

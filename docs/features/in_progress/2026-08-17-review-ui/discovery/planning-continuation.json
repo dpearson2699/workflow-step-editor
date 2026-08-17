@@ -1,0 +1,42 @@
+{
+  "current_pass_id": "aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5",
+  "parent_cursor": {
+    "blind_receipt_digest": null,
+    "bundle_revision": 3,
+    "candidate_plan_digest": null,
+    "consultation_id": "aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5",
+    "expected_successor": null,
+    "replacement_heartbeat": null,
+    "stage": "resolve_material_findings"
+  },
+  "passes": [
+    {
+      "attempt_ordinal": 1,
+      "consultation_id": "aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5",
+      "conversation_binding_digest": "6e160fc808963c47040afc0a9ea8aa5674cc87b9c4393a1c77a935aefc027aaa",
+      "conversation_generation_id": "6290e387-9605-484c-bb37-407b123d4f70",
+      "conversation_origin_anchor_digest": "45fd8adf56df0b416ed0acdfc5214638f341a3cf6d4c464bf6f7fff9556f876b",
+      "conversation_ref_digest": "91cd7ffd521ce78f1a3cb35431e67115a03de7260104bda0589f326f4d9988bd",
+      "invalidation": null,
+      "invoking_automation_ref_digest": "d31bf91ce164f26ada299428f84f90932d20ac43617f84d06042619a8348d9fa",
+      "pass_id": "141ce77e243a29d1942448dfdc4f28dfc167c8fd95e6428200c2ad7dd63b7ef6",
+      "prompt_digest": "74269a53ecd755b182267969498025981443ca59e129a38367a435be77f15537",
+      "repository": "dpearson2699/workflow-step-editor",
+      "response_digest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833",
+      "response_evidence": "discovery/pro-lifecycle-evidence/aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5.md",
+      "response_evidence_digest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833",
+      "source_branch": "main",
+      "source_commit": "1b659697b3bf5e7fb2b4bf909d377392e162b0f3",
+      "specification_digest": "7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6",
+      "status": "consumed",
+      "terminal_candidate_digest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833"
+    }
+  ],
+  "repository": "dpearson2699/workflow-step-editor",
+  "revision": 1,
+  "schema": "planning-continuation",
+  "updated_at": "2026-08-17T23:06:03.813368Z",
+  "work_bundle": "/Users/dpearson/repos/workflow-step-editor/docs/features/in_progress/2026-08-17-review-ui",
+  "work_id": "2026-08-17-review-ui",
+  "work_kind": "feature"
+}

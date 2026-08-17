@@ -4,22 +4,22 @@
 - Work kind: `feature`
 - Work ID: `2026-08-17-review-ui`
 - Phase: `plan`
-- Revision: `2`
+- Revision: `4`
 - Observed origin/main: `not recorded`
 - Task roster: `efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18`
 - Active slices: `none`
-- Last update: `2026-08-17T22:29:16Z`
+- Last update: `2026-08-17T23:07:51Z`
 
 ## ChatGPT Pro Planning Evidence
 
-- Current specification digest: `not recorded`
-- Current source commit: `not recorded`
-- Active response: `not recorded`
-- Generated for: `not recorded`
-- Accepted for: `not recorded`
-- Disposition: `not recorded`
+- Current specification digest: `7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6`
+- Current source commit: `1b659697b3bf5e7fb2b4bf909d377392e162b0f3`
+- Active response: `3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833`
+- Generated for: `7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6`
+- Accepted for: `7f661df90bfd4a6ea4f09c4b9191955c2b844795fd600d119b3d2b0cbc1defc6`
+- Disposition: `clean`
 - Latest applicability: `not recorded`
-- Fresh primary required: `yes`
+- Fresh primary required: `no`
 - Explicit Pro primary waiver: `not recorded`
 - Blind completeness: `decision required`
 
