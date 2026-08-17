@@ -19,3 +19,12 @@ _Avoid_: action, task, annotation
 The three images captured for every event: the full screen, the window crop,
 and the element crop.
 _Avoid_: screenshots, captures
+
+**Workflow**:
+One recorded task — the events captured in a single recording run together
+with the steps a user reviews and annotates.
+_Avoid_: recording, session, script
+
+**Classification**:
+The step's kind, one of `click`, `type`, `wait`, or `assert`.
+_Avoid_: type, category, label
