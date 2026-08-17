@@ -3,12 +3,12 @@
 
 - Work kind: `feature`
 - Work ID: `2026-08-17-capture-pipeline-and-backend-foundation`
-- Phase: `plan`
-- Revision: `33`
+- Phase: `delivery`
+- Revision: `37`
 - Observed origin/main: `f3a587659533ad366c6c8cedd10f4d08a8ad8752`
 - Task roster: `1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e`
 - Active slices: `none`
-- Last update: `2026-08-17T17:15:34Z`
+- Last update: `2026-08-17T17:20:40Z`
 
 ## ChatGPT Pro Planning Evidence
 
@@ -21,7 +21,7 @@
 - Latest applicability: `prior_evidence_applicable`
 - Fresh primary required: `no`
 - Explicit Pro primary waiver: `not recorded`
-- Blind completeness: `decision required`
+- Blind completeness: `recorded (required_multi_slice_reconciliation)`
 
 ## Slices
 
@@ -29,8 +29,8 @@
 - Active: none
 - Trunk ready: PR-02
 - Stackable: none
-- Blocked: PR-03
-- Pending: none
+- Blocked: none
+- Pending: PR-03
 
 ## Acceptance
 

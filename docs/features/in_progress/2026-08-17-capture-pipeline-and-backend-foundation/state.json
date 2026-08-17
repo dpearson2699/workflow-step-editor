@@ -66,14 +66,21 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": null,
-  "observation_epoch_high_water": 7,
+  "observation_epoch_high_water": 10,
   "observed_main_sha": "f3a587659533ad366c6c8cedd10f4d08a8ad8752",
   "parallel_assessments": [],
-  "phase": "plan",
+  "phase": "delivery",
   "planning": {
     "active_response_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
-    "blind_completeness": null,
-    "blind_requirement": null,
+    "blind_completeness": {
+      "epoch": 10,
+      "receipt": "discovery/blind-completeness-0002.json",
+      "receipt_digest": "a9596510a8a7510e7664945369431bc9d59005b6ea5a88b5b6a30e4da398c7e2"
+    },
+    "blind_requirement": {
+      "plan_digest": "860ca87269d59a3af4f6dd34e4dae61af3c30f6e6ba353ad3f39929c8e991608",
+      "requirement": "required_multi_slice_reconciliation"
+    },
     "current_plan_digest": "860ca87269d59a3af4f6dd34e4dae61af3c30f6e6ba353ad3f39929c8e991608",
     "current_source_commit": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
     "current_specification_digest": "b7ee3357e73086c538e8503546af7fc266034353111740f046814bbe0041a3c3",
@@ -152,7 +159,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 33,
+  "revision": 37,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -547,7 +554,7 @@
       },
       "revision_epoch": 0,
       "revision_history": [],
-      "status": "blocked",
+      "status": "pending",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Real macOS capture adapter, dev trigger, and proven-gate readiness",
@@ -637,7 +644,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T17:15:34Z",
+  "updated_at": "2026-08-17T17:20:40Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }
