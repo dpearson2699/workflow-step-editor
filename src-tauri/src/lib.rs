@@ -1,3 +1,4 @@
+pub mod capture;
 mod commands;
 pub mod domain;
 mod permissions;
@@ -12,7 +13,6 @@ use permissions::macos::MacosPermissionSource;
 use permissions::{PermissionKind, PermissionReport, PermissionService, PermissionStatus};
 use recording::clock::{Clock, SystemClock};
 use recording::coordinator::{PermissionGate, PipelineFactory, RecordingCoordinator};
-use recording::pipeline::UnavailablePipeline;
 use recording::store::JsonWorkflowStore;
 
 /// Managed permission state. The mutex serializes all permission
@@ -52,10 +52,11 @@ pub fn run() {
             let workflows_root = app.path().app_data_dir()?.join("workflows");
             let clock: Arc<dyn Clock> = Arc::new(SystemClock);
             let store = Arc::new(JsonWorkflowStore::new(workflows_root, clock.clone()));
-            // PR-03 replaces this factory with the macOS capture adapter;
-            // until then start_recording reports the pipeline as
-            // unavailable and rolls back cleanly.
-            let factory: PipelineFactory = Box::new(|| Box::new(UnavailablePipeline));
+            // The real macOS capture adapter: a ListenOnly event tap,
+            // pre-buffered per-display streams, AX resolution, and the
+            // bounded screenshot queue behind the one trait boundary.
+            let factory: PipelineFactory =
+                Box::new(|| Box::new(capture::MacosCapturePipeline::new()));
             let coordinator = Arc::new(RecordingCoordinator::new(
                 store,
                 permission_gate.clone(),
