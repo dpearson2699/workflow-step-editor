@@ -1,0 +1,29 @@
+{
+  "schema": "spec-work-pro-applicability",
+  "workKind": "feature",
+  "workId": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "workBundle": "2026-08-17-capture-pipeline-and-backend-foundation",
+  "responseDigest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
+  "fromDigest": "96e8bf0cba5a9551af77fdbf4dfd562e3e1f90728afc9974cb61e0f7477e3e50",
+  "toDigest": "c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32",
+  "fromSourceCommit": "d5467958edb31a31e743f7801f8d93bcc3252840",
+  "toSourceCommit": "902c158a146b1a4c8b507804d17fd6f026cc75ff",
+  "classification": "non_material",
+  "changedPaths": [
+    "ACCEPTANCE.md",
+    "DECISIONS.md",
+    "FEATURE.md",
+    "INTERVIEW.md"
+  ],
+  "recommendationsChanged": false,
+  "implementationSlicesChanged": false,
+  "validationResult": "prior_evidence_applicable",
+  "evidenceAnchors": [
+    "DECISIONS.md",
+    "review/plan-consensus-log.md",
+    "discovery/pro-lifecycle-evidence/fc3c1b33d7245cf3a2173c6b5437e3a5ec7375982d56f7ada750646c741aff32.md"
+  ],
+  "semanticDiffSummary": "The specification delta adopts the captured Pro response's own recommendations and three user interview decisions made after capture: DEC-009 queue-saturation fail-stop (Q-002), DEC-010 non-UI classification of the dev-only trigger (Q-003), DEC-011 command and schema edge-case clarifications, an AC-005 clause for blocked_by_prerequisite, a DEC-003 title-grammar alignment to its accepted examples, FEATURE.md synchronization of the optional-name, channel-envelope, and null-window contracts, and interview ledger entries GA-007/Q-002/Q-003.",
+  "applicabilityRationale": "Every change either implements what the immutable Pro response itself recommended (store-owned shot persistence, persistence-before-channel, queue policy question, permission status shape) or records user decisions and coordinator clarifications inside unaddressed edge cases; no accepted goal, scope boundary, acceptance outcome, or architectural recommendation the response analyzed was altered, so the prior response remains fully applicable to the revised specification without a fresh primary.",
+  "assessmentEpoch": 1
+}

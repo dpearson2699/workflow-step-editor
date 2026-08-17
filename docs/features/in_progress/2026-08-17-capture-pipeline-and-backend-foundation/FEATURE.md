@@ -83,7 +83,7 @@ this bundle's command surface.
 | --- | --- | --- | --- |
 | Pre-buffered capture and artifact derivation | `docs/adr/0001-pre-buffered-screen-capture.md` | none | none |
 | Key-event chord semantics and classifier ownership | `docs/adr/0002-key-event-semantic-classifier.md` | none | none |
-| Ubiquitous language (event, step, screenshot triple, workflow, classification, shortcut, hotkey) | `CONTEXT.md` | new terms crystallising during build | `CONTEXT.md` |
+| Ubiquitous language (event, step, screenshot triple, workflow, classification, shortcut, hotkey) | `CONTEXT.md` | the coordinator root, not a slice, writes any new product-language term that crystallises during build; implementation vocabulary stays out of the glossary | `CONTEXT.md` (root-owned write) |
 | Window crop is a bounds crop, not an isolated window image | ADR 0001 consequences | README must state the caveat | `README.md` (created in this bundle) |
 | macOS-only support | capability split, issue #11 | README must state the limitation | `README.md` (created in this bundle) |
 | Schema v1 field shapes | issue #7 decision record plus DEC-011 edge clarifications | none — fields fixed by the record; DEC-011 covers only unaddressed null-window and optional-name cases | none |

@@ -46,7 +46,7 @@
     },
     "AC-005": {
       "assignment_digest": null,
-      "criterion_digest": "ef635660052b816eba3088386c5bfa272a910db63364427e071db7fde5eff3db",
+      "criterion_digest": "9099ac0f109858ebaadcbab42c4c97fdce62bd9824f8141e6d45be56e588a186",
       "evidence": [],
       "evidence_digests": {},
       "locked": false,
@@ -66,24 +66,56 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": null,
-  "observation_epoch_high_water": 0,
+  "observation_epoch_high_water": 1,
   "observed_main_sha": null,
   "parallel_assessments": [],
   "phase": "plan",
   "planning": {
     "active_response_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
     "blind_completeness": null,
-    "blind_requirement": null,
-    "current_plan_digest": null,
-    "current_source_commit": "d5467958edb31a31e743f7801f8d93bcc3252840",
-    "current_specification_digest": "96e8bf0cba5a9551af77fdbf4dfd562e3e1f90728afc9974cb61e0f7477e3e50",
+    "blind_requirement": {
+      "plan_digest": "732c7ab3654292610dfb4654766f0db1f0d3ea09b068d6da7c5a2a6b7ea0dec6",
+      "requirement": "required_multi_slice_reconciliation"
+    },
+    "current_plan_digest": "732c7ab3654292610dfb4654766f0db1f0d3ea09b068d6da7c5a2a6b7ea0dec6",
+    "current_source_commit": "902c158a146b1a4c8b507804d17fd6f026cc75ff",
+    "current_specification_digest": "c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32",
     "evidence": [
       {
-        "accepted_for_digest": "96e8bf0cba5a9551af77fdbf4dfd562e3e1f90728afc9974cb61e0f7477e3e50",
-        "accepted_source_commit": "d5467958edb31a31e743f7801f8d93bcc3252840",
+        "accepted_for_digest": "c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32",
+        "accepted_source_commit": "902c158a146b1a4c8b507804d17fd6f026cc75ff",
         "annotations": [],
         "answer_artifact": "discovery/pro-lifecycle-evidence/fc3c1b33d7245cf3a2173c6b5437e3a5ec7375982d56f7ada750646c741aff32.md",
-        "applicability": [],
+        "applicability": [
+          {
+            "changed_paths": [
+              "ACCEPTANCE.md",
+              "DECISIONS.md",
+              "FEATURE.md",
+              "INTERVIEW.md"
+            ],
+            "classification": "non_material",
+            "correction_receipt": null,
+            "correction_receipt_digest": null,
+            "epoch": 1,
+            "evidence_anchors": [
+              "DECISIONS.md",
+              "review/plan-consensus-log.md",
+              "discovery/pro-lifecycle-evidence/fc3c1b33d7245cf3a2173c6b5437e3a5ec7375982d56f7ada750646c741aff32.md"
+            ],
+            "from_digest": "96e8bf0cba5a9551af77fdbf4dfd562e3e1f90728afc9974cb61e0f7477e3e50",
+            "from_source_commit": "d5467958edb31a31e743f7801f8d93bcc3252840",
+            "implementation_slices_changed": false,
+            "original_receipt": null,
+            "original_receipt_digest": null,
+            "receipt": "discovery/pro-applicability-0001.json",
+            "receipt_digest": "879aeb0eb939970fd81f125ebe0232d074e3753bc81cb897bf00d7a6fe85d42e",
+            "recommendations_changed": false,
+            "to_digest": "c6274e76dc9316e27c0a52ec9b665460d7e99e7d31439f563943a45a59332f32",
+            "to_source_commit": "902c158a146b1a4c8b507804d17fd6f026cc75ff",
+            "validation_result": "prior_evidence_applicable"
+          }
+        ],
         "contract_disposition": "clean",
         "generated_for_digest": "96e8bf0cba5a9551af77fdbf4dfd562e3e1f90728afc9974cb61e0f7477e3e50",
         "generated_source_commit": "d5467958edb31a31e743f7801f8d93bcc3252840",
@@ -99,7 +131,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 4,
+  "revision": 8,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -175,7 +207,7 @@
       ],
       "plan": "pr/PR-01/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "16c82ad715a7c9a026fc1f66c8a95d26adadbc29a3d2f6cb755fe57997bfdd33",
+      "plan_digest": "bdd21fad07d1e80e23a7a08d6b95e01b31dfacfa7b540322c8939f8c866e7205",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -299,13 +331,15 @@
       "owned_paths": [
         "src-tauri/Cargo.lock",
         "src-tauri/Cargo.toml",
+        "src-tauri/src/commands",
         "src-tauri/src/domain",
         "src-tauri/src/lib.rs",
-        "src-tauri/src/main.rs"
+        "src-tauri/src/main.rs",
+        "src-tauri/src/recording"
       ],
       "plan": "pr/PR-02/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "07e651e45e087519c5665a9286ee6bebcd84b27377a01fe72b84e60107658066",
+      "plan_digest": "f134a577f2f5557f1274b4a3d4084e8416fadadc832fa285458043aeccb59a2b",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -362,7 +396,7 @@
       "status": "pending",
       "task_history": [],
       "terminal_freshness": null,
-      "title": "Recording domain core: KeySemantics, parser, schema v1 store",
+      "title": "Recording domain core, persistence seam, and fake-driven recording coordinator",
       "wave": 2
     },
     {
@@ -427,18 +461,18 @@
       "merge_receipt": null,
       "merge_receipt_digest": null,
       "owned_paths": [
+        "dev/proven-gate",
         "src",
         "src-tauri/Cargo.lock",
         "src-tauri/Cargo.toml",
         "src-tauri/src/capture",
-        "src-tauri/src/commands",
         "src-tauri/src/lib.rs",
         "src-tauri/src/main.rs",
         "src-tauri/tauri.conf.json"
       ],
       "plan": "pr/PR-03/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "97ffdc1c355bf2d7409aeb76053362c17cd38a5d59493671d58db11dff4cb939",
+      "plan_digest": "cbb04243b46977f6d173f1477e1014a351ed96ac68f3937475e7fc2bf23e871c",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -495,7 +529,7 @@
       "status": "pending",
       "task_history": [],
       "terminal_freshness": null,
-      "title": "macOS capture pipeline, recording lifecycle, and dev trigger",
+      "title": "Real macOS capture adapter, dev trigger, and proven-gate readiness",
       "wave": 3
     }
   ],
@@ -582,7 +616,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T06:51:30Z",
+  "updated_at": "2026-08-17T14:53:11Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }

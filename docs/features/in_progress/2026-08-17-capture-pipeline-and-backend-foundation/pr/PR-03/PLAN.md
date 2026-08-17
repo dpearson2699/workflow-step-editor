@@ -22,8 +22,12 @@ merge; only the authenticated bundle-snapshot commit follows that head.
   advances), display stream manager (one
   continuous SCStream per active display; first-frame warm-up before the
   tap enables; restart on display-configuration changes; per-generation
-  display sets published atomically — new events select only warmed
-  frames of the current generation while existing leases stay valid),
+  display sets published atomically; an event whose selected display
+  retains any pre-event frame — including the outgoing generation's
+  newest frame during warm-up — uses it, and an event whose selected
+  display has no retained frame at all maps to the explicit fail-stop
+  path, so no event is ever silently dropped; existing leases stay
+  valid),
   frame-set broker (timestamped frames per display, event and frame
   timestamps converted to one monotonic host clock; each event selects
   the newest frame not later than its event timestamp; `frame_age_ms`
@@ -44,9 +48,10 @@ merge; only the authenticated bundle-snapshot commit follows that head.
   behind the bounded queue with one ordered capture worker (capacity
   chosen from a retained-frame byte budget; overload signals out-of-band
   of the data queue), and the health/failure adapter mapping tap disable,
-  stream failure, permission loss, and queue saturation (DEC-009
-  fail-stop with one explicit capture-overloaded error) into the
-  coordinator's single fail-stop path (DEC-007). Recording gating
+  stream failure, permission loss, queue saturation (DEC-009 fail-stop
+  with one explicit capture-overloaded error), and an event without any
+  retained frame for its display into the coordinator's single fail-stop
+  path (DEC-007). Recording gating
   consumes the PR-01 production permission module unchanged; this slice
   adds no second permission implementation. A bare dev-only trigger in
   the shell page starts and stops recording and shows minimal live output
@@ -140,7 +145,9 @@ merge; only the authenticated bundle-snapshot commit follows that head.
   display selection and both DEC-011 fallback crops), queue-saturation
   fail-stop per DEC-009, single fail-stop transition for tap disable,
   stream failure, and permission loss, display-set replacement keeping
-  existing leases alive while refusing events without a valid frame, a
+  existing leases alive — an event with an outgoing-generation frame
+  still captures, and an event whose display retains no frame at all
+  takes one explicit fail-stop, a
   broker-advance test (advance the live broker after enqueue and verify
   the pinned predecessor frame is still selected), a
   display-spanning-window selection test on mixed-scale geometry, and a
