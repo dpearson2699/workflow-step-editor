@@ -72,11 +72,7 @@
   "phase": "delivery",
   "planning": {
     "active_response_digest": "fc7e5e2e7d2396d48602560b4b820331569b3806b663ac819ffc1e9c3816cd08",
-    "blind_completeness": {
-      "epoch": 3,
-      "receipt": "discovery/blind-completeness-0001.json",
-      "receipt_digest": "7b0ee4d92b269617932f5fe42a8d018c6565f8e73b67221eaa24ee24655c1338"
-    },
+    "blind_completeness": null,
     "blind_requirement": {
       "plan_digest": "860ca87269d59a3af4f6dd34e4dae61af3c30f6e6ba353ad3f39929c8e991608",
       "requirement": "required_multi_slice_reconciliation"
@@ -159,7 +155,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 15,
+  "revision": 21,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -168,13 +164,13 @@
       "branch": "feat/pr-01-scaffold-permissions",
       "depends_on": [],
       "execution_mode": "serial",
-      "head_sha": null,
+      "head_sha": "7788bbf70410336fbe20e2a8c7b9433a32f2687e",
       "id": "PR-01",
       "implementation_task": {
-        "adoption_start_sha": null,
-        "attempt": 0,
-        "authorization_digest": null,
-        "bound_sha": null,
+        "adoption_start_sha": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
+        "attempt": 1,
+        "authorization_digest": "0137973e5a36357c51ad09319929111939c542f183e80e4cede95ffe6a5411be",
+        "bound_sha": "30ef40f33bfc7bd1c46f3968d4b117da4a498720",
         "branch_attachment_digest": null,
         "branch_attachment_epoch": null,
         "branch_attachment_receipt": null,
@@ -182,7 +178,7 @@
         "branch_release_epoch": null,
         "branch_release_receipt": null,
         "changed_paths_digest": null,
-        "client_thread_id": null,
+        "client_thread_id": "a6352089879840c52",
         "companion_probe_digest": null,
         "companion_probe_epoch": null,
         "companion_probe_receipt": null,
@@ -193,7 +189,7 @@
         "head_adoption_terminal_lineage": [],
         "implementation_receipt": null,
         "implementation_receipt_digest": null,
-        "launch_marker": null,
+        "launch_marker": "feature/PR-01/implementation/1",
         "output_head_sha": null,
         "output_pr": null,
         "replacement_observation_digest": null,
@@ -207,13 +203,13 @@
         "review_receipt_digest": null,
         "review_task_quiescence_digest": null,
         "snapshot_authorization": null,
-        "state": "unbound",
+        "state": "active",
         "stop_proof_digest": null,
         "stop_proof_epoch": null,
         "stop_proof_receipt": null,
-        "task_worktree": null,
+        "task_worktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a6352089879840c52",
         "terminal_result": null,
-        "thread_id": null,
+        "thread_id": "local_agent:a6352089879840c52",
         "verification_digest": null,
         "verification_verdict": null
       },
@@ -234,11 +230,11 @@
         "vite.config.ts"
       ],
       "plan": "pr/PR-01/PLAN.md",
-      "plan_checkpoint_sha": null,
+      "plan_checkpoint_sha": "919b77da67a50b6cd194f106ccff8225fa840fe8",
       "plan_digest": "bdd21fad07d1e80e23a7a08d6b95e01b31dfacfa7b540322c8939f8c866e7205",
-      "pr": null,
+      "pr": 17,
       "premerge_drift": null,
-      "receipt": null,
+      "receipt": "pr/PR-01/RECEIPT.md",
       "replacement_lineage": null,
       "review_task": {
         "adoption_start_sha": null,
@@ -287,9 +283,9 @@
         "verification_digest": null,
         "verification_verdict": null
       },
-      "revision_epoch": 0,
+      "revision_epoch": 1,
       "revision_history": [],
-      "status": "pending",
+      "status": "pr_open",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Tauri scaffold, signed dev build, and permission commands",
@@ -644,7 +640,7 @@
     ],
     "primary_digest": "1a5583a9375e7712ee8677a7fc5e228ac18bcfb7e41ca3a650d53c7da6e8367e"
   },
-  "updated_at": "2026-08-17T16:02:02Z",
+  "updated_at": "2026-08-17T16:21:53Z",
   "work_id": "2026-08-17-capture-pipeline-and-backend-foundation",
   "work_kind": "feature"
 }
