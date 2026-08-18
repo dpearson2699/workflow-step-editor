@@ -122,6 +122,9 @@ fn select_key_down_frame(
 /// and re-queries. The total requested wait never exceeds the remaining
 /// window; a job that arrives after its deadline queries once and never
 /// waits. The broker lock is never held across a wait or a compare.
+/// Frames are immutable and arrive in timestamp order, so a candidate
+/// is compared once: later passes skip every candidate whose timestamp
+/// is not newer than the newest one already compared.
 fn await_post_event_frame(
     broker: &Mutex<FrameBroker>,
     wait: &mut impl WaitRuntime,
@@ -131,12 +134,17 @@ fn await_post_event_frame(
 ) -> Option<Arc<FrameData>> {
     let deadline_ns = event_ts_ns.saturating_add(wait.window_ns());
     let poll = wait.poll_interval();
+    let mut compared_through_ts_ns = event_ts_ns;
     loop {
         let candidates = broker
             .lock()
             .expect("frame broker lock poisoned")
             .post_event_frames(pinned.display.id, event_ts_ns, deadline_ns);
         let changed = candidates.iter().find(|frame| {
+            if frame.ts_ns <= compared_through_ts_ns {
+                return false;
+            }
+            compared_through_ts_ns = frame.ts_ns;
             frame.display == pinned.display
                 && crop_pixels_differ(frame, &pinned.frame, element_crop)
         });
