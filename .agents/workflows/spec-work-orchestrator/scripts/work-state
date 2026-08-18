@@ -15850,6 +15850,30 @@ def command_reopen_final_ui_remediation(arguments: argparse.Namespace) -> dict:
                 and lineage_head == item["head_sha"]
                 and lineage_base == item["base_sha"]
             )
+        if not implementation_head_is_current and review["state"] == "clean":
+            # Review-owned remediation rotates the head inside the rolling
+            # lease; the archived CLEAN lease terminal authenticates the
+            # contiguous chain from the implementation output head to the
+            # current slice head, so it is the same causal proof a head
+            # adoption receipt provides.
+            lease_relative = review["branch_attachment_receipt"]
+            if lease_relative is not None and receipt_kind(
+                bundle, lease_relative, f"{item['id']} review lease terminal"
+            ) == "review_lease_terminal":
+                lease_path = safe_path(
+                    bundle, lease_relative,
+                    f"{item['id']} review lease terminal", required=True,
+                )
+                lease_digest = hashlib.sha256(lease_path.read_bytes()).hexdigest()
+                lease = json.loads(lease_path.read_text(encoding="utf-8"))
+                implementation_head_is_current = (
+                    lease_digest == review["branch_attachment_digest"]
+                    and lease.get("clean") is True
+                    and lease.get("initialHeadSha")
+                    == implementation["output_head_sha"]
+                    and lease.get("finalHeadSha") == item["head_sha"]
+                    and lease.get("finalBaseSha") == item["base_sha"]
+                )
         if (
             implementation["state"] != "quiescent"
             or implementation["terminal_result"] != "SUCCEEDED"
