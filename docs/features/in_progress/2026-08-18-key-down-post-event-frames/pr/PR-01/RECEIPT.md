@@ -6,8 +6,9 @@
 - Branch, base, head, and PR: `feat/pr-01-key-down-post-event-frames` from
   `origin/main@26ade421f69ac061533d4507de6c87b49ad94106`; head
   `176be565676b5abc383f684a81597893c3260524`; PR #39
-  https://github.com/dpearson2699/workflow-step-editor/pull/39 (open,
-  `Closes #38`).
+  https://github.com/dpearson2699/workflow-step-editor/pull/39 (still open
+  and unmerged at the time of supersession; the root closes it as superseded
+  once PR-02's replacement PR is open, per AC-004).
 - Worktree: `/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a1a6ee8d3ee6108d2`
   (implementation attempt 1, distinct from the coordinator worktree).
 - Plan checkpoint and digest: `dae8ca30fc919730a87438f621106ca440e227e2`,
@@ -21,8 +22,8 @@
   2026-08-18 after the AC-001 gate on this head (workflow
   `2026-08-18-155755-1d2a`) showed the accepted "oldest in-window frame"
   rule captures an intermediate repaint on the first keystroke (GA-007,
-  Q-003, DEC-004). PR #39 is closed unmerged; its commit is integrated by
-  PR-02.
+  Q-003, DEC-004). PR #39 is to be closed unmerged (AC-004) and its commit
+  integrated by PR-02.
 
 ## Implementation
 
@@ -59,9 +60,13 @@
 
 ## Acceptance
 
-- AC-001: pending — user-run signed-build recording gate on head `176be56`.
-- AC-002: pending — root-verified tests at head (`evidence/root-cargo-test-176be565.log`); recorded after the review verdict.
-- AC-003: pending — evidence pending review of the documentation diff.
+- AC-004: pending — evidence to gather: `gh pr view 39` showing `CLOSED`
+  and not merged, and `git merge-base --is-ancestor 176be565… <PR-02 head>`
+  succeeding, once PR-02's PR is open.
+- AC-001, AC-002, AC-003: no longer owned by this slice (AC-001 is
+  feature-owned; AC-002 and AC-003 moved to PR-02). Historical: the AC-001
+  gate run on this head failed (GA-007); root-verified tests at this head
+  are retained in `evidence/root-cargo-test-176be565.log`.
 
 ## Review and Deviations
 
