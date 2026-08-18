@@ -2,7 +2,7 @@
 // IPC surface (`invoke`/`Channel`). Views receive data and callbacks;
 // they never import from @tauri-apps/api directly.
 
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 
 export type PermissionStatus =
   | "granted"
@@ -120,6 +120,18 @@ export interface LoadedWorkflow {
   events: WorkflowEvent[];
 }
 
+/**
+ * One tagged item on the live capture channel (backend `LiveEnvelope`).
+ * `step` items stream one per captured event, followed by exactly one
+ * terminal `stopped` or `failed` item (terminal-last). The `ts` on a
+ * step item is the source event's RFC 3339 timestamp — a transient
+ * envelope field for the live rows (DEC-009), not a schema field.
+ */
+export type LiveEnvelope =
+  | { type: "step"; step: Step; ts: string }
+  | { type: "stopped"; workflow_id: string }
+  | { type: "failed"; workflow_id: string; error: string };
+
 /** A transient step patch: only supplied fields change (DEC-004). */
 export interface StepPatch {
   title?: string;
@@ -147,6 +159,15 @@ export interface ApiClient {
   renameWorkflow(id: string, name: string): Promise<void>;
   /** ADR 0003 hard delete: success means the folder is absent. */
   deleteWorkflow(id: string): Promise<void>;
+  /**
+   * Starts a recording under the manifest's default timestamp name.
+   * Envelopes stream to `onEnvelope` until the terminal item; envelopes
+   * may arrive before the returned promise (the workflow id) resolves.
+   */
+  startRecording(onEnvelope: (envelope: LiveEnvelope) => void): Promise<string>;
+  /** Stops the active recording; resolves with the workflow id after
+   *  finalization. The terminal envelope arrives on the channel. */
+  stopRecording(): Promise<string>;
 }
 
 export function createTauriClient(): ApiClient {
@@ -185,6 +206,16 @@ export function createTauriClient(): ApiClient {
     },
     deleteWorkflow(id) {
       return invoke<void>("delete_workflow", { id });
+    },
+    startRecording(onEnvelope) {
+      const channel = new Channel<LiveEnvelope>();
+      channel.onmessage = onEnvelope;
+      // No frontend name: the backend names the manifest with its
+      // timestamp default, which the naming dialog later pre-selects.
+      return invoke<string>("start_recording", { name: null, channel });
+    },
+    stopRecording() {
+      return invoke<string>("stop_recording");
     },
   };
 }

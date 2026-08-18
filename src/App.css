@@ -581,6 +581,126 @@ div.shot-big {
   margin: 0;
 }
 
+/* ---------- Record flow: live capture view ---------- */
+
+.rec-dot {
+  color: #ff5252;
+  animation: pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.rec-overlay {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2a1315;
+  border: 2px solid #ff5252;
+  color: #ffb3b3;
+  border-radius: 999px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px 8px 18px;
+  z-index: 60;
+  box-shadow: 0 6px 24px #000b;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stop-big {
+  background: #ff5252;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.stop-big:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Static live rows: same layout as .step-row-open, no button. */
+.step-row-static {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+}
+
+/* ---------- Record flow: draft review ---------- */
+
+.draft-name {
+  font-weight: 700;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.draft-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #d8b45a;
+  border: 1px solid #d8b45a66;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+.draft-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.save-draft-button {
+  background: #4670d8;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-weight: 700;
+}
+
+.save-draft-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.discard-button {
+  background: none;
+  border: 1px solid #ff6b6b55;
+  color: #ff8f8f;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.discard-button:hover {
+  background: #3a2020;
+}
+
+.record-failed-banner {
+  margin: 0;
+  padding: 10px 20px;
+  background: #3a2020;
+  border-bottom: 1px solid #ff6b6b55;
+  color: #ff8f8f;
+  font-size: 13px;
+}
+
 /* ---------- Destructive confirmation ---------- */
 
 .modal-scrim {
@@ -643,6 +763,32 @@ div.shot-big {
 
 .modal-cancel:disabled,
 .modal-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------- Save-recording naming dialog ---------- */
+
+.modal-name-input {
+  width: 100%;
+  background: #1c1c1f;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.modal-save {
+  background: #4670d8;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 700;
+}
+
+.modal-save:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

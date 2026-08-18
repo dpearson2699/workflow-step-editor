@@ -622,8 +622,13 @@ fn run_worker(context: WorkerContext) {
                         steps.push(step.clone());
                         // Emitted only after the event line and all three
                         // screenshots are committed. A channel disconnect
-                        // never interrupts disk persistence.
-                        let _ = sink.emit(LiveEnvelope::Step { step });
+                        // never interrupts disk persistence. The event
+                        // timestamp rides the envelope for the live rows
+                        // (DEC-009).
+                        let _ = sink.emit(LiveEnvelope::Step {
+                            step,
+                            ts: event.ts.clone(),
+                        });
                     }
                     Err(error) => {
                         break Some(Outcome::Failed(format!(
@@ -840,13 +845,17 @@ mod tests {
         // Channel: two ordered steps, then the terminal, terminal-last.
         let items = log.items();
         assert_eq!(items.len(), 3);
-        let LiveEnvelope::Step { step: step1 } = &items[0] else {
+        let LiveEnvelope::Step { step: step1, ts: ts1 } = &items[0] else {
             panic!("first item must be a step, got {:?}", items[0]);
         };
-        let LiveEnvelope::Step { step: step2 } = &items[1] else {
+        let LiveEnvelope::Step { step: step2, ts: ts2 } = &items[1] else {
             panic!("second item must be a step, got {:?}", items[1]);
         };
         assert_eq!(items[2], LiveEnvelope::Stopped { workflow_id: id.clone() });
+        // DEC-009: each step envelope carries its event's timestamp as a
+        // transient field for the live rows.
+        assert_eq!(ts1, "2026-08-16T22:31:05.000Z");
+        assert_eq!(ts2, "2026-08-16T22:31:05.000Z");
         assert_eq!(step1.title, "Click \"OK\" — TextEdit");
         assert_eq!(step1.classification, Classification::Click);
         assert_eq!(step1.event_ids, vec!["evt_0001".to_owned()]);

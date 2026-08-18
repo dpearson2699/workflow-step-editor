@@ -1,5 +1,7 @@
 # Proven capture gate — frozen script (AC-001)
 
+> Historical gate of the capture-pipeline bundle: its AC-001/PR-03 labels belong to that completed bundle, not to the review-UI bundle, whose final gate is `dev/review-ui-gate/script.md`.
+
 This is the frozen, user-run acceptance script for the macOS capture
 pipeline. It runs on the locally built, signed `.app` from the exact
 final code head of PR-03, before snapshot materialization, review, and
