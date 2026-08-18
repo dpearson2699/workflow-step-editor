@@ -74,7 +74,9 @@
     "primary": "FEATURE.md",
     "status": "STATUS.md"
   },
-  "blockers": [],
+  "blockers": [
+    "BLK-001"
+  ],
   "completion_binding": null,
   "completion_specification_digest": null,
   "observation_epoch_high_water": 5,
@@ -168,7 +170,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 22,
+  "revision": 23,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -491,7 +493,7 @@
     ],
     "primary_digest": "ababcf697a99b93dfb6cb703529a38c37bab537cffafc45c2033f15b7c8ccea2"
   },
-  "updated_at": "2026-08-18T18:03:19Z",
+  "updated_at": "2026-08-18T18:06:11Z",
   "work_id": "2026-08-18-key-down-post-event-frames",
   "work_kind": "feature"
 }

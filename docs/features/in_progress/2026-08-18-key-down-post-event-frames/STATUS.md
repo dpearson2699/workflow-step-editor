@@ -4,11 +4,11 @@
 - Work kind: `feature`
 - Work ID: `2026-08-18-key-down-post-event-frames`
 - Phase: `plan`
-- Revision: `22`
+- Revision: `23`
 - Observed origin/main: `26ade421f69ac061533d4507de6c87b49ad94106`
 - Task roster: `ababcf697a99b93dfb6cb703529a38c37bab537cffafc45c2033f15b7c8ccea2`
 - Active slices: `none`
-- Last update: `2026-08-18T18:03:19Z`
+- Last update: `2026-08-18T18:06:11Z`
 
 ## ChatGPT Pro Planning Evidence
 
@@ -52,7 +52,7 @@
 
 ## Blockers
 
-- none
+- BLK-001
 
 ## Pull Requests
 
