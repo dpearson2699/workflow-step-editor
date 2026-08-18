@@ -49,15 +49,15 @@
       "assignment_digest": "6a342e26930bf48165a5d90bc3b7ec7baceb696089c934b0284f0bcf4e0c9551",
       "criterion_digest": "8a98119b4b2f94935f0dfd8a6cd12ab902c2224c8eb7b4439c4ac2033632d0a1",
       "evidence": [
-        "pr/PR-03/evidence/ui-proof/93cbfb19c72c3afdb13536556d30d434d458d136/snapshot.json",
-        "pr/PR-03/evidence/ui-proof/93cbfb19c72c3afdb13536556d30d434d458d136/ui-receipt.json"
+        "pr/PR-03/evidence/ui-proof/5590f8d73ea49fc35acaa2f356ab46af5349cf71/snapshot.json",
+        "pr/PR-03/evidence/ui-proof/5590f8d73ea49fc35acaa2f356ab46af5349cf71/ui-receipt.json"
       ],
       "evidence_digests": {
-        "pr/PR-03/evidence/ui-proof/93cbfb19c72c3afdb13536556d30d434d458d136/snapshot.json": "72a884bd46cc910150b53e5c30a4acca5d38b6c3a6e4f5404d573cda951ff445",
-        "pr/PR-03/evidence/ui-proof/93cbfb19c72c3afdb13536556d30d434d458d136/ui-receipt.json": "94faef42afe0c4266d4c6c74ff7cedb37892eb4ffd9d51c5882a8665011bf950"
+        "pr/PR-03/evidence/ui-proof/5590f8d73ea49fc35acaa2f356ab46af5349cf71/snapshot.json": "63cd7b4fc12000777066124bc1601eb512b175eac4f71105e264d3c6c00c8bbc",
+        "pr/PR-03/evidence/ui-proof/5590f8d73ea49fc35acaa2f356ab46af5349cf71/ui-receipt.json": "84b7c69843a9502879dad531f9d48096235f152aebb20fb729fb9ff8f5881a9a"
       },
       "locked": true,
-      "producer_head_sha": "40f5431b3ef5dc0a2134388dfe997a557f6eb527",
+      "producer_head_sha": "d62c51f3b95242f9b2c6336d9872ecf5bf438ae5",
       "producer_slice": "PR-03",
       "scope": "slice",
       "status": "passed"
@@ -88,8 +88,8 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": "84bf72fe25d06ce0a0164c5358a43b460207ab4bb1172144365914e8d580fa18",
-  "observation_epoch_high_water": 16,
-  "observed_main_sha": "4e53b63f27b44bcd69bb59b26a6220054600a475",
+  "observation_epoch_high_water": 22,
+  "observed_main_sha": "02b255adfb6a9c70245f83c5925f6a12d2c45140",
   "parallel_assessments": [],
   "phase": "complete",
   "planning": {
@@ -203,7 +203,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 78,
+  "revision": 91,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -511,22 +511,22 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "4e53b63f27b44bcd69bb59b26a6220054600a475",
+      "base_sha": "02b255adfb6a9c70245f83c5925f6a12d2c45140",
       "branch": "feat/pr-03-record-flow",
       "depends_on": [
         "PR-02"
       ],
       "execution_mode": "serial",
-      "head_sha": "40f5431b3ef5dc0a2134388dfe997a557f6eb527",
+      "head_sha": "d62c51f3b95242f9b2c6336d9872ecf5bf438ae5",
       "id": "PR-03",
       "implementation_task": {
         "adoption_start_sha": "4e53b63f27b44bcd69bb59b26a6220054600a475",
         "attempt": 1,
         "authorization_digest": "c712a27b52684dd2c64580b2e718d9efb40b7894d0c794da5bf982b2e1505482",
-        "bound_sha": "4e53b63f27b44bcd69bb59b26a6220054600a475",
-        "branch_attachment_digest": null,
-        "branch_attachment_epoch": null,
-        "branch_attachment_receipt": null,
+        "bound_sha": "f693fa9640c764fffddd54a01949e385243cff01",
+        "branch_attachment_digest": "07d639660aaf228aa7d2e16da315d5699232c1002bdd1c0f5b86107709c99f86",
+        "branch_attachment_epoch": 22,
+        "branch_attachment_receipt": "pr/PR-03/evidence/implementation-branch-attachment.json",
         "branch_release_digest": null,
         "branch_release_epoch": null,
         "branch_release_receipt": null,
@@ -585,9 +585,9 @@
       "replacement_lineage": null,
       "review_task": {
         "adoption_start_sha": null,
-        "attempt": 0,
-        "authorization_digest": null,
-        "bound_sha": null,
+        "attempt": 1,
+        "authorization_digest": "05594c9c2183176f104885d2b6219ea6c7e7244044e6f94d2112afb1c4bae965",
+        "bound_sha": "f693fa9640c764fffddd54a01949e385243cff01",
         "branch_attachment_digest": null,
         "branch_attachment_epoch": null,
         "branch_attachment_receipt": null,
@@ -595,10 +595,10 @@
         "branch_release_epoch": null,
         "branch_release_receipt": null,
         "changed_paths_digest": null,
-        "client_thread_id": null,
-        "companion_probe_digest": null,
-        "companion_probe_epoch": null,
-        "companion_probe_receipt": null,
+        "client_thread_id": "a0e1ef8e99f26d54f",
+        "companion_probe_digest": "00f0a32c1e8668bfd65dde5676ebb7a8c6437f438eb6890e88ad306d7031d1a4",
+        "companion_probe_epoch": 18,
+        "companion_probe_receipt": "pr/PR-03/evidence/review-companion-probe.json",
         "descendant_quiescence_digest": null,
         "head_adoption_digest": null,
         "head_adoption_epoch": null,
@@ -606,7 +606,7 @@
         "head_adoption_terminal_lineage": [],
         "implementation_receipt": null,
         "implementation_receipt_digest": null,
-        "launch_marker": null,
+        "launch_marker": "feature/PR-03/review/1",
         "output_head_sha": null,
         "output_pr": null,
         "replacement_observation_digest": null,
@@ -620,18 +620,51 @@
         "review_receipt_digest": null,
         "review_task_quiescence_digest": null,
         "snapshot_authorization": null,
-        "state": "unbound",
+        "state": "blocked",
         "stop_proof_digest": null,
         "stop_proof_epoch": null,
         "stop_proof_receipt": null,
-        "task_worktree": null,
+        "task_worktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a0e1ef8e99f26d54f",
         "terminal_result": null,
-        "thread_id": null,
+        "thread_id": "local_agent:a0e1ef8e99f26d54f",
         "verification_digest": null,
         "verification_verdict": null
       },
-      "revision_epoch": 1,
-      "revision_history": [],
+      "revision_epoch": 2,
+      "revision_history": [
+        {
+          "acceptance_digest": "e349e558b512f06db650fab24b6047c3f8999bb3ae3c69c686bf11a1771714ae",
+          "added_owned_paths": [],
+          "authorization_digest": "c712a27b52684dd2c64580b2e718d9efb40b7894d0c794da5bf982b2e1505482",
+          "base_ref": "origin/main",
+          "base_sha": "02b255adfb6a9c70245f83c5925f6a12d2c45140",
+          "final_ui_issue_receipt": "pr/PR-03/evidence/ui-proof/final-checkpoint-66e75bdce84271e7b85de86436731c68507c725b/ui-receipt.json",
+          "final_ui_issue_receipt_digest": "f37459c824182b9206935ed9ab1595d4b0fc0f951bf5ef40b3eb0b6c8145fcc5",
+          "final_ui_review_receipt": "pr/PR-03/evidence/review-clean.json",
+          "head_adoption_digest": null,
+          "head_adoption_epoch": null,
+          "head_adoption_receipt": null,
+          "head_adoption_terminal_lineage": [],
+          "head_sha": "f693fa9640c764fffddd54a01949e385243cff01",
+          "implementation_receipt_digest": "068dc0f3b61f1303e58ce310bef5207862e08433094721fd2571fc847e5d3af5",
+          "owned_paths": [
+            "README.md",
+            "dev",
+            "src",
+            "src-tauri/src"
+          ],
+          "plan_checkpoint_sha": "4e53b63f27b44bcd69bb59b26a6220054600a475",
+          "pr": 36,
+          "reauthorization_digest": "5655a03a45a02b55b4789d095d42dbcf0c2f2f43b1d4b4e8155593e2b16df6c8",
+          "reauthorization_disposition": "final_ui_checkpoint_issue",
+          "required_by_intent_acceptance_id": null,
+          "review_receipt_digest": "142080a34416b848f1451c5991bc3fe1a3878e8eaecfb4df0ae2c0d7dc5043d1",
+          "review_terminal_digest": "6375da11742b16fb06b1050f615555f46401a4447f878d07b609a2e89d95033c",
+          "review_terminal_receipt": "pr/PR-03/evidence/review-lease-terminal.json",
+          "revision_epoch": 1,
+          "specification_digest": "84bf72fe25d06ce0a0164c5358a43b460207ab4bb1172144365914e8d580fa18"
+        }
+      ],
       "status": "pr_open",
       "task_history": [],
       "terminal_freshness": null,
@@ -722,7 +755,7 @@
     ],
     "primary_digest": "efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18"
   },
-  "updated_at": "2026-08-18T04:06:34Z",
+  "updated_at": "2026-08-18T06:04:18Z",
   "work_id": "2026-08-17-review-ui",
   "work_kind": "feature"
 }

@@ -1,0 +1,14 @@
+{
+  "schema": "project-ui-proof",
+  "source": "project_ui_adapter",
+  "taskStage": "final_orchestrated_pr",
+  "sliceId": "PR-03",
+  "identityKind": "worktree_tree",
+  "identity": "66e75bdce84271e7b85de86436731c68507c725b",
+  "automatedAcceptanceId": "AC-004",
+  "proofTarget": "stop-recording-banner",
+  "observation": {
+    "kind": "displayed_value",
+    "value": "Stop banner '\u25a0 Stop Recording' as sole in-page action with live status 'Recording \u2014 3 steps captured'; Stop entered draft review (draft badge, Discard, Save\u2026); Discard confirmation names recorded keystroke data; confirm returned to landing with the draft gone"
+  }
+}

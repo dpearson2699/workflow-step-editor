@@ -14,8 +14,15 @@
   plan digest `08453df4cb45ca35513f59b74f052608303ae48af9d8484e34436e3eafba63d2`.
 - Implementation task: attempt 1, `local_agent:a94d6fe2451de9a3e`, worktree
   above, bound START `4e53b63f27b44bcd69bb59b26a6220054600a475`.
-- Review task: pending (launches at this handoff per the early-review
-  policy).
+- Review task: attempt 1, `local_agent:a0e1ef8e99f26d54f`; exact-head
+  CLEAN at `f693fa96` over base `02b255ad` (revision epoch 1;
+  review-lease-terminal.json); blocked by the final-checkpoint issue and
+  revalidating the epoch-2 fix head `d62c51f3`.
+- Revision epoch 2: final-checkpoint issue (Reveal/chevron overlap on
+  landing rows) fixed in `d62c51f3` — prototype row order restored
+  (`row-open`, `row-reveal`, `row-chevron` as flow siblings), collision
+  margin removed, structural test added; visually verified on the signed
+  rebuild (row-hover screenshot).
 
 ## Implementation
 
