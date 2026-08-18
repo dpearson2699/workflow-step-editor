@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use crate::capture::broker::{FrameBroker, POST_EVENT_FRAME_WINDOW_NS, POST_EVENT_SETTLE_NS};
+use crate::capture::broker::{FrameBroker, POST_EVENT_FRAME_WINDOW_NS};
 use crate::capture::health::EmitterGuard;
 use crate::capture::hostclock::host_now_ns;
 use crate::capture::macos::{DisplayReconfigurationObserver, MacosResolver, MacosStreamBackend};
@@ -36,13 +36,12 @@ const WARM_UP_TIMEOUT: Duration = Duration::from_secs(8);
 /// The tap-health poll interval.
 const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(250);
 /// How often the worker re-queries the broker during a key-down's
-/// bounded post-event settle/wait (DEC-002/DEC-004).
+/// bounded post-event wait (DEC-002/DEC-006).
 const POST_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 /// The production wait runtime for the worker's key-down post-event
 /// wait: the mach host clock (the event and frame timestamp domain),
-/// a plain thread sleep, the DEC-002 window, the DEC-004 settle, and a
-/// short poll.
+/// a plain thread sleep, the DEC-002 window, and a short poll.
 struct HostWaitRuntime;
 
 impl WaitRuntime for HostWaitRuntime {
@@ -56,10 +55,6 @@ impl WaitRuntime for HostWaitRuntime {
 
     fn window_ns(&self) -> u64 {
         POST_EVENT_FRAME_WINDOW_NS
-    }
-
-    fn settle_ns(&self) -> u64 {
-        POST_EVENT_SETTLE_NS
     }
 
     fn poll_interval(&self) -> Duration {

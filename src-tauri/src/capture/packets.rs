@@ -6,9 +6,11 @@
 //! fixed-size fallback crop, and the null-window shapes. No macOS API
 //! is touched here. Which frame a job uses is decided by the worker
 //! ([`crate::capture::worker`]): the pinned pre-event frame for a click,
-//! the bounded post-event frame or the pinned fallback for a key-down
-//! (DEC-001/DEC-002); [`build_packet`] cuts all three shots from that
-//! one [`SelectedFrame`].
+//! the content-aware post-event frame or the pinned fallback for a
+//! key-down (DEC-001/DEC-002/DEC-006); [`build_packet`] cuts all three
+//! shots from that one [`SelectedFrame`]. The worker's pixel compare
+//! uses the same element crop rule ([`element_info`],
+//! [`element_crop_px`]) and the pure [`crop_pixels_differ`] helper.
 
 use std::sync::Arc;
 
@@ -16,7 +18,7 @@ use crate::capture::broker::FrameData;
 use crate::capture::encoder::encode_crop_png;
 use crate::capture::geometry::{
     crop_px, display_for_point, display_for_rect, fallback_rect_pt, full_display_px,
-    is_implausible, DisplayGeometry, PointPt, RectPt,
+    is_implausible, CropPx, DisplayGeometry, PointPt, RectPt,
 };
 use crate::capture::queue::{CaptureJob, RawInput};
 use crate::domain::schema::{ElementInfo, ElementSource, Pos, WindowInfo};
@@ -74,7 +76,7 @@ impl std::fmt::Display for PacketBuildError {
 /// The frame one job's screenshot triple is cut from: the event-time
 /// display it was selected for plus the frame lease. The worker builds
 /// it from the pinned snapshot ([`select_pinned_frame`]) and, for a
-/// key-down, may swap in the bounded post-event frame of the same
+/// key-down, may swap in the content-aware post-event frame of the same
 /// display geometry.
 #[derive(Debug, Clone)]
 pub struct SelectedFrame {
@@ -137,8 +139,6 @@ pub fn build_packet(
     meta: &ResolvedMetadata,
     selected: &SelectedFrame,
 ) -> Result<CapturePacket, PacketBuildError> {
-    let point = PointPt { x: job.x, y: job.y };
-    let is_click = matches!(job.input, RawInput::Click { .. });
     let display = &selected.display;
     let frame = &selected.frame;
 
@@ -151,13 +151,48 @@ pub fn build_packet(
         .and_then(|window| crop_px(&frame.display, &window.bounds_pt))
         .unwrap_or_else(|| full_display_px(&frame.display));
 
-    // Element: the AX frame when plausible; the fixed-size fallback
-    // otherwise (DEC-008/DEC-011).
+    let element = element_info(job, meta, display);
+    let element_crop = element_crop_px(&frame.display, &element);
+
+    let shots = encode_triple(frame, window_crop, element_crop)
+        .map_err(PacketBuildError::Encode)?;
+
+    Ok(CapturePacket {
+        input: match &job.input {
+            RawInput::Click { button } => PacketInput::Click { button: *button },
+            RawInput::KeyDown { key } => PacketInput::KeyDown { key: key.clone() },
+        },
+        pos: Pos { x: job.x, y: job.y },
+        display_id: display.id,
+        window: meta.window.as_ref().map(|window| WindowInfo {
+            app: window.app.clone(),
+            title: window.title.clone(),
+            pid: window.pid,
+            bounds: window.bounds_pt.to_schema_rect(),
+        }),
+        element,
+        frontmost_app: meta.frontmost_app.clone(),
+        frame_age_ms: job.snapshot.frame_age_ms(frame),
+        shots,
+    })
+}
+
+/// The element the packet reports for one job on `display`: the AX
+/// frame when plausible; the fixed-size fallback otherwise
+/// (DEC-008/DEC-011). Shared by [`build_packet`] and the worker's
+/// content-aware key-down selection (DEC-006).
+pub fn element_info(
+    job: &CaptureJob,
+    meta: &ResolvedMetadata,
+    display: &DisplayGeometry,
+) -> ElementInfo {
+    let point = PointPt { x: job.x, y: job.y };
+    let is_click = matches!(job.input, RawInput::Click { .. });
     let click_constraint = is_click.then_some(point);
     let ax_element = meta.element.as_ref().filter(|element| {
         !is_implausible(&element.frame_pt, display, click_constraint)
     });
-    let element = match ax_element {
+    match ax_element {
         Some(element) => ElementInfo {
             role: element.role.clone(),
             title: element.title.clone(),
@@ -182,36 +217,42 @@ pub fn build_packet(
                 source: ElementSource::Fallback,
             }
         }
-    };
+    }
+}
+
+/// The element shot's pixel crop on a frame of `frame_display`
+/// geometry: the element rectangle, or the full display when the
+/// rectangle misses it.
+pub fn element_crop_px(frame_display: &DisplayGeometry, element: &ElementInfo) -> CropPx {
     let element_rect_pt = RectPt::new(
         f64::from(element.frame.x),
         f64::from(element.frame.y),
         f64::from(element.frame.w),
         f64::from(element.frame.h),
     );
-    let element_crop = crop_px(&frame.display, &element_rect_pt)
-        .unwrap_or_else(|| full_display_px(&frame.display));
+    crop_px(frame_display, &element_rect_pt).unwrap_or_else(|| full_display_px(frame_display))
+}
 
-    let shots = encode_triple(frame, window_crop, element_crop)
-        .map_err(PacketBuildError::Encode)?;
-
-    Ok(CapturePacket {
-        input: match &job.input {
-            RawInput::Click { button } => PacketInput::Click { button: *button },
-            RawInput::KeyDown { key } => PacketInput::KeyDown { key: key.clone() },
-        },
-        pos: Pos { x: job.x, y: job.y },
-        display_id: display.id,
-        window: meta.window.as_ref().map(|window| WindowInfo {
-            app: window.app.clone(),
-            title: window.title.clone(),
-            pid: window.pid,
-            bounds: window.bounds_pt.to_schema_rect(),
-        }),
-        element,
-        frontmost_app: meta.frontmost_app.clone(),
-        frame_age_ms: job.snapshot.frame_age_ms(frame),
-        shots,
+/// True when the BGRA pixels of `candidate` and `reference` differ
+/// anywhere inside `crop` (DEC-006 content-aware key-down selection).
+/// Pure and cheap: compares the crop's rows byte-for-byte. Frames of a
+/// different buffer shape count as differing. The crop is clamped into
+/// the reference frame the way the encoder clamps it.
+pub fn crop_pixels_differ(candidate: &FrameData, reference: &FrameData, crop: CropPx) -> bool {
+    if candidate.width_px != reference.width_px
+        || candidate.height_px != reference.height_px
+        || candidate.bytes_per_row != reference.bytes_per_row
+    {
+        return true;
+    }
+    let x = crop.x.min(reference.width_px) as usize;
+    let y = crop.y.min(reference.height_px);
+    let w = crop.w.min(reference.width_px - x as u32) as usize;
+    let h = crop.h.min(reference.height_px - y);
+    (y..y + h).any(|row| {
+        let start = row as usize * reference.bytes_per_row + x * 4;
+        let end = start + w * 4;
+        candidate.pixels.get(start..end) != reference.pixels.get(start..end)
     })
 }
 
@@ -557,5 +598,48 @@ mod tests {
         }
         assert_eq!(decode_size(&packet.shots.full), (40, 30));
         assert_eq!(decode_size(&packet.shots.window), (20, 20));
+    }
+
+    #[test]
+    fn crop_pixels_differ_only_sees_changes_inside_the_crop() {
+        // DEC-006: a title-only repaint outside the element crop is not
+        // a change; one changed byte inside it is.
+        let display = DisplayGeometry {
+            id: 1,
+            frame_pt: RectPt::new(0.0, 0.0, 40.0, 30.0),
+            scale: 1.0,
+        };
+        let reference = frame_for(&display, 1_000);
+        let with_pixels = |ts_ns: u64, pixels: Vec<u8>| FrameData {
+            display: display.clone(),
+            width_px: 40,
+            height_px: 30,
+            bytes_per_row: 160,
+            ts_ns,
+            pixels,
+        };
+        let crop = CropPx {
+            x: 10,
+            y: 10,
+            w: 12,
+            h: 8,
+        };
+        assert!(!crop_pixels_differ(&reference, &reference, crop));
+
+        let mut outside = reference.pixels.clone();
+        outside[0] = 0; // pixel (0, 0): outside the crop
+        assert!(!crop_pixels_differ(&with_pixels(2_000, outside), &reference, crop));
+
+        let mut inside = reference.pixels.clone();
+        // Last byte of the crop's last row: pixel (21, 17), alpha.
+        inside[17 * 160 + 21 * 4 + 3] = 0;
+        assert!(crop_pixels_differ(&with_pixels(3_000, inside), &reference, crop));
+
+        // A frame of another buffer shape counts as differing.
+        let smaller = DisplayGeometry {
+            frame_pt: RectPt::new(0.0, 0.0, 20.0, 30.0),
+            ..display.clone()
+        };
+        assert!(crop_pixels_differ(&frame_for(&smaller, 4_000), &reference, crop));
     }
 }

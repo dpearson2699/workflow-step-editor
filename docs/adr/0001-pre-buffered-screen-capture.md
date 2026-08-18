@@ -35,20 +35,25 @@ the field without the typed character and was judged useless
 - **Clicks** keep the pre-event selection unchanged: the tap callback pins the
   newest retained frame not later than the event, and the artifact shows the
   control before the UI repaints.
-- **Key-downs** use the newest retained frame on the selected display whose
-  display timestamp lies in the bounded window `(event_ts, event_ts + 250 ms]`,
-  selected after a 100 ms settle: the worker waits until the display retains a
-  frame with `ts >= event_ts + 100 ms` (one minimum frame interval; equality
-  satisfies it) or the 250 ms deadline passes, then takes the newest in-window
-  frame. The settle lets an intermediate repaint — such as the dirty-state
-  title repaint on the first keystroke into a clean document — be superseded
-  by the later glyph paint instead of winning as the first post-event frame.
-  The broker retains two frames per display. Frames equal to the event
-  timestamp are not eligible; a frame equal to the deadline is.
+- **Key-downs** select content-aware inside the bounded window
+  `(event_ts, event_ts + 250 ms]` on the selected display: the worker waits,
+  up to the 250 ms deadline, for the oldest retained in-window frame whose
+  pixels inside the selected element crop (the same crop the element
+  screenshot is cut from: the focused AX element when plausible, else the
+  fixed-size fallback rectangle) differ from the pinned pre-event frame's
+  pixels in that rectangle, and selects it as soon as it exists. If no such
+  frame exists at the deadline, it selects the newest in-window frame. The
+  typed glyph always appears inside the focused element while the first
+  keystroke's dirty-state title repaint does not, so the title-only frame is
+  skipped and the glyph frame wins; and because the first changed frame is
+  taken at once, a typing step does not show characters typed after it (a
+  time-based settle overshoots at typing speed with ~10 fps capture). The
+  broker retains two frames per display. Frames equal to the event timestamp
+  are not eligible; a frame equal to the deadline is.
 - The tap callback still pins the pre-event snapshot for every event and never
-  blocks. The bounded settle/wait for the post-event frame runs on the capture
-  worker after it has resolved metadata and chosen the display, with the
-  deadline anchored to the event timestamp; a job that reaches the worker
+  blocks. The bounded wait and the pixel compare run on the capture worker
+  after it has resolved metadata and chosen the display, never under the
+  broker lock, with the deadline anchored to the event timestamp; a job that reaches the worker
   after its deadline queries once and never waits. Because the deadline is
   event-anchored, a burst of key-downs on a static screen shares one wait
   instead of stacking waits linearly; a burst can still fill the bounded queue
@@ -68,10 +73,12 @@ the field without the typed character and was judged useless
 - At the ~10 fps stream rate, several key-downs that precede one frame share
   that frame, so a typing step's screenshots may show more than its own
   character.
-- A key-down step pays at least the 100 ms settle and at most 250 ms of added
-  latency before its packet is emitted; while the screen keeps changing
-  (continuous typing) the wait ends at the first settle-satisfying frame, and
-  an isolated key on a static screen waits out the 250 ms deadline.
+- A key-down step pays up to 250 ms of added latency before its packet is
+  emitted: the wait ends at the first in-window frame that changes the focused
+  element (normally the next captured frame while typing), and a key whose
+  visual effect lies outside the element, or a static screen, waits out the
+  250 ms deadline. Each candidate frame costs one small pixel compare of the
+  element crop.
 - Orderly stop joins the capture worker before it stops the display streams,
   so a key-down accepted just before Stop can still receive its post-event
   frame; the streams stop afterwards and the emitter quiesces last.
