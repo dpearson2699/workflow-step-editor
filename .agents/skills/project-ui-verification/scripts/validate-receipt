@@ -563,10 +563,20 @@ def validate_published_implementation_tree(
     except UnicodeDecodeError as error:
         raise ReceiptError("published tree contains a non-UTF-8 path") from error
     allowed_root = snapshot_path.as_posix()
+    # A final snapshot moves the bundle between lifecycle roots, so its diff
+    # legitimately removes the alternate lifecycle path of the same work id.
+    # verify-pr-snapshot already rejects content on both paths at the head,
+    # so alternate-root diff entries can only be removals, never additions.
+    alternate_lifecycle = "in_progress" if lifecycle == "completed" else "completed"
+    alternate_root = PurePosixPath(
+        "docs", work_root, alternate_lifecycle,
+        nonempty_string(state.get("work_id"), "work_id"),
+    ).as_posix()
     require(
         bool(changed_paths)
         and all(
             path == allowed_root or path.startswith(allowed_root + "/")
+            or path == alternate_root or path.startswith(alternate_root + "/")
             for path in changed_paths
         ),
         "published slice Git tree differs from implementation proof tree "
