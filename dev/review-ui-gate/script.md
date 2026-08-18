@@ -38,9 +38,10 @@ pinned prototype direction (`prototype/map-1-8`, variant D).
    auto-title, event time — in capture order.
 2. **Stop into draft review.** Click **■ Stop Recording**. The full
    detail view opens with a `draft` badge beside the default timestamp
-   name, and **Discard** / **Save…** in the header. Select a few steps;
-   confirm each shows its screenshot triple (one large, two labeled
-   click-to-swap thumbnails) and the metadata grid.
+   name, and **Discard** / **Save…** in the header. The Stop click
+   itself does not appear as a step. Select a few steps; confirm each
+   shows its screenshot triple (one large, two labeled click-to-swap
+   thumbnails) and the metadata grid.
 3. **Save with a name.** Click **Save…**. The naming dialog pre-selects
    the default timestamp name. Type a real name (for example
    `Approve invoice`) and click **Save**. The draft badge and draft

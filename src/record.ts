@@ -10,8 +10,11 @@
 //   recording mode once start settles.
 // - A Stop click during startup latches and issues once start resolves.
 // - Stop issues at most one stop command; a second click is a no-op.
-// - Draft entry is driven by the terminal envelope, so both orders of
-//   stop-command resolution versus terminal-envelope arrival converge.
+// - Draft entry is driven by the terminal envelope or, because channel
+//   delivery is documented best-effort, by a successful stop result —
+//   whichever settles first wins exactly once, so both orders of
+//   stop-command resolution versus terminal-envelope arrival converge
+//   and a lost terminal can never strand the live view.
 // - A disposed session ignores every late channel message and promise
 //   settlement (stale-session suppression).
 //
@@ -124,9 +127,17 @@ export function startRecordSession(api: ApiClient): RecordSession {
   function issueStop(): void {
     setState(liveState());
     api.stopRecording().then(
-      () => {
-        // Draft entry belongs to the terminal envelope; the resolved
-        // stop command carries nothing the flow still needs.
+      (workflowId: string) => {
+        if (disposed || terminalHandled) {
+          return;
+        }
+        // The terminal envelope normally drives draft entry, but the
+        // channel is documented best-effort while the stop command
+        // resolves only after finalization saved the manifest. Its
+        // workflow id is the reliable fallback into draft review; a
+        // terminal that already landed keeps precedence, and one that
+        // trails in is ignored via `terminalHandled`.
+        handleTerminal({ type: "stopped", workflow_id: workflowId });
       },
       (caught: unknown) => {
         if (disposed || terminalHandled) {

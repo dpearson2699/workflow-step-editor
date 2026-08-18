@@ -223,7 +223,7 @@ describe("record flow", () => {
     expect(screen.getByText(/2 steps captured/)).toBeTruthy();
   });
 
-  it("issues one stop for repeated clicks and enters draft when the terminal follows the stop result", async () => {
+  it("issues one stop for repeated clicks and falls back to the stop result when the terminal is lost", async () => {
     const capture = recorder();
     await renderShell(capture);
     fireEvent.click(recordButton());
@@ -236,14 +236,11 @@ describe("record flow", () => {
     fireEvent.click(stopButton());
     expect(capture.stopRecording).toHaveBeenCalledTimes(1);
 
-    // Order A: the stop command resolves first, then the terminal
-    // envelope arrives; the terminal drives draft entry.
+    // Order A: the stop command resolves and no terminal envelope ever
+    // arrives (channel delivery is best-effort). The successful stop
+    // result drives draft entry.
     await act(async () => {
       capture.stops[0].resolve(WORKFLOW_ID);
-    });
-    expect(screen.queryByText("draft")).toBeNull();
-    await act(async () => {
-      capture.sinks[0]({ type: "stopped", workflow_id: WORKFLOW_ID });
     });
     expect(screen.getByText("draft")).toBeTruthy();
     // Draft review is the full detail view under the manifest's
@@ -252,6 +249,13 @@ describe("record flow", () => {
     expect(screen.getByRole("button", { name: "Discard" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Save…" })).toBeTruthy();
     expect(screen.getByText('Click "OK" — TextEdit')).toBeTruthy();
+
+    // A terminal that trails the fallback is ignored: draft is entered
+    // exactly once and no error surfaces.
+    await act(async () => {
+      capture.sinks[0]({ type: "stopped", workflow_id: WORKFLOW_ID });
+    });
+    expect(screen.getAllByText("draft")).toHaveLength(1);
   });
 
   it("enters draft exactly once when the terminal envelope outruns the stop result", async () => {

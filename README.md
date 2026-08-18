@@ -10,7 +10,9 @@ recordings.
   across every application. Each captured event becomes a step that
   streams into the step list while you work, with a classification dot,
   an auto-generated title, and the event time. A prominent Stop
-  Recording banner is the only action while recording.
+  Recording banner is the only action while recording. Interactions
+  with the recorder's own window — including the Stop click itself —
+  are excluded from the captured steps.
 - **Draft review and save.** Stopping opens the full editor in draft
   mode. Review the captured steps, then Save… with a name (the dialog
   pre-selects the default timestamp name) or Discard the recording
