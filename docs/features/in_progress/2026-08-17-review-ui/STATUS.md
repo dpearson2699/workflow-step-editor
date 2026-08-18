@@ -4,11 +4,11 @@
 - Work kind: `feature`
 - Work ID: `2026-08-17-review-ui`
 - Phase: `delivery`
-- Revision: `31`
+- Revision: `35`
 - Observed origin/main: `098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d`
 - Task roster: `efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18`
 - Active slices: `PR-01`
-- Last update: `2026-08-18T00:11:29Z`
+- Last update: `2026-08-18T00:32:42Z`
 
 ## ChatGPT Pro Planning Evidence
 
@@ -34,10 +34,10 @@
 
 ## Acceptance
 
-- Passed: 0
+- Passed: 1
 - Failed: 0
 - Waived: 0
-- Pending: 5
+- Pending: 4
 
 ## Tasks
 
@@ -58,4 +58,4 @@
 
 ## Pull Requests
 
-- none
+- PR-01: #30

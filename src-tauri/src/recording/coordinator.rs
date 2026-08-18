@@ -22,7 +22,9 @@ use crate::permissions::{PermissionReport, PermissionService, PermissionSource, 
 use crate::recording::channel::{LiveEnvelope, StepSink};
 use crate::recording::clock::{default_workflow_name, event_timestamp, Clock};
 use crate::recording::pipeline::{CapturePacket, CapturePipeline, PacketEmitter, PacketInput, PipelineEvent};
-use crate::recording::store::{LoadedWorkflow, StoreError, WorkflowStore, WorkflowSummary};
+use crate::recording::store::{
+    LoadedWorkflow, ShotVariant, StoreError, WorkflowStore, WorkflowSummary,
+};
 
 /// The permission seam the coordinator gates start on. Production wires
 /// the shared PR-01 `PermissionService`; tests substitute a fake source
@@ -347,6 +349,23 @@ impl RecordingCoordinator {
 
     pub fn get_workflow(&self, workflow_id: &str) -> Result<LoadedWorkflow, RecordingError> {
         Ok(self.store.load(workflow_id)?)
+    }
+
+    /// Resolves the validated workflow folder for the backend-side
+    /// Finder reveal. The path stays on this side of IPC (DEC-007).
+    pub fn workflow_path(&self, workflow_id: &str) -> Result<std::path::PathBuf, RecordingError> {
+        Ok(self.store.locate(workflow_id)?)
+    }
+
+    /// Reads one canonical screenshot of an event's triple as raw PNG
+    /// bytes through the store's confinement validation (DEC-007).
+    pub fn read_screenshot(
+        &self,
+        workflow_id: &str,
+        event_id: &str,
+        variant: ShotVariant,
+    ) -> Result<Vec<u8>, RecordingError> {
+        Ok(self.store.read_shot(workflow_id, event_id, variant)?)
     }
 
     fn lock_state(&self) -> std::sync::MutexGuard<'_, Phase> {
@@ -1047,6 +1066,19 @@ mod tests {
         fn list(&self) -> Result<Vec<WorkflowSummary>, StoreError> {
             self.inner.list()
         }
+
+        fn locate(&self, workflow_id: &str) -> Result<PathBuf, StoreError> {
+            self.inner.locate(workflow_id)
+        }
+
+        fn read_shot(
+            &self,
+            workflow_id: &str,
+            event_id: &str,
+            variant: ShotVariant,
+        ) -> Result<Vec<u8>, StoreError> {
+            self.inner.read_shot(workflow_id, event_id, variant)
+        }
     }
 
     /// Store wrapper whose `save_manifest` always fails.
@@ -1081,6 +1113,19 @@ mod tests {
 
         fn list(&self) -> Result<Vec<WorkflowSummary>, StoreError> {
             self.inner.list()
+        }
+
+        fn locate(&self, workflow_id: &str) -> Result<PathBuf, StoreError> {
+            self.inner.locate(workflow_id)
+        }
+
+        fn read_shot(
+            &self,
+            workflow_id: &str,
+            event_id: &str,
+            variant: ShotVariant,
+        ) -> Result<Vec<u8>, StoreError> {
+            self.inner.read_shot(workflow_id, event_id, variant)
         }
     }
 

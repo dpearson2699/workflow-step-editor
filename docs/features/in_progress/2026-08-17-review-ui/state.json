@@ -12,15 +12,21 @@
       "status": "pending"
     },
     "AC-002": {
-      "assignment_digest": null,
+      "assignment_digest": "6808807362bd9073da2f6041d0993d0164100862728891b54ad6ca615b7f2f29",
       "criterion_digest": "d5cfa66485e7c75f57dee14f75f2399bc8a18ca16cd8fdf23446a45139745f89",
-      "evidence": [],
-      "evidence_digests": {},
+      "evidence": [
+        "pr/PR-01/evidence/ui-proof/30bca81179cdbe28e57ff39070788f298cc318ba/snapshot.json",
+        "pr/PR-01/evidence/ui-proof/30bca81179cdbe28e57ff39070788f298cc318ba/ui-receipt.json"
+      ],
+      "evidence_digests": {
+        "pr/PR-01/evidence/ui-proof/30bca81179cdbe28e57ff39070788f298cc318ba/snapshot.json": "1c26f2eb52602bf4303ed527558e41836a60bc08cecc9aba6017f7d35e0a5cf9",
+        "pr/PR-01/evidence/ui-proof/30bca81179cdbe28e57ff39070788f298cc318ba/ui-receipt.json": "b2e06fd41a7362b484e9e0073f07dabcbfa12cf959acf54cb70a77b6601fea7a"
+      },
       "locked": false,
-      "producer_head_sha": null,
-      "producer_slice": null,
-      "scope": null,
-      "status": "pending"
+      "producer_head_sha": "0827494f77b50a3b39e6ea774dc2764de3accdba",
+      "producer_slice": "PR-01",
+      "scope": "slice",
+      "status": "passed"
     },
     "AC-003": {
       "assignment_digest": null,
@@ -181,7 +187,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 31,
+  "revision": 35,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -190,7 +196,7 @@
       "branch": "feat/pr-01-landing-page",
       "depends_on": [],
       "execution_mode": "serial",
-      "head_sha": null,
+      "head_sha": "0827494f77b50a3b39e6ea774dc2764de3accdba",
       "id": "PR-01",
       "implementation_task": {
         "adoption_start_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
@@ -261,9 +267,9 @@
       "plan": "pr/PR-01/PLAN.md",
       "plan_checkpoint_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
       "plan_digest": "977a432b90b9d3093201f82f2e8112f3b70e0b490af36331cfb9e5ae12249913",
-      "pr": null,
+      "pr": 30,
       "premerge_drift": null,
-      "receipt": null,
+      "receipt": "pr/PR-01/RECEIPT.md",
       "replacement_lineage": null,
       "review_task": {
         "adoption_start_sha": null,
@@ -314,7 +320,7 @@
       },
       "revision_epoch": 1,
       "revision_history": [],
-      "status": "in_progress",
+      "status": "pr_open",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Landing page over extended workflow summaries",
@@ -660,7 +666,7 @@
     ],
     "primary_digest": "efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18"
   },
-  "updated_at": "2026-08-18T00:11:29Z",
+  "updated_at": "2026-08-18T00:32:42Z",
   "work_id": "2026-08-17-review-ui",
   "work_kind": "feature"
 }

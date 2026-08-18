@@ -72,7 +72,9 @@ pub fn run() {
             commands::start_recording,
             commands::stop_recording,
             commands::list_workflows,
-            commands::get_workflow
+            commands::get_workflow,
+            commands::reveal_workflow,
+            commands::read_screenshot
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
