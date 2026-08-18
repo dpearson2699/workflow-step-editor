@@ -1,6 +1,6 @@
 # Harness deadlock record — 2026-08-18
 
-`BLK-HARNESS-WAIVER-LINEAGE-LOST` (bundle revision 23).
+`BLK-HARNESS-WAIVER-LOST` (bundle revision 23).
 
 Sequence: the AC-001 gate failed on PR-01 (PR #39) before the final-PR
 snapshot; the accepted rule changed (DEC-004); the user waived a fresh Pro
