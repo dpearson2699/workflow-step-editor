@@ -1,10 +1,5 @@
 # PR-01 Plan: Per-kind frame selection with a post-event key-down frame
 
-> Superseded 2026-08-18 by PR-02 after the AC-001 gate on head `176be565`
-> (GA-007, DEC-004). The behavior text below is retained as history; this
-> slice's acceptance coverage is reassigned to AC-004 (closed unmerged,
-> integrated by PR-02). AC-002 and AC-003 are owned by PR-02.
-
 ## Outcome
 
 A key-down step's screenshot triple is cut from the oldest retained frame on
@@ -114,8 +109,8 @@ comments record the per-kind rule.
   the worker before the streams stop.
 - Owning observable seam: The packet emitter fed by the capture worker
   (`PacketEmitter` receives `CapturePacket`s in event order).
-- Primary acceptance criterion: AC-004
-- Regression guards: none
+- Primary acceptance criterion: AC-002
+- Regression guards: AC-003
 - New high-cost verification mechanism: none
 - Independent execution flows: no
 - Persistence/schema compatibility plus cross-screen consumer sweep: no
@@ -146,9 +141,11 @@ comments record the per-kind rule.
 
 ## Acceptance Coverage
 
-- AC-004: This superseded slice's only remaining obligation is that its PR
-  #39 stays unmerged (closed as superseded) and its commit `176be565` is an
-  ancestor of the PR-02 head.
+- AC-002: This slice implements the per-kind selection rule end to end and
+  proves it with broker unit tests and deterministic worker-level tests at
+  the emitter (matrix below).
+- AC-003: This slice lands the ADR-0001 amendment, the README sentence, and
+  the `frame_age_ms` doc comments; the reviewer checks them at the PR head.
 
 ## Verification
 

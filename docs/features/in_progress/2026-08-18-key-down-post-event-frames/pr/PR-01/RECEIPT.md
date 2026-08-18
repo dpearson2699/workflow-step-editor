@@ -60,13 +60,17 @@
 
 ## Acceptance
 
-- AC-004: pending — evidence to gather: `gh pr view 39` showing `CLOSED`
-  and not merged, and `git merge-base --is-ancestor 176be565… <PR-02 head>`
-  succeeding, once PR-02's PR is open.
-- AC-001, AC-002, AC-003: no longer owned by this slice (AC-001 is
-  feature-owned; AC-002 and AC-003 moved to PR-02). Historical: the AC-001
-  gate run on this head failed (GA-007); root-verified tests at this head
-  are retained in `evidence/root-cargo-test-176be565.log`.
+- AC-002: pending -> to be closed as waived (superseded by DEC-004; live
+  criterion AC-005 owned by PR-02).
+- AC-003: pending -> to be closed as waived (superseded; live criterion
+  AC-006 owned by PR-02).
+- AC-004 (feature-owned): evidence to gather by the root: `gh pr view 39`
+  showing `CLOSED` and not merged, and `git merge-base --is-ancestor
+  176be565… <PR-02 head>` succeeding, once PR-02's PR is open
+  (`review/pr-01-supersession.md`).
+- AC-001: feature-owned; the gate run on this head failed (GA-007).
+  Root-verified tests at this head are retained in
+  `evidence/root-cargo-test-176be565.log`.
 
 ## Review and Deviations
 

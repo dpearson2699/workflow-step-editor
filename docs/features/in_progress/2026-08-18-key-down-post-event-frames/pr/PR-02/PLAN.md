@@ -135,8 +135,8 @@ commit and then applies the DEC-004 correction.
   the worker before the streams stop.
 - Owning observable seam: The packet emitter fed by the capture worker
   (`PacketEmitter` receives `CapturePacket`s in event order).
-- Primary acceptance criterion: AC-002
-- Regression guards: AC-003
+- Primary acceptance criterion: AC-005
+- Regression guards: AC-006
 - New high-cost verification mechanism: none
 - Independent execution flows: no
 - Persistence/schema compatibility plus cross-screen consumer sweep: no
@@ -167,11 +167,13 @@ commit and then applies the DEC-004 correction.
 
 ## Acceptance Coverage
 
-- AC-002: This slice implements the per-kind selection rule end to end and
-  proves it with broker unit tests and deterministic worker-level tests at
-  the emitter (matrix below).
-- AC-003: This slice lands the ADR-0001 amendment, the README sentence, and
-  the `frame_age_ms` doc comments; the reviewer checks them at the PR head.
+- AC-005: This slice implements the DEC-004 per-kind selection rule end to
+  end and proves it with broker unit tests and deterministic worker-level
+  tests at the emitter (matrix below). (AC-002 is the superseded PR-01
+  criterion and is not owned here.)
+- AC-006: This slice lands the revised ADR-0001 amendment, the README
+  sentence, and the `frame_age_ms` doc comments; the reviewer checks them
+  at the PR head. (AC-003 is the superseded PR-01 criterion.)
 
 ## Verification
 

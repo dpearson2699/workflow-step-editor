@@ -21,7 +21,43 @@
   files, `frame_age_ms` values for the key-down events, and the verdict
   under `review/timing-gate-run.md`.
 
-## AC-002: Per-kind frame selection invariant
+## AC-002: Superseded — PR-01 selection invariant (oldest in-window frame)
+
+- Ownership: slice
+- Invariant: Historical. This criterion described the "oldest retained
+  in-window frame" key-down rule implemented by PR-01 (PR #39, head
+  `176be565`). The rule was superseded on 2026-08-18 by DEC-004 after the
+  AC-001 gate (GA-007); the live invariant is AC-005, owned by PR-02. No
+  implementation is expected to satisfy this criterion; it is closed as
+  waived (superseded) at completion.
+- Owning seam: none (superseded).
+- Evidence required: none beyond the supersession record in
+  `pr/PR-01/RECEIPT.md` and DEC-004.
+
+## AC-003: Superseded — PR-01 documentation of the oldest-frame rule
+
+- Ownership: slice
+- Invariant: Historical. This criterion covered the ADR-0001 amendment,
+  README sentence, and doc comments as written by PR-01 for the superseded
+  rule. The live documentation invariant is AC-006, owned by PR-02. Closed
+  as waived (superseded) at completion.
+- Owning seam: none (superseded).
+- Evidence required: none beyond the supersession record in
+  `pr/PR-01/RECEIPT.md`.
+
+## AC-004: Superseded PR-01 attempt is closed unmerged and integrated
+
+- Ownership: feature
+- Invariant: The PR-01 implementation of the superseded "oldest in-window
+  frame" rule (PR #39, head `176be565676b5abc383f684a81597893c3260524`) is
+  never merged: PR #39 is closed as superseded, and its commit is an
+  ancestor of the PR-02 head so no work is lost.
+- Owning seam: GitHub PR #39 state and PR-02 branch ancestry.
+- Evidence required: `gh pr view 39` showing `CLOSED` and not merged, and
+  `git merge-base --is-ancestor 176be565… <PR-02 head>` succeeding;
+  recorded by the root under `review/pr-01-supersession.md`.
+
+## AC-005: Per-kind frame selection invariant (DEC-004)
 
 - Ownership: slice
 - Invariant: For a click, frame selection is byte-for-byte the current
@@ -50,7 +86,7 @@
   late job with only an after-deadline frame; key-down then click then
   key-down in emitter order; and drain after sender close.
 
-## AC-003: Documentation records the per-kind timing rule
+## AC-006: Documentation records the per-kind timing rule (DEC-004)
 
 - Ownership: slice
 - Invariant: `docs/adr/0001-pre-buffered-screen-capture.md` records the
@@ -59,15 +95,3 @@
   state the post-event value.
 - Owning seam: The named documentation files at the PR head.
 - Evidence required: Review of the changed documentation in the PR.
-
-## AC-004: Superseded PR-01 attempt is closed unmerged and integrated
-
-- Ownership: slice
-- Invariant: The PR-01 implementation of the superseded "oldest in-window
-  frame" rule (PR #39, head `176be565676b5abc383f684a81597893c3260524`) is
-  never merged: PR #39 is closed as superseded, and its commit is an
-  ancestor of the PR-02 head so no work is lost.
-- Owning seam: GitHub PR #39 state and PR-02 branch ancestry.
-- Evidence required: `gh pr view 39` showing `CLOSED` and not merged, and
-  `git merge-base --is-ancestor 176be565… <PR-02 head>` succeeding;
-  recorded in `pr/PR-01/RECEIPT.md`.
