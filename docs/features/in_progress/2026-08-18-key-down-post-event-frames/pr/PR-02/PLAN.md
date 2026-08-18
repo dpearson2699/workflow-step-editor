@@ -1,4 +1,14 @@
-# PR-02 Plan: Per-kind frame selection with a settled post-event key-down frame
+# PR-02 Plan: Per-kind frame selection with a content-aware post-event key-down frame
+
+> Amended 2026-08-18 after the PR #41 gate (GA-009, Q-005, DEC-006): the
+> 100 ms settle is replaced by content-aware selection (oldest in-window
+> frame whose focused-element crop differs from the pinned pre-event frame;
+> newest in-window at the deadline; else pinned). Where the text below says
+> "settle" read the DEC-006 rule; `POST_EVENT_SETTLE_NS` and `settle_ns()`
+> are removed. Tests: element-region change on an early frame is selected
+> even when a later frame exists; a title-only (outside-element) change is
+> skipped; no differing frame by the deadline -> newest in-window; boundary
+> tests on the settle are replaced by these.
 
 ## Outcome
 

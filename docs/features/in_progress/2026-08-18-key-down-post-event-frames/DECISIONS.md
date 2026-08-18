@@ -116,3 +116,27 @@
   (PR-01 superseded); time budget of the take-home project.
 - Rejected alternatives: Fresh Pro primary plus consensus loop.
 - Canonical docs: none.
+
+## DEC-006: Content-aware post-event frame selection
+
+- Status: accepted
+- Decision: For a key-down, the worker waits (bounded by the 250 ms
+  event-anchored deadline, DEC-002) for the OLDEST retained in-window frame
+  on the selected display whose pixels inside the selected element crop
+  rectangle differ from the pinned pre-event frame's pixels in that same
+  rectangle; it selects that frame as soon as it exists. If no differing
+  frame exists at the deadline, it selects the newest in-window frame; if
+  no in-window frame exists (or geometry mismatches), the pinned pre-event
+  frame (DEC-002 fallback set). This supersedes DEC-004's 100 ms settle;
+  the newest-in-window range query remains as the deadline fallback and
+  `POST_EVENT_SETTLE_NS` is removed.
+- Rationale: User answer to Q-005 (2026-08-18) after the PR #41 gate
+  (GA-009): the typed glyph always appears inside the focused element,
+  while the first-key title-only repaint does not, and any time-based
+  settle overshoots at typing speed with ~10 fps capture.
+- Rejected alternatives: Oldest in-window frame without settle (first-key
+  repaint); settle-then-newest (later characters visible); raising the
+  capture frame rate (cost, and still time-based).
+- Canonical docs: `docs/adr/0001-pre-buffered-screen-capture.md`
+  amendment; `README.md` sentence.
+

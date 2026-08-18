@@ -251,3 +251,43 @@ are what the issue and the current code do not settle.
 - Closure: No unresolved finding exists, so no tie-break question is
   posed; convergence is not claimed (the log records the cap and the
   disposition). The earlier plan converged APPROVED in round 3.
+
+## GA-009: A time-based settle overshoots at typing speed
+
+- Status: closed
+- Kind: decision
+- Uncertainty: Whether the DEC-004 100 ms settle can both skip the first
+  keystroke's title-only repaint and keep each typing step's screenshot at
+  its own character.
+- Why it matters: AC-001 requires each typed step's screenshots to include
+  the just-typed character; the user judged frames that already show later
+  characters as wrong.
+- Evidence inspected: AC-001 gate on PR #41 head `cf29cfc4` (workflow
+  `2026-08-18-182339-6da6`, "Typing Still Bugged"): `evt_0005` (`e`)
+  shows "Hel"; keys arrived 92-180 ms apart; SCStream delivers at most one
+  frame per ~100 ms, so a settle of one frame interval necessarily lands
+  on the frame after the next key. The first-key case (GA-007) is a
+  title-bar-only repaint that does not touch the focused text element.
+- Confidence: high
+- Question: Q-005
+
+## Q-005: Which selection rule replaces the settle?
+
+- Status: answered
+- Recommendation: Content-aware selection: the oldest in-window frame whose
+  pixels inside the focused-element crop differ from the pinned pre-event
+  frame's; if none differs by the deadline, the newest in-window frame;
+  else the pinned frame.
+- Options and tradeoffs: (a) Recommended content-aware rule (fixes both
+  cases; small per-candidate pixel compare). (b) Oldest in-window frame,
+  no settle (first keystroke may show the pre-glyph repaint). (c) Keep
+  settle-then-newest (typing steps show later characters).
+- If wrong: With (a) a key whose visual effect is outside the focused
+  element (or an element crop that is the fixed-size fallback) falls back
+  to newest-in-window; caret-blink toggles inside the element could count
+  as a change, but macOS suspends the blink while typing.
+- Answer/source: User answer 2026-08-18: option (a).
+- Closure reason: The user selected the recommended rule.
+- Decision: DEC-006 (supersedes DEC-004's settle clause)
+- Canonical-doc impact: ADR-0001 amendment; README sentence.
+
