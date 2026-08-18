@@ -34,31 +34,39 @@ commit and then applies the DEC-004 correction.
     byte-for-byte as they are (including the existing bounded-retention
     approximation). The tap callback keeps pinning the pre-event snapshot
     for every event (`pipeline.rs::start_tap` behavior unchanged).
-  - Extract the existing display selection (click: display under the
+  - Retain PR-01's `packets.rs::select_display` (click: display under the
     point else main; key-down: focused element center, else focused
-    window center, else main — DEC-008/DEC-011) from
-    `packets.rs::build_packet` into one pure shared function that the
-    worker and `build_packet` both use.
+    window center, else main — DEC-008/DEC-011) and
+    `packets.rs::select_pinned_frame`; `build_packet` stays frame-explicit
+    and only the worker selects the frame.
   - The capture worker (`worker.rs::run_capture_worker`) receives the
-    shared broker handle and an injectable wait runtime: `now_ns()`,
-    `wait_for(duration)`, the window/deadline constant, and the poll
-    interval, so tests advance a fake clock and publish frames into the
-    real broker inside `wait_for` without real sleeping. Production wiring
-    in `pipeline.rs` (the macOS composition root) supplies
-    `hostclock::host_now_ns`, `std::thread::sleep`, 250 ms, and a short
-    poll interval (about 5 ms); the pure worker module stays buildable
-    off macOS.
-  - For every job the worker resolves metadata, selects the display with
-    the shared function, and reads the pinned frame for that display from
-    the job snapshot (its absence remains the existing fail-stop). A click
-    uses the pinned frame directly and never consults the live broker. A
-    key-down runs the bounded settle/wait on that display ID: loop
-    `wait_for(min(poll, remaining))` and re-query until either a retained
-    frame with `ts_ns >= event_ts + POST_EVENT_SETTLE_NS` (100 ms, one
-    minimum frame interval; a `WaitRuntime` value beside the window) exists
-    on that display or `now_ns() >= event_ts + window`, with one final
-    query at the deadline; then select the newest in-window frame (the
-    range query above). The total requested wait never exceeds the
+    shared broker handle and the injectable `WaitRuntime` (`now_ns()`,
+    `wait_for(duration)`, `window_ns()`, the poll interval) extended with
+    `settle_ns()`; define `pub const POST_EVENT_SETTLE_NS: u64 =
+    100_000_000` beside `POST_EVENT_FRAME_WINDOW_NS` in `broker.rs`, and
+    require every production and test wait runtime to use it, so tests
+    advance a fake clock and publish frames into the real broker inside
+    `wait_for` without real sleeping. Production wiring in `pipeline.rs`
+    (the macOS composition root) supplies `hostclock::host_now_ns`,
+    `std::thread::sleep`, `POST_EVENT_FRAME_WINDOW_NS` (250 ms),
+    `POST_EVENT_SETTLE_NS` (100 ms), and a short poll interval (about
+    5 ms); the pure worker module stays buildable off macOS.
+  - For every job the worker resolves metadata and calls
+    `select_pinned_frame` (which itself applies `select_display`) to obtain
+    the `SelectedFrame` (its absence remains the existing fail-stop); the
+    broker query uses `SelectedFrame.display.id`. A
+    click uses the pinned frame directly and never consults the live
+    broker. A key-down runs the bounded settle/wait on that display ID:
+    loop `wait_for(min(poll, remaining))` and re-query until either a
+    retained frame with `ts_ns >= event_ts + settle_ns()` (inclusive
+    boundary: exactly `event_ts + 100 ms` satisfies the settle;
+    `event_ts + 100 ms - 1 ns` does not) exists on that display or
+    `now_ns() >= event_ts + window`, with one final query at the deadline;
+    then select the newest in-window frame (the range query above).
+    Rename PR-01's broker query `oldest_in_window` to `newest_in_window`
+    and update every related doc comment and test name in `broker.rs`,
+    `worker.rs`, and `packets.rs` so no comment still describes oldest
+    selection. The total requested wait never exceeds the
     remaining window (never past 250 ms after the event); a job that
     reaches the worker after its deadline queries once and never waits. It
     must not hold the broker mutex while waiting. If the candidate frame's `display`
@@ -98,11 +106,12 @@ commit and then applies the DEC-004 correction.
     decision (issue #38).
   - `README.md`: replace the parenthetical "captured from a pre-event
     frame, so the screen shows the state *before* the action" with the
-    per-kind statement: click steps are cut from a pre-event frame so the
-    screen shows the state before the click; typing steps use the first
-    frame captured after the key when one arrives within 250 ms
-    (best-effort, so the typed character is normally visible), otherwise
-    the pre-event frame.
+    per-kind statement (replacing PR-01's wording, which still says "the
+    first frame captured after the key"): click steps are cut from a
+    pre-event frame so the screen shows the state before the click; typing
+    steps use the newest retained frame captured within 250 ms after the
+    key, chosen after a 100 ms settle so the typed character is normally
+    visible; when no such frame remains, the pre-event frame.
 - Owned paths: `src-tauri/src/capture/broker.rs`,
   `src-tauri/src/capture/worker.rs`, `src-tauri/src/capture/packets.rs`,
   `src-tauri/src/capture/pipeline.rs`, `src-tauri/src/domain/schema.rs`,
@@ -173,9 +182,12 @@ commit and then applies the DEC-004 correction.
     another display -> `None` for the selected display; existing click
     snapshot tests unchanged.
   - worker: an early in-window frame (for example event + 30 ms) followed
-    by a frame at or after event + 100 ms published during the scripted
+    by a frame at exactly event + 100 ms published during the scripted
     wait -> emitted PNGs decode to the LATER frame's pixels and the wait
-    ends at that frame, not at the deadline; a single early in-window
+    ends at that frame, not at the deadline; the same setup with the later
+    frame at event + 100 ms - 1 ns -> the wait does not end on it (settle
+    boundary is inclusive at exactly 100 ms) and selection happens at the
+    deadline; a single early in-window
     frame with no later frame -> that frame's pixels, selected when the
     deadline is reached; no post frame before an actively reached
     deadline -> pinned pixels, no failure, no real sleep; job reaching the

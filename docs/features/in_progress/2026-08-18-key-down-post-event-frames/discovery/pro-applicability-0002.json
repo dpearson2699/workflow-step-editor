@@ -1,0 +1,30 @@
+{
+  "schema": "spec-work-pro-applicability",
+  "workKind": "feature",
+  "workId": "2026-08-18-key-down-post-event-frames",
+  "workBundle": "2026-08-18-key-down-post-event-frames",
+  "responseDigest": "0009245cf1bc7b71ba6a8432eb0127e44b4200434a87fca0a4ae9cbe333e02ce",
+  "fromDigest": "a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c",
+  "toDigest": "817a99b00f86f5871e452e27ef20ebff80ce9578c1385d158f4d06fc8845ddf4",
+  "fromSourceCommit": "7db98414fd59608ca0b2ff4323ce5a190a9ef3b2",
+  "toSourceCommit": "543884082f5247200e2b329bf5bb93605e1c9d4f",
+  "classification": "material",
+  "changedPaths": [
+    "ACCEPTANCE.md",
+    "DECISIONS.md",
+    "FEATURE.md",
+    "INTERVIEW.md"
+  ],
+  "recommendationsChanged": true,
+  "implementationSlicesChanged": true,
+  "validationResult": "fresh_primary_required",
+  "evidenceAnchors": [
+    "DECISIONS.md",
+    "INTERVIEW.md",
+    "pr/PR-01/evidence/implementation-attention-report.md",
+    "discovery/pro-lifecycle-evidence/aa6bf429d5b771b66b635150e0e8cf3563f133da5c66848b3e7c2dc4e7019932.md"
+  ],
+  "semanticDiffSummary": "After the AC-001 gate on PR #39 head 176be565 showed that the accepted 'oldest in-window frame' rule captures an intermediate repaint on the first keystroke (GA-007), the user decided (Q-003, DEC-004) that a key-down waits until a frame at least 100 ms after the event is retained or the 250 ms deadline passes and then selects the NEWEST in-window frame; DEC-002's selection clause is superseded, AC-002 and FEATURE.md restate the rule and its tests, PR-01 is superseded by a new slice PR-02 that integrates the PR-01 commit and applies the correction, and DEC-005 records the user's explicit Q-004 decision to stop further Pro sends for this change.",
+  "applicabilityRationale": "The selection rule the Pro response recommended (oldest eligible in-window frame) is replaced by newest-in-window after a settle, and the slice topology changes (PR-01 superseded, PR-02 added), so the prior response is not applicable to the revised specification and a fresh primary would ordinarily be required; the user explicitly waived that fresh primary (Q-004, DEC-005), so adoption proceeds through the adopt-plan Pro-primary waiver with a fresh CLEAN blind-completeness receipt.",
+  "assessmentEpoch": 3
+}

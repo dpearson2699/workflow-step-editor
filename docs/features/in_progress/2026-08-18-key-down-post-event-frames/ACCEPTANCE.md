@@ -3,14 +3,16 @@
 ## AC-001: Real recording shows typed characters and pre-click menus
 
 - Ownership: feature
-- Invariant: On the signed build from the PR-01 head, a recording in which
+- Invariant: On the signed build from the head of the final implementation
+  slice (PR-02; the PR-01 head `176be565` run of 2026-08-18 is failed
+  historical evidence, GA-007), a recording in which
   the user types `hello` into a native text field produces five `type`
   steps whose screenshots each include the just-typed character, and a
   click on a menu item produces a `click` step whose screenshots show the
   menu as it looked at click time.
 - Owning seam: The recorded workflow folder on disk and the review UI,
   inspected by the user.
-- Evidence required: Build the exact PR-01 head with `npm run tauri build`
+- Evidence required: Build the exact final-slice (PR-02) head with `npm run tauri build`
   (the signed app, because macOS TCC binds permission grants to the signed
   bundle identity) and launch it; the user records the `hello` typing, a
   menu-item click, and one run where Stop is pressed promptly after the

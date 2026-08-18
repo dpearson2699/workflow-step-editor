@@ -12,15 +12,13 @@ triple keeps showing the control as it looked at click time.
 
 ## Scope
 
-- Key-down events select the first buffered frame whose display timestamp
-  is after the event, instead of the latest pre-event frame. One frame
-  interval (~100 ms) of added latency is the expected cost; the wait is
-  bounded at 250 ms after the event (DEC-002), which is the single accepted
-  latency limit. Operationally the worker waits until a frame at least
-  100 ms after the event is retained or the deadline passes, then selects
-  the newest retained frame on the selected display inside the bounded
-  window `(event_ts, event_ts + 250 ms]` (DEC-004; the broker retains two
-  frames per display).
+- Key-down events select a post-event frame instead of the latest
+  pre-event frame: the worker waits until a frame at least 100 ms after
+  the event is retained or the 250 ms deadline passes, then selects the
+  newest retained frame on the selected display inside the bounded window
+  `(event_ts, event_ts + 250 ms]` (DEC-004; the broker retains two frames
+  per display). The added latency is at least the 100 ms settle and at
+  most 250 ms after the event (DEC-002), the single accepted latency limit.
 - Click events keep the current pre-event selection byte-for-byte
   (`RetainedFrames::eligible` unchanged, including its bounded-retention
   approximation; ADR-0001 rationale stands: the artifact must show the

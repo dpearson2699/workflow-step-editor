@@ -4,22 +4,22 @@
 - Work kind: `feature`
 - Work ID: `2026-08-18-key-down-post-event-frames`
 - Phase: `plan`
-- Revision: `16`
+- Revision: `17`
 - Observed origin/main: `26ade421f69ac061533d4507de6c87b49ad94106`
 - Task roster: `28038c289b7454195abcf7d2b68e35c621278ed39f81f9600e9d546af33a4a6f`
 - Active slices: `PR-01`
-- Last update: `2026-08-18T16:08:28Z`
+- Last update: `2026-08-18T16:11:35Z`
 
 ## ChatGPT Pro Planning Evidence
 
-- Current specification digest: `a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c`
-- Current source commit: `7db98414fd59608ca0b2ff4323ce5a190a9ef3b2`
+- Current specification digest: `817a99b00f86f5871e452e27ef20ebff80ce9578c1385d158f4d06fc8845ddf4`
+- Current source commit: `543884082f5247200e2b329bf5bb93605e1c9d4f`
 - Active response: `0009245cf1bc7b71ba6a8432eb0127e44b4200434a87fca0a4ae9cbe333e02ce`
 - Generated for: `6ded6b17311006b1e991d10d10f1b5772abc9942dc902c35409c78715c80ae0a`
 - Accepted for: `a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c`
 - Disposition: `clean`
-- Latest applicability: `prior_evidence_applicable`
-- Fresh primary required: `no`
+- Latest applicability: `fresh_primary_required`
+- Fresh primary required: `yes`
 - Explicit Pro primary waiver: `not recorded`
 - Blind completeness: `decision required`
 

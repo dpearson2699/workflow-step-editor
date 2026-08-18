@@ -6,10 +6,12 @@
 - Decision: Click events keep the current pre-event selection unchanged
   (`RetainedFrames::eligible`: the newest retained frame not later than the
   event, or the oldest retained frame when both retained frames are later —
-  the existing bounded-retention approximation). Key-down events select the
-  first buffered frame whose display timestamp is after the event; one
-  frame interval of added latency is the expected cost and the wait is
-  bounded at 250 ms (DEC-002). The tap callback still pins the pre-event
+  the existing bounded-retention approximation). Key-down events select a
+  post-event frame: the newest retained frame inside the bounded window
+  `(event_ts, event_ts + 250 ms]`, chosen after a 100 ms settle (DEC-004,
+  which supersedes this decision's original "first buffered frame after
+  the event" clause); the added latency is at least the 100 ms settle and
+  at most the 250 ms deadline (DEC-002). The tap callback still pins the pre-event
   snapshot for every event; the capture worker performs the key-down
   post-event selection after it has resolved metadata and chosen the
   display (DEC-008 rule unchanged). Several key-downs that precede one
@@ -62,10 +64,12 @@
 
 - Status: accepted
 - Decision: AC-001 is a feature-owned, user-run real recording on the
-  signed build from the PR-01 head: type `hello` into a native text field
-  and click a menu item, then inspect the steps. It blocks the final PR
-  merge until the user accepts; the root records the run under
-  `review/timing-gate-run.md`.
+  signed build from the head of the final implementation slice (originally
+  PR-01; since 2026-08-18 the replacement slice PR-02 — the PR-01 head
+  `176be565` run is failed historical evidence, GA-007): type `hello` into
+  a native text field and click a menu item, then inspect the steps. It
+  blocks the final PR merge until the user accepts; the root records the
+  run under `review/timing-gate-run.md`.
 - Rationale: User answer to Q-002 (2026-08-18). The issue's acceptance is
   a visible-outcome statement that only a real recording proves; the
   foundation bundle's proven gate is the precedent.
@@ -107,7 +111,8 @@
   blind-completeness receipt; the immutable Pro response
   (`discovery/pro-lifecycle-evidence/aa6bf429...md`) remains recorded
   evidence.
-- Rationale: Bounded rule correction inside the same slice, seam, and
-  architecture; time budget of the take-home project.
+- Rationale: Bounded rule correction for the same accepted goal, owning
+  seam, and architecture, delivered through the replacement slice PR-02
+  (PR-01 superseded); time budget of the take-home project.
 - Rejected alternatives: Fresh Pro primary plus consensus loop.
 - Canonical docs: none.

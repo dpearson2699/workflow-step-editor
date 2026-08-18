@@ -44,7 +44,7 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": null,
-  "observation_epoch_high_water": 2,
+  "observation_epoch_high_water": 3,
   "observed_main_sha": "26ade421f69ac061533d4507de6c87b49ad94106",
   "parallel_assessments": [],
   "phase": "plan",
@@ -52,9 +52,9 @@
     "active_response_digest": "0009245cf1bc7b71ba6a8432eb0127e44b4200434a87fca0a4ae9cbe333e02ce",
     "blind_completeness": null,
     "blind_requirement": null,
-    "current_plan_digest": "ff911e61b8ddaff31c3deb94811c6ac70b315ba1c6bbfc1e9335be6acaf6ed90",
-    "current_source_commit": "7db98414fd59608ca0b2ff4323ce5a190a9ef3b2",
-    "current_specification_digest": "a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c",
+    "current_plan_digest": null,
+    "current_source_commit": "543884082f5247200e2b329bf5bb93605e1c9d4f",
+    "current_specification_digest": "817a99b00f86f5871e452e27ef20ebff80ce9578c1385d158f4d06fc8845ddf4",
     "evidence": [
       {
         "accepted_for_digest": "a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c",
@@ -89,6 +89,35 @@
             "to_digest": "a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c",
             "to_source_commit": "7db98414fd59608ca0b2ff4323ce5a190a9ef3b2",
             "validation_result": "prior_evidence_applicable"
+          },
+          {
+            "changed_paths": [
+              "ACCEPTANCE.md",
+              "DECISIONS.md",
+              "FEATURE.md",
+              "INTERVIEW.md"
+            ],
+            "classification": "material",
+            "correction_receipt": null,
+            "correction_receipt_digest": null,
+            "epoch": 3,
+            "evidence_anchors": [
+              "DECISIONS.md",
+              "INTERVIEW.md",
+              "pr/PR-01/evidence/implementation-attention-report.md",
+              "discovery/pro-lifecycle-evidence/aa6bf429d5b771b66b635150e0e8cf3563f133da5c66848b3e7c2dc4e7019932.md"
+            ],
+            "from_digest": "a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c",
+            "from_source_commit": "7db98414fd59608ca0b2ff4323ce5a190a9ef3b2",
+            "implementation_slices_changed": true,
+            "original_receipt": null,
+            "original_receipt_digest": null,
+            "receipt": "discovery/pro-applicability-0002.json",
+            "receipt_digest": "1f7dd9d5befcf6a9aafaba2d5b708b822bb737d59efacd2ad1d602799c7d80ac",
+            "recommendations_changed": true,
+            "to_digest": "817a99b00f86f5871e452e27ef20ebff80ce9578c1385d158f4d06fc8845ddf4",
+            "to_source_commit": "543884082f5247200e2b329bf5bb93605e1c9d4f",
+            "validation_result": "fresh_primary_required"
           }
         ],
         "contract_disposition": "clean",
@@ -106,7 +135,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 16,
+  "revision": 17,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -272,7 +301,7 @@
     ],
     "primary_digest": "28038c289b7454195abcf7d2b68e35c621278ed39f81f9600e9d546af33a4a6f"
   },
-  "updated_at": "2026-08-18T16:08:28Z",
+  "updated_at": "2026-08-18T16:11:35Z",
   "work_id": "2026-08-18-key-down-post-event-frames",
   "work_kind": "feature"
 }
