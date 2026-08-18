@@ -18,3 +18,12 @@ remaining delivery of PR-02 (implementation, user gate, review, merge, close
 #38) proceeds as ordinary harness-native worktree tasks outside the bundle's
 task-state machine; this record and the blocker keep the bundle truthful.
 The harness gap is filed as a `harness` issue.
+
+## Follow-up publication receipt
+
+- issue_url: https://github.com/dpearson2699/workflow-step-editor/issues/40
+- verified_state: OPEN (direct fetch 2026-08-18)
+- fingerprint: 4b42faa689fde551ce1ebe3914e9772fcff9efdb6d8786334c04241e5b8a0a45
+- fingerprint_comparison: exact (no prior open or closed exact owner)
+- issue_type: harness | severity: P2 | expected_labels: [harness, P2]
+- disposition: created | label_verification_status: verified
