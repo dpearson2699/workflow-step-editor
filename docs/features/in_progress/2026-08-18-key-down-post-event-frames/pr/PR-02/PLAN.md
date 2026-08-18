@@ -171,11 +171,11 @@ commit and then applies the DEC-004 correction.
 
 - AC-005: This slice implements the DEC-004 per-kind selection rule end to
   end and proves it with broker unit tests and deterministic worker-level
-  tests at the emitter (matrix below). (AC-002 is the superseded PR-01
-  criterion and is not owned here.)
+  tests at the emitter (matrix below). The superseded PR-01 criteria stay
+  with PR-01.
 - AC-006: This slice lands the revised ADR-0001 amendment, the README
   sentence, and the `frame_age_ms` doc comments; the reviewer checks them
-  at the PR head. (AC-003 is the superseded PR-01 criterion.)
+  at the PR head.
 
 ## Verification
 

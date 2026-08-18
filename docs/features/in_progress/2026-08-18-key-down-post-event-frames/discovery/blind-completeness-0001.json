@@ -3,12 +3,12 @@
   "workKind": "feature",
   "workId": "2026-08-18-key-down-post-event-frames",
   "workBundle": "2026-08-18-key-down-post-event-frames",
-  "planDigest": "66fe86039d56ba7b330044ccf231882f82c353c0693db50a4bc010d66070bd7d",
-  "approvedSourcePackDigest": "4e6f2233b31b8839f419aa152ddb4eaa107a913558669773c2b33c9ba2faea6f",
+  "planDigest": "00377493df254e43e4c9ba1e124a77a389a04e619e5837877b903168d37e635f",
+  "approvedSourcePackDigest": "d2359d27fb54666d6f969cd1f648d50241c053e48678bd66ce266308dde366eb",
   "verdict": "CLEAN",
   "materialFindings": [],
   "limitations": [
-    "Cold-context read-only auditor (Explore subagent, model sonnet) over the exact bundle bytes of the candidate Plan (PR-01 superseded with AC-004, PR-02 replacement slice under DEC-004/DEC-005), the immutable Pro response, the consensus log, and the PR-01 code at commit 176be565; two earlier passes surfaced (1) the ADR amendment must be revised in place and (2) the stale PR-01 receipt, both folded before this clean pass; no compilation or test execution; state.json/STATUS.md read for context only."
+    "Cold-context read-only auditor (Explore subagent, model sonnet) over the exact bundle bytes of the candidate Plan (PR-01 superseded at its checkpoint plan bytes owning historical AC-002/AC-003; feature-owned AC-004; PR-02 replacement slice owning AC-005/AC-006 under DEC-004/DEC-005), the immutable Pro response, the consensus log, and the PR-01 code at commit 176be565; earlier passes surfaced (1) ADR amendment to revise in place, (2) stale PR-01 receipt, (3) the consensus-cap disposition (recorded as GA-008), each folded before this clean pass; no compilation or test execution; state.json/STATUS.md excluded (adopt-plan follows)."
   ],
   "descendantQuiescenceVerdict": "QUIESCENT",
   "descendantQuiescenceDigest": "37b5a5b920afd920d6efca47b6825074e810b289238f8cafe51b90bd90d0f886",
