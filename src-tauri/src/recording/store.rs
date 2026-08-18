@@ -38,12 +38,72 @@ pub struct ShotPayloads {
     pub element: Vec<u8>,
 }
 
-/// One row of `list`.
+/// One row of `list`, extended with the landing-page presentation data
+/// (DEC-006): step count from manifest steps, the first-to-last event
+/// span, and the first step's window-crop reference. Damaged event logs
+/// degrade to `None` fields instead of hiding the row.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct WorkflowSummary {
     pub id: String,
     pub name: String,
     pub created_at: String,
+    /// Number of manifest steps (not raw events).
+    pub step_count: u64,
+    /// Milliseconds from the first to the last event timestamp; zero with
+    /// fewer than two events; `None` when the event log is unreadable.
+    pub duration_ms: Option<u64>,
+    /// Event id whose window crop is the row thumbnail (the first step's
+    /// first event); `None` when there is no step or the event log is
+    /// unreadable. The frontend resolves it through the scoped
+    /// screenshot read (DEC-007); no path crosses IPC.
+    pub thumbnail_event_id: Option<String>,
+}
+
+/// The allowlisted screenshot variants of the per-event triple (DEC-007).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShotVariant {
+    Full,
+    Window,
+    Element,
+}
+
+impl ShotVariant {
+    fn file_suffix(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Window => "window",
+            Self::Element => "element",
+        }
+    }
+}
+
+/// Error for a variant name outside the DEC-007 allowlist.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidShotVariant(String);
+
+impl std::fmt::Display for InvalidShotVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "unknown screenshot variant: {:?} (expected full, window, or element)",
+            self.0,
+        )
+    }
+}
+
+impl std::error::Error for InvalidShotVariant {}
+
+impl std::str::FromStr for ShotVariant {
+    type Err = InvalidShotVariant;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "full" => Ok(Self::Full),
+            "window" => Ok(Self::Window),
+            "element" => Ok(Self::Element),
+            other => Err(InvalidShotVariant(other.to_owned())),
+        }
+    }
 }
 
 /// The result of `load`: the manifest plus the raw event log.
@@ -198,9 +258,28 @@ pub trait WorkflowStore: Send + Sync {
     /// version 1; a mismatch is rejected before any write.
     fn save_manifest(&self, workflow_id: &str, manifest: &Manifest) -> Result<(), StoreError>;
 
-    /// Lists readable workflows sorted by id. Folders that fail to load
-    /// are skipped so one damaged folder cannot hide the rest.
+    /// Lists readable workflows newest first (descending id: ids carry
+    /// the creation-timestamp prefix). Folders whose manifest fails to
+    /// load are skipped so one damaged folder cannot hide the rest; a
+    /// damaged event log only degrades that row's summary fields.
     fn list(&self) -> Result<Vec<WorkflowSummary>, StoreError>;
+
+    /// Resolves and validates the workflow folder (id shape, real
+    /// non-symlink directories) and returns its absolute path for
+    /// backend-side use such as the Finder reveal. The path never
+    /// crosses IPC (DEC-007).
+    fn locate(&self, workflow_id: &str) -> Result<PathBuf, StoreError>;
+
+    /// Reads one canonical screenshot of an event's triple as raw PNG
+    /// bytes. Ids are validated, the path is derived (never accepted),
+    /// and symlinks are refused, so the read stays confined to the
+    /// workflow's `shots/` folder (DEC-007).
+    fn read_shot(
+        &self,
+        workflow_id: &str,
+        event_id: &str,
+        variant: ShotVariant,
+    ) -> Result<Vec<u8>, StoreError>;
 }
 
 /// JSON filesystem implementation of [`WorkflowStore`].
@@ -482,15 +561,63 @@ impl WorkflowStore for JsonWorkflowStore {
             let Ok(manifest) = self.load_manifest(&id, &entry.path()) else {
                 continue;
             };
+            // A damaged or missing event log keeps the row listable with
+            // placeholder duration and thumbnail (DEC-006).
+            let (duration_ms, thumbnail_event_id) =
+                match self.load_events(&id, &entry.path()) {
+                    Ok(events) => (
+                        event_span_ms(&events),
+                        manifest
+                            .steps
+                            .first()
+                            .and_then(|step| step.event_ids.first().cloned()),
+                    ),
+                    Err(_) => (None, None),
+                };
             summaries.push(WorkflowSummary {
                 id,
                 name: manifest.name,
                 created_at: manifest.created_at,
+                step_count: manifest.steps.len() as u64,
+                duration_ms,
+                thumbnail_event_id,
             });
         }
-        summaries.sort_by(|a, b| a.id.cmp(&b.id));
+        summaries.sort_by(|a, b| b.id.cmp(&a.id));
         Ok(summaries)
     }
+
+    fn locate(&self, workflow_id: &str) -> Result<PathBuf, StoreError> {
+        self.workflow_dir(workflow_id)
+    }
+
+    fn read_shot(
+        &self,
+        workflow_id: &str,
+        event_id: &str,
+        variant: ShotVariant,
+    ) -> Result<Vec<u8>, StoreError> {
+        let dir = self.workflow_dir(workflow_id)?;
+        validate_event_id(event_id)?;
+        let shots_dir = dir.join(SHOTS_DIR);
+        require_real_dir(&shots_dir, || StoreError::NotFound(workflow_id.to_owned()))?;
+        read_no_follow(&shots_dir.join(format!("{event_id}.{}.png", variant.file_suffix())))
+    }
+}
+
+/// Milliseconds from the first to the last event timestamp; zero with
+/// fewer than two events; `None` when an endpoint timestamp does not
+/// parse (a damaged log line).
+fn event_span_ms(events: &[Event]) -> Option<u64> {
+    let (Some(first), Some(last)) = (events.first(), events.last()) else {
+        return Some(0);
+    };
+    if events.len() < 2 {
+        return Some(0);
+    }
+    let parse = |ts: &str| chrono::DateTime::parse_from_rfc3339(ts).ok();
+    let span = parse(&last.ts)? - parse(&first.ts)?;
+    Some(span.num_milliseconds().max(0) as u64)
 }
 
 fn manifest_bytes(manifest: &Manifest) -> Result<Vec<u8>, StoreError> {
@@ -956,7 +1083,7 @@ mod tests {
     }
 
     #[test]
-    fn list_returns_summaries_sorted_by_id() {
+    fn list_returns_summaries_newest_first() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_in(temp.path());
         let (id_a, _) = created(&store, "first");
@@ -966,10 +1093,228 @@ mod tests {
         let ids: Vec<&str> = list.iter().map(|s| s.id.as_str()).collect();
         let mut expected = vec![id_a.as_str(), id_b.as_str()];
         expected.sort();
-        assert_eq!(ids, expected);
+        expected.reverse();
+        assert_eq!(ids, expected, "ids sort descending: newest first");
         assert_eq!(list.len(), 2);
         for summary in &list {
             assert_eq!(summary.created_at, "2026-08-16T22:31:05Z");
         }
+    }
+
+    /// Saves a manifest whose steps reference the given events 1:1.
+    fn save_steps(store: &JsonWorkflowStore, id: &str, mut manifest: Manifest, events: &[&Event]) {
+        manifest.steps = events
+            .iter()
+            .enumerate()
+            .map(|(index, event)| Step {
+                id: format!("step_{:04}", index + 1),
+                event_ids: vec![event.id.clone()],
+                classification: Classification::Click,
+                title: format!("Step {}", index + 1),
+                description: String::new(),
+            })
+            .collect();
+        store.save_manifest(id, &manifest).unwrap();
+    }
+
+    #[test]
+    fn summaries_carry_step_count_duration_and_thumbnail_reference() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, manifest) = created(&store, "w");
+
+        let mut first = sample_click_event("evt_0001");
+        first.ts = "2026-08-16T22:31:05.100Z".to_owned();
+        let mut second = sample_key_event("evt_0002");
+        second.ts = "2026-08-16T22:31:06.000Z".to_owned();
+        let mut third = sample_click_event("evt_0003");
+        third.ts = "2026-08-16T22:31:23.350Z".to_owned();
+        for event in [&first, &second, &third] {
+            store.append_event(&id, event, &sample_shots()).unwrap();
+        }
+        save_steps(&store, &id, manifest, &[&first, &second, &third]);
+
+        let list = store.list().unwrap();
+        assert_eq!(list.len(), 1);
+        let summary = &list[0];
+        assert_eq!(summary.step_count, 3, "step count comes from manifest steps");
+        assert_eq!(summary.duration_ms, Some(18_250), "first-to-last event span");
+        assert_eq!(
+            summary.thumbnail_event_id.as_deref(),
+            Some("evt_0001"),
+            "thumbnail references the first step's first event",
+        );
+    }
+
+    #[test]
+    fn zero_and_single_event_workflows_report_zero_duration() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (empty_id, _) = created(&store, "empty");
+        let (single_id, single_manifest) = created(&store, "single");
+        let event = sample_click_event("evt_0001");
+        store
+            .append_event(&single_id, &event, &sample_shots())
+            .unwrap();
+        save_steps(&store, &single_id, single_manifest, &[&event]);
+
+        let list = store.list().unwrap();
+        let by_id = |id: &str| {
+            list.iter()
+                .find(|summary| summary.id == id)
+                .expect("summary listed")
+        };
+        let empty = by_id(&empty_id);
+        assert_eq!(empty.step_count, 0);
+        assert_eq!(empty.duration_ms, Some(0));
+        assert_eq!(empty.thumbnail_event_id, None, "no step, no thumbnail");
+        let single = by_id(&single_id);
+        assert_eq!(single.step_count, 1);
+        assert_eq!(single.duration_ms, Some(0));
+        assert_eq!(single.thumbnail_event_id.as_deref(), Some("evt_0001"));
+    }
+
+    #[test]
+    fn a_damaged_event_log_keeps_the_row_listed_with_placeholders() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, manifest) = created(&store, "damaged");
+        let event = sample_click_event("evt_0001");
+        store.append_event(&id, &event, &sample_shots()).unwrap();
+        save_steps(&store, &id, manifest, &[&event]);
+        // A corrupt newline-terminated line makes the log unreadable.
+        fs::write(
+            temp.path().join(&id).join(EVENTS_FILE),
+            b"{not json}\n",
+        )
+        .unwrap();
+
+        let list = store.list().unwrap();
+        assert_eq!(list.len(), 1);
+        let summary = &list[0];
+        assert_eq!(summary.step_count, 1, "step count still comes from the manifest");
+        assert_eq!(summary.duration_ms, None, "unreadable log omits the duration");
+        assert_eq!(summary.thumbnail_event_id, None, "unreadable log omits the thumbnail");
+
+        // A missing log degrades the same way.
+        fs::remove_file(temp.path().join(&id).join(EVENTS_FILE)).unwrap();
+        let list = store.list().unwrap();
+        assert_eq!(list[0].duration_ms, None);
+        assert_eq!(list[0].thumbnail_event_id, None);
+    }
+
+    #[test]
+    fn read_shot_returns_the_canonical_bytes_per_variant() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, _) = created(&store, "w");
+        let event = sample_click_event("evt_0001");
+        let shots = sample_shots();
+        store.append_event(&id, &event, &shots).unwrap();
+
+        for (variant, expected) in [
+            (ShotVariant::Full, &shots.full),
+            (ShotVariant::Window, &shots.window),
+            (ShotVariant::Element, &shots.element),
+        ] {
+            assert_eq!(&store.read_shot(&id, "evt_0001", variant).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn read_shot_rejects_non_canonical_ids_and_missing_targets() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, _) = created(&store, "w");
+        store
+            .append_event(&id, &sample_click_event("evt_0001"), &sample_shots())
+            .unwrap();
+
+        for bad_event_id in ["", "..", "../evt_0001", "evt/0001", "evt_0001.full"] {
+            let error = store
+                .read_shot(&id, bad_event_id, ShotVariant::Full)
+                .unwrap_err();
+            assert!(
+                matches!(error, StoreError::InvalidEventId(_)),
+                "event id {bad_event_id:?} got {error}",
+            );
+        }
+        let error = store
+            .read_shot("missing", "evt_0001", ShotVariant::Full)
+            .unwrap_err();
+        assert!(matches!(error, StoreError::NotFound(_)), "got {error}");
+        let error = store
+            .read_shot(&id, "evt_9999", ShotVariant::Full)
+            .unwrap_err();
+        assert!(matches!(error, StoreError::Io { .. }), "got {error}");
+    }
+
+    #[test]
+    fn read_shot_refuses_symlinked_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, _) = created(&store, "w");
+        store
+            .append_event(&id, &sample_click_event("evt_0001"), &sample_shots())
+            .unwrap();
+
+        // A symlinked PNG at the canonical path is refused (O_NOFOLLOW).
+        let shots_dir = temp.path().join(&id).join(SHOTS_DIR);
+        let linked = shots_dir.join("evt_0002.full.png");
+        symlink(shots_dir.join("evt_0001.full.png"), &linked).unwrap();
+        let error = store
+            .read_shot(&id, "evt_0002", ShotVariant::Full)
+            .unwrap_err();
+        assert!(matches!(error, StoreError::SymlinkRejected(_)), "got {error}");
+
+        // A symlinked shots directory is refused before any open.
+        let real_target = temp.path().join("elsewhere");
+        fs::create_dir(&real_target).unwrap();
+        fs::remove_dir_all(&shots_dir).unwrap();
+        symlink(&real_target, &shots_dir).unwrap();
+        let error = store
+            .read_shot(&id, "evt_0001", ShotVariant::Full)
+            .unwrap_err();
+        assert!(matches!(error, StoreError::SymlinkRejected(_)), "got {error}");
+    }
+
+    #[test]
+    fn shot_variants_parse_from_the_allowlist_only() {
+        assert_eq!("full".parse::<ShotVariant>().unwrap(), ShotVariant::Full);
+        assert_eq!("window".parse::<ShotVariant>().unwrap(), ShotVariant::Window);
+        assert_eq!(
+            "element".parse::<ShotVariant>().unwrap(),
+            ShotVariant::Element,
+        );
+        for bad in ["", "Full", "screen", "window.png", "../window"] {
+            assert!(
+                bad.parse::<ShotVariant>().is_err(),
+                "variant {bad:?} must be rejected",
+            );
+        }
+    }
+
+    #[test]
+    fn locate_validates_before_returning_the_folder_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, _) = created(&store, "w");
+
+        assert_eq!(store.locate(&id).unwrap(), temp.path().join(&id));
+        for bad in ["", "..", "../x", "a/b"] {
+            let error = store.locate(bad).unwrap_err();
+            assert!(
+                matches!(error, StoreError::InvalidWorkflowId(_)),
+                "id {bad:?} got {error}",
+            );
+        }
+        let error = store.locate("missing").unwrap_err();
+        assert!(matches!(error, StoreError::NotFound(_)), "got {error}");
+
+        let real_target = temp.path().join("real");
+        fs::create_dir(&real_target).unwrap();
+        symlink(&real_target, temp.path().join("linked")).unwrap();
+        let error = store.locate("linked").unwrap_err();
+        assert!(matches!(error, StoreError::SymlinkRejected(_)), "got {error}");
     }
 }

@@ -1,183 +1,183 @@
-import { useState } from "react";
-import { Channel, invoke } from "@tauri-apps/api/core";
+// The product shell (issue #13, DEC-001): a discriminated view reducer
+// over the landing page and the detail shell. Data flows through the
+// typed API client; views stay presentational.
 
-// The tagged live-channel envelope the Rust `LiveEnvelope` serializes to.
-type LiveEnvelope =
-  | { type: "step"; step: Step }
-  | { type: "stopped"; workflow_id: string }
-  | { type: "failed"; workflow_id: string; error: string };
+import { useEffect, useReducer, useRef, useState } from "react";
 
-interface Step {
-  id: string;
-  event_ids: string[];
-  classification: string;
-  title: string;
-  description: string;
-}
+import type {
+  ApiClient,
+  PermissionKind,
+  PermissionReport,
+  WorkflowSummary,
+} from "./api/client";
+import { createTauriClient } from "./api/client";
+import { initialView, viewReducer } from "./view";
+import { DetailShell } from "./views/DetailShell";
+import { LandingView } from "./views/LandingView";
+import "./App.css";
 
-type PermissionStatus =
-  | "granted"
-  | "denied"
-  | "not_requested"
-  | "blocked_by_prerequisite";
+const client = createTauriClient();
 
-interface PermissionReport {
-  input_monitoring: PermissionStatus;
-  accessibility: PermissionStatus;
-  screen_recording: PermissionStatus;
-}
+/**
+ * Loads row thumbnails through the scoped screenshot read and caches
+ * the blob URLs for this landing view. Every URL is revoked when the
+ * view unmounts or a cache entry is replaced (DEC-007).
+ */
+function useThumbnails(
+  api: ApiClient,
+  workflows: WorkflowSummary[] | null,
+): ReadonlyMap<string, string> {
+  const [urls, setUrls] = useState<ReadonlyMap<string, string>>(new Map());
+  const cache = useRef(new Map<string, string>());
+  const requested = useRef(new Set<string>());
+  const disposed = useRef(false);
 
-// This is the bare dev-only capture trigger (DEC-010). It is developer
-// scaffolding, not the product review UI (issue #13): start/stop plus
-// minimal live output (latest step title and received count) to prove
-// the capture channel end to end during the proven gate.
-function App() {
-  const [recording, setRecording] = useState(false);
-  const [workflowId, setWorkflowId] = useState<string | null>(null);
-  const [latestStep, setLatestStep] = useState<string>("—");
-  const [count, setCount] = useState(0);
-  const [terminal, setTerminal] = useState<string>("");
-  const [permissions, setPermissions] = useState<PermissionReport | null>(null);
-  const [error, setError] = useState<string>("");
-
-  async function checkPermissions() {
-    setError("");
-    try {
-      setPermissions(await invoke<PermissionReport>("check_permissions"));
-    } catch (caught) {
-      setError(String(caught));
-    }
-  }
-
-  async function requestPermission(kind: string) {
-    setError("");
-    try {
-      await invoke("request_permission", { kind });
-      await checkPermissions();
-    } catch (caught) {
-      setError(String(caught));
-    }
-  }
-
-  async function startRecording() {
-    setError("");
-    setLatestStep("—");
-    setCount(0);
-    setTerminal("");
-
-    const channel = new Channel<LiveEnvelope>();
-    channel.onmessage = (message) => {
-      if (message.type === "step") {
-        setLatestStep(message.step.title);
-        setCount((current) => current + 1);
-      } else if (message.type === "stopped") {
-        setTerminal(`stopped (${message.workflow_id})`);
-        setRecording(false);
-      } else {
-        setTerminal(`failed: ${message.error}`);
-        setRecording(false);
+  useEffect(() => {
+    disposed.current = false;
+    return () => {
+      disposed.current = true;
+      for (const url of cache.current.values()) {
+        URL.revokeObjectURL(url);
       }
+      cache.current.clear();
+      requested.current.clear();
     };
+  }, []);
 
-    try {
-      const id = await invoke<string>("start_recording", {
-        name: null,
-        channel,
+  useEffect(() => {
+    if (workflows === null) {
+      return;
+    }
+    for (const workflow of workflows) {
+      const eventId = workflow.thumbnail_event_id;
+      if (eventId === null || requested.current.has(workflow.id)) {
+        continue;
+      }
+      requested.current.add(workflow.id);
+      api
+        .readScreenshot(workflow.id, eventId, "window")
+        .then((bytes) => {
+          const blob = new Blob([bytes as BlobPart], { type: "image/png" });
+          const url = URL.createObjectURL(blob);
+          if (disposed.current) {
+            URL.revokeObjectURL(url);
+            return;
+          }
+          const replaced = cache.current.get(workflow.id);
+          if (replaced !== undefined) {
+            URL.revokeObjectURL(replaced);
+          }
+          cache.current.set(workflow.id, url);
+          setUrls(new Map(cache.current));
+        })
+        .catch(() => {
+          // The row keeps its labeled placeholder (DEC-006).
+        });
+    }
+  }, [api, workflows]);
+
+  return urls;
+}
+
+function LandingContainer(props: {
+  api: ApiClient;
+  onOpenWorkflow: (workflow: WorkflowSummary) => void;
+}) {
+  const { api } = props;
+  const [permissions, setPermissions] = useState<PermissionReport | null>(null);
+  const [workflows, setWorkflows] = useState<WorkflowSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const thumbnails = useThumbnails(api, workflows);
+
+  useEffect(() => {
+    let stale = false;
+    api
+      .checkPermissions()
+      .then((report) => {
+        if (!stale) {
+          setPermissions(report);
+        }
+      })
+      .catch((caught) => {
+        if (!stale) {
+          setError(String(caught));
+        }
       });
-      setWorkflowId(id);
-      setRecording(true);
+    api
+      .listWorkflows()
+      .then((list) => {
+        if (!stale) {
+          setWorkflows(list);
+        }
+      })
+      .catch((caught) => {
+        if (!stale) {
+          setError(`Could not load workflows: ${String(caught)}`);
+        }
+      });
+    return () => {
+      stale = true;
+    };
+  }, [api]);
+
+  async function requestPermission(kind: PermissionKind) {
+    setError(null);
+    try {
+      await api.requestPermission(kind);
+      setPermissions(await api.checkPermissions());
     } catch (caught) {
       setError(String(caught));
     }
   }
 
-  async function stopRecording() {
-    setError("");
+  async function revealWorkflow(id: string) {
+    setError(null);
     try {
-      await invoke<string>("stop_recording");
+      await api.revealWorkflow(id);
     } catch (caught) {
       setError(String(caught));
     }
   }
 
   return (
-    <main style={{ fontFamily: "system-ui", padding: "1.5rem", maxWidth: 640 }}>
-      <h1>Workflow Step Editor</h1>
-      <p style={{ color: "#666" }}>
-        Dev-only capture trigger. The product review UI arrives in a later
-        capability.
-      </p>
+    <LandingView
+      workflows={workflows}
+      error={error}
+      permissions={permissions}
+      thumbnails={thumbnails}
+      onRequestPermission={(kind) => void requestPermission(kind)}
+      onOpenWorkflow={props.onOpenWorkflow}
+      onRevealWorkflow={(id) => void revealWorkflow(id)}
+      onRecord={() => {
+        // The record flow ships in PR-03 (AC-004); the gate and hint
+        // are this slice's contract (AC-002).
+      }}
+    />
+  );
+}
 
-      <section style={{ marginBottom: "1rem" }}>
-        <button type="button" onClick={checkPermissions}>
-          Check permissions
-        </button>
-        {permissions && (
-          <ul>
-            <li>
-              Input Monitoring: {permissions.input_monitoring}{" "}
-              <button
-                type="button"
-                onClick={() => requestPermission("input_monitoring")}
-              >
-                Request
-              </button>
-            </li>
-            <li>
-              Accessibility: {permissions.accessibility}{" "}
-              <button
-                type="button"
-                onClick={() => requestPermission("accessibility")}
-              >
-                Request
-              </button>
-            </li>
-            <li>
-              Screen Recording: {permissions.screen_recording}{" "}
-              <button
-                type="button"
-                onClick={() => requestPermission("screen_recording")}
-              >
-                Request
-              </button>
-            </li>
-          </ul>
-        )}
-      </section>
+function App() {
+  const [view, dispatch] = useReducer(viewReducer, initialView);
 
-      <section style={{ marginBottom: "1rem" }}>
-        <button type="button" onClick={startRecording} disabled={recording}>
-          Start recording
-        </button>{" "}
-        <button type="button" onClick={stopRecording} disabled={!recording}>
-          Stop recording
-        </button>
-      </section>
-
-      <section>
-        <p>
-          <strong>Status:</strong>{" "}
-          {recording ? "recording" : "idle"}
-          {workflowId ? ` · workflow ${workflowId}` : ""}
-        </p>
-        <p>
-          <strong>Steps received:</strong> {count}
-        </p>
-        <p>
-          <strong>Latest step:</strong> {latestStep}
-        </p>
-        {terminal && (
-          <p>
-            <strong>Terminal:</strong> {terminal}
-          </p>
-        )}
-        {error && (
-          <p style={{ color: "#b00" }}>
-            <strong>Error:</strong> {error}
-          </p>
-        )}
-      </section>
-    </main>
+  if (view.kind === "detail") {
+    return (
+      <DetailShell
+        workflowName={view.workflowName}
+        onBack={() => dispatch({ kind: "back_to_landing" })}
+      />
+    );
+  }
+  return (
+    <LandingContainer
+      api={client}
+      onOpenWorkflow={(workflow) =>
+        dispatch({
+          kind: "open_workflow",
+          workflowId: workflow.id,
+          workflowName: workflow.name,
+        })
+      }
+    />
   );
 }
 

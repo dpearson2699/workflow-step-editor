@@ -20,6 +20,13 @@ npm run tauri dev     # run the app in development mode
 npm run tauri build   # build the signed release app
 ```
 
+## Tests
+
+```sh
+npm test                       # frontend component tests (vitest + jsdom)
+(cd src-tauri && cargo test)   # backend tests
+```
+
 The built app lands at
 `src-tauri/target/release/bundle/macos/workflow-step-editor.app`.
 
