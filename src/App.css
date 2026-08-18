@@ -224,7 +224,7 @@ button {
   opacity: 1;
 }
 
-/* ---------- Detail shell ---------- */
+/* ---------- Detail view (pinned variant D) ---------- */
 
 .detail-root {
   height: 100vh;
@@ -240,16 +240,409 @@ button {
   padding: 0;
 }
 
-.detail-title {
-  font-size: 16px;
-  font-weight: 700;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .detail-pane {
   flex: 1;
   min-height: 0;
+  padding: 16px 22px;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+.name-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.name-input:hover,
+.name-input:focus {
+  border-color: #444;
+  background: #1c1c1f;
+  outline: none;
+}
+
+.save-status {
+  font-size: 12px;
+  color: #9a9aa2;
+  white-space: nowrap;
+}
+
+.save-status.save-error {
+  color: #ff8f8f;
+}
+
+.retry-button {
+  background: none;
+  border: 1px solid #ff6b6b55;
+  border-radius: 6px;
+  color: #ff8f8f;
+  font-size: 12px;
+  padding: 1px 8px;
+}
+
+.delete-workflow-button {
+  background: none;
+  border: 1px solid #444;
+  border-radius: 8px;
+  color: #aaa;
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
+.delete-workflow-button:hover {
+  border-color: #ff6b6b55;
+  color: #ff8f8f;
+}
+
+.detail-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* ---------- Step list (compact, text-only) ---------- */
+
+.step-list-pane {
+  width: 340px;
+  flex-shrink: 0;
+  background: #232327;
+  border-right: 1px solid #333;
+  overflow-y: auto;
+}
+
+.step-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #2b2b2f;
+}
+
+.step-row:hover {
+  background: #2a2a2f;
+}
+
+.step-row.sel {
+  background: #31415f;
+}
+
+.step-row-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  padding: 9px 4px 9px 12px;
+}
+
+.step-index {
+  color: #888;
+  width: 18px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.dot-click {
+  background: #6fb4ff;
+}
+
+.dot-type {
+  background: #f8b880;
+}
+
+.dot-wait {
+  background: #c9c9cf;
+}
+
+.dot-assert {
+  background: #a8e08a;
+}
+
+.step-row-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.step-row-time {
+  font-size: 11px;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.step-delete {
+  background: none;
+  border: none;
+  color: #888;
+  padding: 9px 12px 9px 6px;
+  /* Opacity (not visibility) keeps the hover-delete keyboard-focusable
+     while visually hidden, so :focus-visible can reveal it. */
+  opacity: 0;
+}
+
+.step-row:hover .step-delete,
+.step-delete:focus-visible {
+  opacity: 1;
+}
+
+.step-delete:hover {
+  color: #ff6b6b;
+}
+
+/* ---------- Detail pane: always-visible screenshot triple ---------- */
+
+.step-detail {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px 22px 40px;
+}
+
+.step-detail-empty {
+  color: #777;
+  text-align: center;
+  margin-top: 40px;
+}
+
+.shot-wrap {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.shot-big {
+  flex: 1;
+  min-width: 0;
+  max-height: 56vh;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #111;
+}
+
+div.shot-big {
+  display: grid;
+  place-items: center;
+  color: #666;
+  font-size: 13px;
+  min-height: 220px;
+}
+
+.shot-thumbs {
+  width: 168px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shot-thumb {
+  margin: 0;
+}
+
+.shot-thumb-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+.shot-thumb img,
+.shot-thumb-open .shot-placeholder {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: #111;
+  display: block;
+}
+
+.shot-thumb-open .shot-placeholder {
+  display: grid;
+  place-items: center;
+  color: #666;
+  font-size: 11px;
+}
+
+.shot-thumb.sel img,
+.shot-thumb.sel .shot-placeholder {
+  border-color: #4670d8;
+}
+
+.shot-thumb figcaption {
+  font-size: 11px;
+  color: #999;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* ---------- Step editing ---------- */
+
+.step-edit {
+  margin-top: 14px;
+  max-width: 760px;
+}
+
+.edit-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.cls {
+  border: none;
+  border-radius: 6px;
+  padding: 6px;
+  font-weight: 600;
+  background: #2d2d31;
+}
+
+.cls-click {
+  color: #6fb4ff;
+}
+
+.cls-type {
+  color: #f8b880;
+}
+
+.cls-wait {
+  color: #c9c9cf;
+}
+
+.cls-assert {
+  color: #a8e08a;
+}
+
+.title-input {
+  flex: 1;
+  min-width: 0;
+  background: #1c1c1f;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.description-input {
+  width: 100%;
+  margin-top: 10px;
+  background: #1c1c1f;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 7px 9px;
+  resize: vertical;
+  min-height: 52px;
+  color: #ccc;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 4px 12px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.meta-grid dt {
+  color: #8b8b93;
+}
+
+.meta-grid dd {
+  margin: 0;
+}
+
+/* ---------- Destructive confirmation ---------- */
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: #000a;
+  display: grid;
+  place-items: center;
+  z-index: 50;
+}
+
+.modal {
+  background: #2a2a2f;
+  border: 1px solid #3c3c42;
+  border-radius: 14px;
+  padding: 22px 24px;
+  width: 440px;
+  box-shadow: 0 12px 40px #000c;
+}
+
+.modal h3 {
+  margin: 0 0 8px;
+}
+
+.modal p {
+  margin: 0 0 14px;
+  color: #a8a8b0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.modal-cancel {
+  background: #3a3a40;
+  color: #e8e8ea;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+}
+
+.modal-delete {
+  background: none;
+  border: 1px solid #ff6b6b88;
+  color: #ff8f8f;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+}
+
+.modal-delete:hover {
+  background: #3a2020;
+}
+
+.modal-cancel:disabled,
+.modal-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
