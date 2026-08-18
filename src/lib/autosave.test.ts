@@ -120,6 +120,63 @@ describe("autosave queue", () => {
     expect(calls).toEqual(["in-flight"]);
   });
 
+  it("serializes a post-invalidate replay behind the stale in-flight request", async () => {
+    const { autosave, statuses } = harness();
+    const stale = deferred();
+    const calls: string[] = [];
+    autosave.schedule("step:1", () => {
+      calls.push("old");
+      return stale.promise;
+    });
+    autosave.invalidate();
+
+    // The replayed newer value must NOT launch while the orphaned older
+    // request is still in flight — the backend write order would be
+    // unspecified otherwise.
+    autosave.schedule("step:1", async () => {
+      calls.push("replay");
+    });
+    expect(calls).toEqual(["old"]);
+
+    stale.resolve();
+    await flush();
+    expect(calls, "replay launches only after the stale settle").toEqual([
+      "old",
+      "replay",
+    ]);
+    // The stale completion itself emitted no status; the replay settled
+    // to idle.
+    expect(statuses[statuses.length - 1]).toEqual({
+      key: "step:1",
+      status: { state: "idle" },
+    });
+  });
+
+  it("discard drops queued and failed work without blocking the key", async () => {
+    const { autosave, last } = harness();
+    const failing = deferred();
+    autosave.schedule("workflow", () => failing.promise);
+    failing.reject(new Error("rename failed"));
+    await flush();
+    expect(last()?.status.state).toBe("error");
+
+    autosave.discard("workflow");
+    expect(last()?.status).toEqual({ state: "idle" });
+    // Retry after discard has nothing to resend.
+    autosave.retry("workflow");
+    await flush();
+    expect(last()?.status).toEqual({ state: "idle" });
+
+    // The key stays schedulable.
+    const calls: string[] = [];
+    autosave.schedule("workflow", async () => {
+      calls.push("fresh");
+    });
+    await flush();
+    expect(calls).toEqual(["fresh"]);
+    expect(last()?.status).toEqual({ state: "idle" });
+  });
+
   it("invalidate drops queued work and ignores every stale completion", async () => {
     const { autosave, statuses } = harness();
     const ok = deferred();

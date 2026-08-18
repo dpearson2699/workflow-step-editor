@@ -312,6 +312,9 @@ export function DetailView(props: DetailViewProps) {
     const trimmed = value.trim();
     if (trimmed === "") {
       setNameError("Name cannot be empty");
+      // Drop any failed rename retry: it holds a previous value that no
+      // longer matches the (invalid) input.
+      autosave.discard(WORKFLOW_KEY);
       return;
     }
     setNameError(null);
@@ -426,10 +429,15 @@ export function DetailView(props: DetailViewProps) {
             {nameError}
           </span>
         )}
-        <SaveIndicator
-          status={statuses.get(WORKFLOW_KEY)}
-          onRetry={() => autosave.retry(WORKFLOW_KEY)}
-        />
+        {/* While the input is invalid the validation error replaces the
+            save indicator, so a stale Retry can never resend a previous
+            name over a blank input. */}
+        {nameError === null && (
+          <SaveIndicator
+            status={statuses.get(WORKFLOW_KEY)}
+            onRetry={() => autosave.retry(WORKFLOW_KEY)}
+          />
+        )}
         <button
           type="button"
           className="delete-workflow-button"

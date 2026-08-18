@@ -11,7 +11,13 @@
 //   completion of any request still in flight.
 // - `invalidate()` (called before workflow deletion) bumps the
 //   generation: every queued save is dropped and every in-flight
-//   completion — success or failure — is ignored.
+//   completion — success or failure — is ignored. The key itself stays
+//   serialized: a save scheduled AFTER the invalidation queues behind a
+//   still-in-flight stale request and launches only when it settles, so
+//   a replayed newer value can never race the orphaned older write.
+// - `discard(key)` drops the key's queued and failed work (without
+//   blocking future schedules) and settles a non-in-flight key to idle;
+//   the detail view uses it when the local value becomes invalid.
 
 export type SaveStatus =
   | { state: "idle" }
@@ -37,6 +43,8 @@ export interface Autosave {
   retry(key: string): void;
   /** Drops the key's pending work; later completions are ignored. */
   block(key: string): void;
+  /** Drops the key's queued and failed work without blocking the key. */
+  discard(key: string): void;
   /** Drops everything and ignores all in-flight completions. */
   invalidate(): void;
 }
@@ -74,9 +82,20 @@ export function createAutosave(
     save: SaveOp,
     failure: string | null,
   ): void {
-    // A stale completion from before `invalidate()` is a no-op: it must
-    // neither settle a status nor launch queued work.
+    // A stale completion from before `invalidate()` settles no status
+    // and installs no retry, but it must still release the key and
+    // launch work queued AFTER the invalidation: a replayed save waits
+    // here instead of racing the orphaned in-flight write.
     if (launchedIn !== generation) {
+      entry.inFlight = false;
+      if (entry.blocked) {
+        return;
+      }
+      const replay = entry.queued;
+      if (replay !== null) {
+        entry.queued = null;
+        launch(key, entry, replay);
+      }
       return;
     }
     entry.inFlight = false;
@@ -126,9 +145,25 @@ export function createAutosave(
       entry.queued = null;
       entry.failed = null;
     },
+    discard(key) {
+      const entry = entries.get(key);
+      if (entry === undefined || entry.blocked) {
+        return;
+      }
+      entry.queued = null;
+      entry.failed = null;
+      if (!entry.inFlight) {
+        onStatus(key, { state: "idle" });
+      }
+    },
     invalidate() {
+      // Entries stay in the map so their in-flight flags keep the keys
+      // serialized; only their pending work is dropped.
       generation += 1;
-      entries.clear();
+      for (const entry of entries.values()) {
+        entry.queued = null;
+        entry.failed = null;
+      }
     },
   };
 }

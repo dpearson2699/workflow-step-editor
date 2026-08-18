@@ -387,6 +387,37 @@ describe("header rename", () => {
     });
   });
 
+  it("clears a stale rename retry when the name becomes invalid", async () => {
+    const renameWorkflow = vi
+      .fn<(id: string, name: string) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("rename failed"))
+      .mockResolvedValue(undefined);
+    await renderDetail({ renameWorkflow });
+
+    const input = screen.getByRole("textbox", { name: "Workflow name" });
+    fireEvent.change(input, { target: { value: "Doomed name" } });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy(),
+    );
+
+    // Clearing the name shows the validation error and removes the
+    // stale Retry, so the previous value can never be resent over a
+    // blank input.
+    fireEvent.change(input, { target: { value: "" } });
+    expect(screen.getByText("Name cannot be empty")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(renameWorkflow).toHaveBeenCalledTimes(1);
+
+    // A valid value schedules a fresh save as usual.
+    fireEvent.change(input, { target: { value: "Recovered name" } });
+    await waitFor(() =>
+      expect(renameWorkflow).toHaveBeenLastCalledWith(
+        WORKFLOW_ID,
+        "Recovered name",
+      ),
+    );
+  });
+
   it("keeps a name typed while the initial load is in flight", async () => {
     const load = deferred<LoadedWorkflow>();
     const renameWorkflow = vi.fn(async () => {});
@@ -625,17 +656,22 @@ describe("workflow deletion", () => {
       removal.reject(new Error("workflow is recording or stopping"));
     });
 
-    // The latest local trio is re-sent for the key whose save the
-    // invalidation dropped.
+    // The replay is scheduled but must wait for the orphaned in-flight
+    // request: launching concurrently would leave the backend write
+    // order unspecified.
+    expect(updateStep).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      firstSave.resolve();
+    });
+    // The stale settle released the key and launched the replay with
+    // the latest local trio.
     expect(updateStep).toHaveBeenCalledTimes(2);
     expect(updateStep).toHaveBeenLastCalledWith(WORKFLOW_ID, "step_0001", {
       title: "Final title",
       description: "",
       classification: "click",
     });
-    await act(async () => {
-      firstSave.resolve();
-    });
+    await act(async () => {});
     // No indicator sticks on "Saving…" after the re-sent save settles.
     expect(screen.queryByText("Saving…")).toBeNull();
   });
