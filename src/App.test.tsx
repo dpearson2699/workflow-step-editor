@@ -35,6 +35,8 @@ function apiWith(overrides: Partial<ApiClient>): ApiClient {
     deleteStep: async () => {},
     renameWorkflow: async () => {},
     deleteWorkflow: async () => {},
+    startRecording: async () => "wf",
+    stopRecording: async () => "wf",
     ...overrides,
   };
 }

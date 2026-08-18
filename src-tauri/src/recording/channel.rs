@@ -14,8 +14,10 @@ use crate::domain::schema::Step;
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LiveEnvelope {
     /// One parsed step. Published only after the event line and all three
-    /// screenshots are committed to disk.
-    Step { step: Step },
+    /// screenshots are committed to disk. `ts` is the source event's
+    /// RFC 3339 timestamp — a transient envelope field for the live rows
+    /// (DEC-009), not part of schema v1's `Step`.
+    Step { step: Step, ts: String },
     /// Terminal: the recording stopped and the manifest is saved.
     Stopped { workflow_id: String },
     /// Terminal: the recording fail-stopped. Committed events and shots
@@ -43,6 +45,24 @@ mod tests {
 
     #[test]
     fn envelope_serializes_with_snake_case_tags() {
+        let step = serde_json::to_value(LiveEnvelope::Step {
+            step: Step {
+                id: "step_0001".into(),
+                event_ids: vec!["evt_0001".into()],
+                classification: crate::domain::schema::Classification::Click,
+                title: "Click \"OK\" — TextEdit".into(),
+                description: String::new(),
+            },
+            ts: "2026-08-16T22:31:05.123Z".into(),
+        })
+        .unwrap();
+        assert_eq!(step["type"], "step");
+        assert_eq!(step["step"]["id"], "step_0001");
+        // The transient DEC-009 event timestamp rides the envelope, not
+        // the schema step.
+        assert_eq!(step["ts"], "2026-08-16T22:31:05.123Z");
+        assert!(step["step"].get("ts").is_none());
+
         let stopped = serde_json::to_value(LiveEnvelope::Stopped {
             workflow_id: "w1".into(),
         })
