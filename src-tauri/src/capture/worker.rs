@@ -7,15 +7,17 @@
 //! packet-assembly failure (no retained frame, encode failure) reports
 //! through the guard's single fail-stop.
 //!
-//! Frame selection is per event kind (DEC-001/DEC-002). A click uses
-//! its pinned pre-event frame and never consults the live broker. A
-//! key-down runs a bounded wait on this thread for the oldest retained
-//! frame on its display inside `(event_ts, event_ts + window]`; when
-//! none exists at the deadline, or the candidate's display geometry
-//! differs from the event-time display, the pinned frame is used. The
-//! wait runs on an injectable [`WaitRuntime`] so tests drive a fake
-//! clock; the deadline is anchored to the event timestamp, so a burst
-//! of key-downs on a static screen shares one wait instead of stacking.
+//! Frame selection is per event kind (DEC-001/DEC-002/DEC-004). A click
+//! uses its pinned pre-event frame and never consults the live broker.
+//! A key-down runs a bounded settle/wait on this thread: it waits until
+//! its display retains a frame with `ts >= event_ts + settle` or the
+//! window deadline passes, then selects the newest retained frame on
+//! its display inside `(event_ts, event_ts + window]`; when none
+//! exists, or the candidate's display geometry differs from the
+//! event-time display, the pinned frame is used. The wait runs on an
+//! injectable [`WaitRuntime`] so tests drive a fake clock; the deadline
+//! is anchored to the event timestamp, so a burst of key-downs on a
+//! static screen shares one wait instead of stacking.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -29,8 +31,10 @@ use crate::capture::resolver::MetadataResolver;
 
 /// The clock and sleep the key-down post-event wait runs on. Production
 /// supplies the mach host clock, `std::thread::sleep`, the DEC-002
-/// window, and a short poll interval; tests supply a fake clock whose
-/// `wait_for` advances time and publishes frames into the real broker.
+/// window, the DEC-004 settle, and a short poll interval; tests supply
+/// a fake clock whose `wait_for` advances time and publishes frames
+/// into the real broker. Every runtime must report
+/// `POST_EVENT_FRAME_WINDOW_NS` and `POST_EVENT_SETTLE_NS`.
 pub trait WaitRuntime: Send {
     /// Now, in the same host-clock nanoseconds as event and frame
     /// timestamps.
@@ -41,6 +45,10 @@ pub trait WaitRuntime: Send {
 
     /// The post-event window: the deadline is `event_ts + window_ns()`.
     fn window_ns(&self) -> u64;
+
+    /// The settle bound: the wait ends early once a retained frame has
+    /// `ts >= event_ts + settle_ns()` (inclusive).
+    fn settle_ns(&self) -> u64;
 
     /// The re-query interval while waiting.
     fn poll_interval(&self) -> Duration;
@@ -80,9 +88,10 @@ pub fn run_capture_worker(
     }
 }
 
-/// The key-down rule (DEC-002): the bounded post-event frame on the
-/// pinned display when one arrives inside the window and matches the
-/// event-time display geometry (GA-006); otherwise the pinned frame.
+/// The key-down rule (DEC-002/DEC-004): the newest in-window post-event
+/// frame on the pinned display, chosen after the bounded settle/wait,
+/// when one exists and matches the event-time display geometry
+/// (GA-006); otherwise the pinned frame.
 fn select_key_down_frame(
     broker: &Mutex<FrameBroker>,
     wait: &mut impl WaitRuntime,
@@ -98,13 +107,16 @@ fn select_key_down_frame(
     }
 }
 
-/// Bounded wait for the oldest retained frame on `display_id` inside
-/// `(event_ts_ns, event_ts_ns + window]`. Queries first, then sleeps
-/// `min(poll, remaining)` and re-queries until a frame is found or the
-/// deadline has passed, with one final query after the last wait. The
-/// total requested wait never exceeds the remaining window; a job that
-/// arrives after its deadline queries once and never waits. The broker
-/// lock is never held across a wait.
+/// Bounded settle/wait for the newest retained frame on `display_id`
+/// inside `(event_ts_ns, event_ts_ns + window]` (DEC-004). Each pass
+/// queries the broker once (settle probe plus newest in-window frame);
+/// the wait ends when the display retains a frame with
+/// `ts >= event_ts_ns + settle` (inclusive) or the deadline has passed,
+/// and the pass after the last wait is the final query. Otherwise it
+/// sleeps `min(poll, remaining)` and re-queries. The total requested
+/// wait never exceeds the remaining window; a job that arrives after
+/// its deadline queries once and never waits. The broker lock is never
+/// held across a wait.
 fn await_post_event_frame(
     broker: &Mutex<FrameBroker>,
     wait: &mut impl WaitRuntime,
@@ -112,18 +124,22 @@ fn await_post_event_frame(
     event_ts_ns: u64,
 ) -> Option<Arc<FrameData>> {
     let deadline_ns = event_ts_ns.saturating_add(wait.window_ns());
+    let settle_ts_ns = event_ts_ns.saturating_add(wait.settle_ns());
     let poll = wait.poll_interval();
     loop {
-        let candidate = broker
-            .lock()
-            .expect("frame broker lock poisoned")
-            .post_event_frame(display_id, event_ts_ns, deadline_ns);
-        if candidate.is_some() {
+        let (settled, candidate) = {
+            let broker = broker.lock().expect("frame broker lock poisoned");
+            (
+                broker.has_frame_at_or_after(display_id, settle_ts_ns),
+                broker.post_event_frame(display_id, event_ts_ns, deadline_ns),
+            )
+        };
+        if settled {
             return candidate;
         }
         let now_ns = wait.now_ns();
         if now_ns >= deadline_ns {
-            return None;
+            return candidate;
         }
         let remaining = Duration::from_nanos(deadline_ns.saturating_sub(now_ns));
         wait.wait_for(poll.min(remaining));
@@ -136,7 +152,9 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::thread;
 
-    use crate::capture::broker::{FrameBroker, FrameData, POST_EVENT_FRAME_WINDOW_NS};
+    use crate::capture::broker::{
+        FrameBroker, FrameData, POST_EVENT_FRAME_WINDOW_NS, POST_EVENT_SETTLE_NS,
+    };
     use crate::capture::geometry::{DisplayGeometry, RectPt};
     use crate::capture::packets::{ResolvedMetadata, ResolvedWindow};
     use crate::capture::queue::{capture_queue, CaptureJob, JobSender, RawInput};
@@ -146,6 +164,7 @@ mod tests {
     use super::*;
 
     const WINDOW_NS: u64 = POST_EVENT_FRAME_WINDOW_NS;
+    const SETTLE_NS: u64 = POST_EVENT_SETTLE_NS;
     const POLL: Duration = Duration::from_millis(5);
     const MS: u64 = 1_000_000;
 
@@ -248,6 +267,10 @@ mod tests {
 
         fn window_ns(&self) -> u64 {
             WINDOW_NS
+        }
+
+        fn settle_ns(&self) -> u64 {
+            SETTLE_NS
         }
 
         fn poll_interval(&self) -> Duration {
@@ -437,14 +460,82 @@ mod tests {
     }
 
     #[test]
-    fn a_key_down_uses_the_post_event_frame_published_during_its_wait() {
+    fn a_settle_frame_supersedes_an_earlier_in_window_frame_and_ends_the_wait() {
+        // GA-007: an intermediate repaint at +30 ms is followed by the
+        // glyph frame at exactly event + 100 ms (the settle bound is
+        // inclusive). The newest in-window frame wins and the wait ends
+        // on that frame, not at the deadline.
+        let displays = [display(1)];
+        let broker = warm_broker(&displays, EVENT - 5 * MS);
+        let (tx, rx) = capture_queue(8);
+        tx.enqueue(key_job(&broker, EVENT)).unwrap();
+        drop(tx);
+        // The worker picks the job up 5 ms after the event.
+        let runtime = ScriptedRuntime::new(broker.clone(), EVENT + 5 * MS)
+            .at(
+                EVENT + 30 * MS,
+                ScriptStep::Publish(frame(&displays[0], EVENT + 30 * MS, OTHER_BGR)),
+            )
+            .at(
+                EVENT + SETTLE_NS,
+                ScriptStep::Publish(frame(&displays[0], EVENT + SETTLE_NS, POST_BGR)),
+            );
+        let waits = runtime.waits();
+
+        let events = run(rx, FixedResolver::default(), broker, runtime);
+
+        let packets = packets(&events);
+        assert_eq!(packets.len(), 1);
+        assert_shots_from(packets[0], POST_BGR);
+        assert_eq!(packets[0].frame_age_ms, 0);
+        // Polled in short steps up to the settle frame; well short of
+        // the remaining window.
+        assert!(waits.lock().unwrap().iter().all(|wait| *wait <= POLL));
+        assert_eq!(total(&waits), Duration::from_nanos(SETTLE_NS - 5 * MS));
+    }
+
+    #[test]
+    fn a_frame_one_nanosecond_short_of_the_settle_does_not_end_the_wait() {
+        // Same setup, but the later frame lands at event + 100 ms - 1 ns:
+        // the settle is not satisfied, the worker waits out the window,
+        // and the final query still selects that newest in-window frame.
+        let displays = [display(1)];
+        let broker = warm_broker(&displays, EVENT - 5 * MS);
+        let (tx, rx) = capture_queue(8);
+        tx.enqueue(key_job(&broker, EVENT)).unwrap();
+        drop(tx);
+        let runtime = ScriptedRuntime::new(broker.clone(), EVENT + 5 * MS)
+            .at(
+                EVENT + 30 * MS,
+                ScriptStep::Publish(frame(&displays[0], EVENT + 30 * MS, OTHER_BGR)),
+            )
+            .at(
+                EVENT + SETTLE_NS - 1,
+                ScriptStep::Publish(frame(&displays[0], EVENT + SETTLE_NS - 1, POST_BGR)),
+            );
+        let waits = runtime.waits();
+
+        let events = run(rx, FixedResolver::default(), broker, runtime);
+
+        let packets = packets(&events);
+        assert_eq!(packets.len(), 1);
+        assert_shots_from(packets[0], POST_BGR);
+        assert_eq!(packets[0].frame_age_ms, 0);
+        // The whole remaining window was waited out.
+        assert_eq!(total(&waits), Duration::from_nanos(WINDOW_NS - 5 * MS));
+        assert!(waits.lock().unwrap().iter().all(|wait| *wait <= POLL));
+    }
+
+    #[test]
+    fn a_single_early_in_window_frame_is_selected_when_the_deadline_is_reached() {
         let displays = [display(1)];
         let broker = warm_broker(&displays, EVENT - 5 * MS);
         let (tx, rx) = capture_queue(8);
         tx.enqueue(key_job(&broker, EVENT)).unwrap();
         drop(tx);
         // The worker picks the job up 2 ms after the event; the stream
-        // publishes the post frame 60 ms after the event.
+        // publishes one post frame 60 ms after the event and nothing
+        // else, so the settle never holds and the deadline decides.
         let runtime = ScriptedRuntime::new(broker.clone(), EVENT + 2 * MS).at(
             EVENT + 60 * MS,
             ScriptStep::Publish(frame(&displays[0], EVENT + 60 * MS, POST_BGR)),
@@ -457,11 +548,13 @@ mod tests {
         assert_eq!(packets.len(), 1);
         assert_shots_from(packets[0], POST_BGR);
         assert_eq!(packets[0].frame_age_ms, 0);
-        // Polled in short steps; never past the remaining window.
+        // Polled in short steps; exactly the remaining window, never more.
         let waits = waits.lock().unwrap();
-        assert!(!waits.is_empty());
         assert!(waits.iter().all(|wait| *wait <= POLL));
-        assert!(waits.iter().sum::<Duration>() <= Duration::from_nanos(WINDOW_NS - 2 * MS));
+        assert_eq!(
+            waits.iter().sum::<Duration>(),
+            Duration::from_nanos(WINDOW_NS - 2 * MS)
+        );
     }
 
     #[test]
@@ -540,9 +633,10 @@ mod tests {
 
     #[test]
     fn several_key_downs_before_one_frame_share_it_without_stacking_waits() {
-        // Three key-downs 20 ms apart, then one frame 90 ms after the
-        // first: the first job waits for it, the later jobs find it
-        // retained and never wait a full window each.
+        // Three key-downs 20 ms apart, then one frame 140 ms after the
+        // first: it satisfies every job's settle (the last one exactly),
+        // so the first job waits for it and the later jobs find it
+        // retained and settled without waiting a full window each.
         let displays = [display(1)];
         let broker = warm_broker(&displays, EVENT - 5 * MS);
         let (tx, rx) = capture_queue(8);
@@ -551,8 +645,8 @@ mod tests {
         }
         drop(tx);
         let runtime = ScriptedRuntime::new(broker.clone(), EVENT + 45 * MS).at(
-            EVENT + 90 * MS,
-            ScriptStep::Publish(frame(&displays[0], EVENT + 90 * MS, POST_BGR)),
+            EVENT + 140 * MS,
+            ScriptStep::Publish(frame(&displays[0], EVENT + 140 * MS, POST_BGR)),
         );
         let waits = runtime.waits();
 
@@ -564,13 +658,9 @@ mod tests {
             assert_shots_from(packet, POST_BGR);
             assert_eq!(packet.frame_age_ms, 0);
         }
-        // Only the first job waited (about 45 ms), the rest were
+        // Only the first job waited (45 ms to 140 ms); the rest were
         // served from the retained frame.
-        assert!(
-            total(&waits) <= Duration::from_millis(50),
-            "{:?}",
-            total(&waits)
-        );
+        assert_eq!(total(&waits), Duration::from_millis(95));
     }
 
     #[test]
@@ -584,14 +674,15 @@ mod tests {
         tx.enqueue(key_job(&broker, EVENT + 20 * MS)).unwrap();
         drop(tx);
         // A newer broker frame arrives before the worker starts and a
-        // second one during the last key-down's wait.
+        // second one, satisfying the first key-down's settle, during
+        // its wait.
         broker
             .lock()
             .unwrap()
             .publish_frame(frame(&displays[0], EVENT + 5 * MS, POST_BGR));
         let runtime = ScriptedRuntime::new(broker.clone(), EVENT + 25 * MS).at(
-            EVENT + 70 * MS,
-            ScriptStep::Publish(frame(&displays[0], EVENT + 70 * MS, OTHER_BGR)),
+            EVENT + 110 * MS,
+            ScriptStep::Publish(frame(&displays[0], EVENT + 110 * MS, OTHER_BGR)),
         );
 
         let events = run(rx, FixedResolver::default(), broker, runtime);
@@ -602,14 +693,16 @@ mod tests {
         assert!(matches!(packets[0].input, PacketInput::KeyDown { .. }));
         assert!(matches!(packets[1].input, PacketInput::Click { .. }));
         assert!(matches!(packets[2].input, PacketInput::KeyDown { .. }));
-        // First key-down: the retained in-window frame at +5 ms.
-        assert_shots_from(packets[0], POST_BGR);
+        // First key-down: the newest in-window frame (+110 ms) supersedes
+        // the earlier +5 ms frame.
+        assert_shots_from(packets[0], OTHER_BGR);
         // The click keeps its pinned pre-event pixels although the
         // broker retains newer frames.
         assert_shots_from(packets[1], PINNED_BGR);
         assert_eq!(packets[1].frame_age_ms, 15);
         // Second key-down at +20 ms: the +5 ms frame is not later than
-        // the event, so it waits for the +70 ms frame.
+        // the event; the +110 ms frame is in its window but short of
+        // its settle, so it is selected at that job's deadline.
         assert_shots_from(packets[2], OTHER_BGR);
     }
 
@@ -632,23 +725,28 @@ mod tests {
                 ..Default::default()
             },
         };
+        // A settle-satisfying frame on display 1 neither ends the wait
+        // nor gets selected for display 2.
         let runtime = ScriptedRuntime::new(broker.clone(), EVENT + 2 * MS).at(
-            EVENT + 30 * MS,
-            ScriptStep::Publish(frame(&displays[0], EVENT + 30 * MS, POST_BGR)),
+            EVENT + SETTLE_NS,
+            ScriptStep::Publish(frame(&displays[0], EVENT + SETTLE_NS, POST_BGR)),
         );
+        let waits = runtime.waits();
 
         let events = run(rx, resolver, broker, runtime);
 
         let packets = packets(&events);
         assert_eq!(packets[0].display_id, 2);
         assert_shots_from(packets[0], PINNED_BGR);
+        assert_eq!(total(&waits), Duration::from_nanos(WINDOW_NS - 2 * MS));
     }
 
     #[test]
     fn a_post_frame_with_changed_display_geometry_falls_back_to_the_pinned_frame() {
         // GA-006: the display set is republished with a new geometry
-        // for the same display ID inside the window; the candidate
-        // frame carries that geometry, so the pinned frame is used.
+        // for the same display ID inside the window; the settle-ending
+        // candidate frame carries that geometry, so the pinned frame is
+        // used.
         let displays = [display(1)];
         let broker = warm_broker(&displays, EVENT - 5 * MS);
         let (tx, rx) = capture_queue(8);
@@ -664,8 +762,8 @@ mod tests {
                 ScriptStep::PublishDisplays(vec![moved.clone()]),
             )
             .at(
-                EVENT + 30 * MS,
-                ScriptStep::Publish(frame(&moved, EVENT + 30 * MS, POST_BGR)),
+                EVENT + SETTLE_NS,
+                ScriptStep::Publish(frame(&moved, EVENT + SETTLE_NS, POST_BGR)),
             );
 
         let events = run(rx, FixedResolver::default(), broker, runtime);
@@ -687,8 +785,8 @@ mod tests {
         let mut runtime = ScriptedRuntime::new(broker.clone(), EVENT + 2 * MS)
             .at(EVENT + 20 * MS, ScriptStep::CloseSender)
             .at(
-                EVENT + 40 * MS,
-                ScriptStep::Publish(frame(&displays[0], EVENT + 40 * MS, POST_BGR)),
+                EVENT + SETTLE_NS,
+                ScriptStep::Publish(frame(&displays[0], EVENT + SETTLE_NS, POST_BGR)),
             );
         runtime.sender = Some(tx);
 

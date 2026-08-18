@@ -22,9 +22,10 @@ recordings.
   all three screenshots visible: one large, two labeled click-to-swap
   thumbnails (full screen, window crop, element crop). Click steps are
   cut from a pre-event frame, so the screen shows the state *before* the
-  click. Typing steps use the first frame captured after the key when
-  one arrives within 250 ms (best-effort, so the typed character is
-  normally visible), otherwise the pre-event frame.
+  click. Typing steps use the newest retained frame captured within
+  250 ms after the key, chosen after a 100 ms settle so the typed
+  character is normally visible; when no such frame remains, the
+  pre-event frame.
   Edit titles and descriptions, switch the classification
   (`click`/`type`/`wait`/`assert`), and delete steps. Edits save
   automatically.

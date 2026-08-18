@@ -35,18 +35,25 @@ the field without the typed character and was judged useless
 - **Clicks** keep the pre-event selection unchanged: the tap callback pins the
   newest retained frame not later than the event, and the artifact shows the
   control before the UI repaints.
-- **Key-downs** use the oldest retained frame on the selected display whose
-  display timestamp lies in the bounded window `(event_ts, event_ts + 250 ms]`.
-  Under normal worker latency this is the first post-event frame; the broker
-  retains two frames per display. Frames equal to the event timestamp are not
-  eligible; a frame equal to the deadline is.
+- **Key-downs** use the newest retained frame on the selected display whose
+  display timestamp lies in the bounded window `(event_ts, event_ts + 250 ms]`,
+  selected after a 100 ms settle: the worker waits until the display retains a
+  frame with `ts >= event_ts + 100 ms` (one minimum frame interval; equality
+  satisfies it) or the 250 ms deadline passes, then takes the newest in-window
+  frame. The settle lets an intermediate repaint — such as the dirty-state
+  title repaint on the first keystroke into a clean document — be superseded
+  by the later glyph paint instead of winning as the first post-event frame.
+  The broker retains two frames per display. Frames equal to the event
+  timestamp are not eligible; a frame equal to the deadline is.
 - The tap callback still pins the pre-event snapshot for every event and never
-  blocks. The bounded wait for the post-event frame runs on the capture worker
-  after it has resolved metadata and chosen the display, with the deadline
-  anchored to the event timestamp. Because the deadline is event-anchored, a
-  burst of key-downs on a static screen shares one wait instead of stacking
-  waits linearly; a burst can still fill the bounded queue during that first
-  wait, and the existing saturation fail-stop remains the policy for that case.
+  blocks. The bounded settle/wait for the post-event frame runs on the capture
+  worker after it has resolved metadata and chosen the display, with the
+  deadline anchored to the event timestamp; a job that reaches the worker
+  after its deadline queries once and never waits. Because the deadline is
+  event-anchored, a burst of key-downs on a static screen shares one wait
+  instead of stacking waits linearly; a burst can still fill the bounded queue
+  during that first wait, and the existing saturation fail-stop remains the
+  policy for that case.
 - **Fallback to the pinned pre-event frame** when no in-window frame exists at
   the deadline, when the selected display retains no live frame, or when the
   candidate frame's display geometry differs from the event-time display
@@ -61,8 +68,10 @@ the field without the typed character and was judged useless
 - At the ~10 fps stream rate, several key-downs that precede one frame share
   that frame, so a typing step's screenshots may show more than its own
   character.
-- A key-down step pays up to one frame interval (about 100 ms, bounded at
-  250 ms) of added latency before its packet is emitted.
+- A key-down step pays at least the 100 ms settle and at most 250 ms of added
+  latency before its packet is emitted; while the screen keeps changing
+  (continuous typing) the wait ends at the first settle-satisfying frame, and
+  an isolated key on a static screen waits out the 250 ms deadline.
 - Orderly stop joins the capture worker before it stops the display streams,
   so a key-down accepted just before Stop can still receive its post-event
   frame; the streams stop afterwards and the emitter quiesces last.

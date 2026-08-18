@@ -6,9 +6,10 @@
 //! is enqueued, so a delayed worker can never lose the required
 //! predecessor frame when the live broker advances (ADR 0001). The
 //! capture worker additionally queries the live broker for a key-down's
-//! post-event frame inside the bounded window
-//! `(event_ts, event_ts + POST_EVENT_FRAME_WINDOW_NS]` (ADR 0001
-//! amendment, DEC-002); the pinned snapshot stays the fallback.
+//! post-event frame: the newest retained frame inside the bounded window
+//! `(event_ts, event_ts + POST_EVENT_FRAME_WINDOW_NS]`, chosen after a
+//! `POST_EVENT_SETTLE_NS` settle (ADR 0001 amendment, DEC-002/DEC-004);
+//! the pinned snapshot stays the fallback.
 //!
 //! Display sets are published per generation and replace each other
 //! atomically under the broker lock. Frames retained for a display
@@ -22,10 +23,18 @@ use std::sync::Arc;
 use crate::capture::geometry::DisplayGeometry;
 
 /// The bounded post-event window for key-down frame selection
-/// (DEC-002): a key-down step uses the oldest retained frame whose
-/// timestamp lies in `(event_ts, event_ts + 250 ms]`, else its pinned
-/// pre-event frame. About 2.5 minimum frame intervals at ~10 fps.
+/// (DEC-002/DEC-004): a key-down step uses the newest retained frame
+/// whose timestamp lies in `(event_ts, event_ts + 250 ms]`, else its
+/// pinned pre-event frame. About 2.5 minimum frame intervals at ~10 fps.
 pub const POST_EVENT_FRAME_WINDOW_NS: u64 = 250_000_000;
+
+/// The key-down settle (DEC-004): the worker waits until a retained
+/// frame with `ts >= event_ts + 100 ms` (one minimum frame interval at
+/// ~10 fps) exists on the selected display, or the window deadline
+/// passes, before it selects the newest in-window frame. This lets the
+/// glyph paint supersede an intermediate repaint (GA-007) while typing
+/// keeps low latency.
+pub const POST_EVENT_SETTLE_NS: u64 = 100_000_000;
 
 /// One captured frame: the pixels plus the display geometry they were
 /// captured under (which may be an older generation than the current
@@ -71,18 +80,27 @@ impl RetainedFrames {
         self.previous.clone().or_else(|| self.newest.clone())
     }
 
-    /// The retained frame with the smallest timestamp inside
+    /// The retained frame with the largest timestamp inside
     /// `(event_ts_ns, deadline_ns]`, or `None`. Both retained slots are
     /// compared (`previous` is not assumed older than `newest`). A
     /// frame equal to the event is not eligible; a frame equal to the
     /// deadline is.
-    fn oldest_in_window(&self, event_ts_ns: u64, deadline_ns: u64) -> Option<Arc<FrameData>> {
+    fn newest_in_window(&self, event_ts_ns: u64, deadline_ns: u64) -> Option<Arc<FrameData>> {
         [&self.newest, &self.previous]
             .into_iter()
             .flatten()
             .filter(|frame| frame.ts_ns > event_ts_ns && frame.ts_ns <= deadline_ns)
-            .min_by_key(|frame| frame.ts_ns)
+            .max_by_key(|frame| frame.ts_ns)
             .cloned()
+    }
+
+    /// True when a retained frame has `ts_ns >= settle_ts_ns` (the
+    /// DEC-004 settle bound; equality satisfies it).
+    fn has_frame_at_or_after(&self, settle_ts_ns: u64) -> bool {
+        [&self.newest, &self.previous]
+            .into_iter()
+            .flatten()
+            .any(|frame| frame.ts_ns >= settle_ts_ns)
     }
 }
 
@@ -197,11 +215,12 @@ impl FrameBroker {
         }
     }
 
-    /// The key-down post-event query (DEC-002): the oldest retained
-    /// frame on `display_id` whose timestamp lies in
+    /// The key-down post-event query (DEC-002/DEC-004): the newest
+    /// retained frame on `display_id` whose timestamp lies in
     /// `(event_ts_ns, deadline_ns]`, or `None` when the display retains
     /// no such frame. Pure and constant-bounded; the caller owns the
-    /// bounded wait and never holds the broker lock while waiting.
+    /// bounded settle/wait and never holds the broker lock while
+    /// waiting.
     pub fn post_event_frame(
         &self,
         display_id: u32,
@@ -210,7 +229,16 @@ impl FrameBroker {
     ) -> Option<Arc<FrameData>> {
         self.frames
             .get(&display_id)
-            .and_then(|retained| retained.oldest_in_window(event_ts_ns, deadline_ns))
+            .and_then(|retained| retained.newest_in_window(event_ts_ns, deadline_ns))
+    }
+
+    /// The key-down settle probe (DEC-004): true when `display_id`
+    /// retains a frame with `ts_ns >= settle_ts_ns` (equality
+    /// satisfies it), so the worker's wait can end before the deadline.
+    pub fn has_frame_at_or_after(&self, display_id: u32, settle_ts_ns: u64) -> bool {
+        self.frames
+            .get(&display_id)
+            .is_some_and(|retained| retained.has_frame_at_or_after(settle_ts_ns))
     }
 }
 
@@ -360,19 +388,40 @@ mod tests {
         assert!(!broker.is_warm());
     }
 
-    // --- Key-down post-event window query (DEC-002) ---
+    // --- Key-down post-event window query (DEC-002/DEC-004) ---
 
     const EVENT: u64 = 1_000_000_000;
     const DEADLINE: u64 = EVENT + POST_EVENT_FRAME_WINDOW_NS;
+    const SETTLE: u64 = EVENT + POST_EVENT_SETTLE_NS;
 
     #[test]
-    fn post_event_query_takes_the_oldest_of_two_in_window_frames() {
+    fn post_event_query_takes_the_newest_of_two_in_window_frames() {
         let mut broker = broker_with(vec![1]);
         broker.publish_frame(frame(1, EVENT + 100_000_000));
         broker.publish_frame(frame(1, EVENT + 200_000_000));
 
         let selected = broker.post_event_frame(1, EVENT, DEADLINE).unwrap();
-        assert_eq!(selected.ts_ns, EVENT + 100_000_000);
+        assert_eq!(selected.ts_ns, EVENT + 200_000_000);
+
+        // Publication order does not decide: the larger timestamp wins
+        // even when it sits in the `previous` slot.
+        let mut broker = broker_with(vec![1]);
+        broker.publish_frame(frame(1, EVENT + 200_000_000));
+        broker.publish_frame(frame(1, EVENT + 100_000_000));
+        let selected = broker.post_event_frame(1, EVENT, DEADLINE).unwrap();
+        assert_eq!(selected.ts_ns, EVENT + 200_000_000);
+    }
+
+    #[test]
+    fn settle_probe_is_inclusive_at_the_settle_bound_and_per_display() {
+        let mut broker = broker_with(vec![1, 2]);
+        broker.publish_frame(frame(1, SETTLE - 1));
+        assert!(!broker.has_frame_at_or_after(1, SETTLE));
+        broker.publish_frame(frame(1, SETTLE));
+        assert!(broker.has_frame_at_or_after(1, SETTLE));
+        // Another display's frame never satisfies the probe.
+        assert!(!broker.has_frame_at_or_after(2, SETTLE));
+        assert!(!broker.has_frame_at_or_after(3, SETTLE));
     }
 
     #[test]
@@ -422,7 +471,7 @@ mod tests {
     #[test]
     fn post_event_query_leaves_the_pinned_click_selection_unchanged() {
         // The pre-event snapshot for the same event still pins the
-        // newest frame not later than the event (AC-002 click rule).
+        // newest frame not later than the event (AC-005 click rule).
         let mut broker = broker_with(vec![1]);
         broker.publish_frame(frame(1, EVENT - 10_000_000));
         broker.publish_frame(frame(1, EVENT + 40_000_000));
