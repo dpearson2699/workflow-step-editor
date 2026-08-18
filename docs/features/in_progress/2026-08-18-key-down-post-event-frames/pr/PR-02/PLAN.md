@@ -64,9 +64,11 @@ commit and then applies the DEC-004 correction.
     `now_ns() >= event_ts + window`, with one final query at the deadline;
     then select the newest in-window frame (the range query above).
     Rename PR-01's broker query `oldest_in_window` to `newest_in_window`
-    and update every related doc comment and test name in `broker.rs`,
-    `worker.rs`, and `packets.rs` so no comment still describes oldest
-    selection. The total requested wait never exceeds the
+    and update every related doc comment and test name in `broker.rs` and
+    `worker.rs` so no comment still describes oldest post-event selection.
+    Do not touch `RetainedFrames::eligible` or its doc comment (its
+    "oldest retained frame" bounded-retention approximation is the click
+    path and stays byte-for-byte). The total requested wait never exceeds the
     remaining window (never past 250 ms after the event); a job that
     reaches the worker after its deadline queries once and never waits. It
     must not hold the broker mutex while waiting. If the candidate frame's `display`
@@ -108,10 +110,10 @@ commit and then applies the DEC-004 correction.
     deadline prevents waits from stacking linearly (not that the queue
     cannot fill), the shutdown-order consequence, and the source
     decision (issue #38).
-  - `README.md`: replace the parenthetical "captured from a pre-event
-    frame, so the screen shows the state *before* the action" with the
-    per-kind statement (replacing PR-01's wording, which still says "the
-    first frame captured after the key"): click steps are cut from a
+  - `README.md`: after the fast-forward onto `176be565`, the live text is
+    PR-01's sentence ("...Typing steps use the first frame captured after
+    the key when one arrives within 250 ms..."); replace that sentence with
+    the per-kind statement: click steps are cut from a
     pre-event frame so the screen shows the state before the click; typing
     steps use the newest retained frame captured within 250 ms after the
     key, chosen after a 100 ms settle so the typed character is normally

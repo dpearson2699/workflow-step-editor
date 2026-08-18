@@ -228,3 +228,26 @@ are what the issue and the current code do not settle.
   for this change.
 - Decision: DEC-005
 - Canonical-doc impact: none.
+
+## GA-008: Consensus loop reached MAX_ROUNDS on the replan
+
+- Status: closed
+- Kind: fact
+- Uncertainty: Whether the round-5 `VERDICT: REVISE` on the replanned
+  candidate leaves an unresolved finding that requires a user tie-break
+  under `plan-consensus.md`.
+- Why it matters: The reference routes each *unresolved* finding at the cap
+  to the user as a decision-shaped question and forbids claiming
+  convergence.
+- Evidence inspected: `review/plan-consensus-log.md` rounds 4 and 5; the
+  three round-5 findings (call only `select_pinned_frame`; state a 100 ms
+  minimum settle and 250 ms cap instead of one-frame latency; README says
+  "newest retained in-window frame" plus fallback) were each accepted by
+  the root and folded into DECISIONS.md, FEATURE.md, and
+  `pr/PR-02/PLAN.md` before adoption. No finding was rejected; the root
+  holds no counter-position.
+- Confidence: high
+- Question: none
+- Closure: No unresolved finding exists, so no tie-break question is
+  posed; convergence is not claimed (the log records the cap and the
+  disposition). The earlier plan converged APPROVED in round 3.
