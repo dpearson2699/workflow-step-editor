@@ -4,16 +4,16 @@
 - Work kind: `feature`
 - Work ID: `2026-08-18-key-down-post-event-frames`
 - Phase: `plan`
-- Revision: `3`
+- Revision: `4`
 - Observed origin/main: `26ade421f69ac061533d4507de6c87b49ad94106`
 - Task roster: `28038c289b7454195abcf7d2b68e35c621278ed39f81f9600e9d546af33a4a6f`
 - Active slices: `none`
-- Last update: `2026-08-18T14:07:43Z`
+- Last update: `2026-08-18T14:08:04Z`
 
 ## ChatGPT Pro Planning Evidence
 
-- Current specification digest: `not recorded`
-- Current source commit: `not recorded`
+- Current specification digest: `6ded6b17311006b1e991d10d10f1b5772abc9942dc902c35409c78715c80ae0a`
+- Current source commit: `cb938b4b2166ffb90c659ad42bf0c70f6fe60deb`
 - Active response: `not recorded`
 - Generated for: `not recorded`
 - Accepted for: `not recorded`

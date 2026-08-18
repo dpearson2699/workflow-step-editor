@@ -53,12 +53,12 @@
     "blind_completeness": null,
     "blind_requirement": null,
     "current_plan_digest": "1957fb186343b352a2ff5f8e6c8407d7d2f35e2a2d5b6f3a1dfa6bed31002b59",
-    "current_source_commit": null,
-    "current_specification_digest": null,
+    "current_source_commit": "cb938b4b2166ffb90c659ad42bf0c70f6fe60deb",
+    "current_specification_digest": "6ded6b17311006b1e991d10d10f1b5772abc9942dc902c35409c78715c80ae0a",
     "evidence": [],
     "pro_primary_waiver": null
   },
-  "revision": 3,
+  "revision": 4,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -219,7 +219,7 @@
     ],
     "primary_digest": "28038c289b7454195abcf7d2b68e35c621278ed39f81f9600e9d546af33a4a6f"
   },
-  "updated_at": "2026-08-18T14:07:43Z",
+  "updated_at": "2026-08-18T14:08:04Z",
   "work_id": "2026-08-18-key-down-post-event-frames",
   "work_kind": "feature"
 }

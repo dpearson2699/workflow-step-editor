@@ -1,0 +1,12 @@
+{
+  "current_pass_id": "aa6bf429d5b771b66b635150e0e8cf3563f133da5c66848b3e7c2dc4e7019932",
+  "parent_cursor": null,
+  "passes": [],
+  "repository": "dpearson2699/workflow-step-editor",
+  "revision": 0,
+  "schema": "planning-continuation",
+  "updated_at": "2026-08-18T14:09:43.714020Z",
+  "work_bundle": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/spec-driven-orchestrator-issue-38-072a42/docs/features/in_progress/2026-08-18-key-down-post-event-frames",
+  "work_id": "2026-08-18-key-down-post-event-frames",
+  "work_kind": "feature"
+}
