@@ -67,8 +67,10 @@
 
 - Status: accepted
 - Decision: No draft flag enters schema v1. The workflow folder exists from
-  recording start under the timestamp default name; Save renames it and
-  leaves draft mode; Discard deletes the folder. A crash or quit before
+  recording start, and the manifest carries the timestamp default name;
+  Save renames the workflow (manifest name only — the folder and the
+  workflow id never change) and leaves draft mode; Discard deletes the
+  folder. A crash or quit before
   Save leaves the workflow listable under its default name with every
   captured event and screenshot retained. The crash guarantee covers raw
   capture data: parsed steps persist to the manifest at stop/fail

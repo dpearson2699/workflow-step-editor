@@ -16,15 +16,19 @@ The running harness is Claude Code. Owner routing policy
 ## Governor predicates
 
 - PR-01 (extended summaries, reveal command, screenshot display path,
-  landing page, frontend test harness): multi-file integration across the
-  Rust store/commands and the new React shell, plus one new verification
-  mechanism (frontend component tests) — High. No critical predicate.
-- PR-02 (step/rename mutation commands, full detail review view): stateful
-  editing flows over persistence with multi-file backend/frontend
-  integration — High. No critical predicate.
-- PR-03 (record flow, draft save/discard, hard deletion): asynchronous live
-  channel state plus one critical predicate (destructive deletion of user
-  data with root-confinement validation) — High.
+  landing page, frontend test harness, UI-proof route): multi-file
+  integration across the Rust store/commands and the new React shell, plus
+  new verification mechanisms — High. No critical predicate.
+- PR-02 (step/rename mutation commands, full detail review view,
+  saved-workflow hard deletion): stateful editing flows over persistence,
+  the DEC-008 mutation lock and active-workflow guard, and one critical
+  predicate (destructive deletion of user data with root-confinement
+  validation) — High. The single coordinator mutex is one serialization
+  invariant, not interacting concurrency domains, so the xHigh tier is
+  not selected.
+- PR-03 (record flow, draft save/discard): asynchronous live-channel state
+  with significant ordering edge cases and the final-slice UI proof
+  obligations — High. No critical predicate.
 - Reviews: fixed High per the routing reference.
 
 ## Pro planning provenance

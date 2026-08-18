@@ -92,7 +92,9 @@ by the backend inside the workflow root.
 - The record flow, draft states, save/discard, and the live capture view
   (PR-03; draft Discard consumes this slice's `delete_workflow`).
 - Landing-page changes beyond wiring the existing navigation into the real
-  pane and the Delete… affordance.
+  pane and refreshing the list after a deletion. The landing page gets no
+  Delete… affordance; the single Delete… control lives in the detail
+  header.
 - Re-parse, grouping, or synthetic steps.
 - Trash, restore, audit, or purge lifecycle; forensic erasure claims.
 
@@ -129,12 +131,13 @@ by the backend inside the workflow root.
   completes; deletion of the active or stopping workflow is rejected;
   deleting one workflow while another records is safe.
 - Frontend: `npx vitest run` component tests for edit persistence flows,
-  out-of-order autosave completions, failed-autosave recovery, deletion
-  of the selected step, stale-update suppression after step and workflow
-  deletion, click-to-swap, the metadata grid rendering both element
-  sources, and the Delete… confirmation (Cancel default, keystroke-data
-  language, row removal only after backend success, failure keeps the row
-  and surfaces the error).
+  out-of-order autosave completions, failed-autosave recovery, header
+  rename persistence and failure handling, deletion of the selected step,
+  stale-update suppression after step and workflow deletion,
+  click-to-swap, the metadata grid rendering both element sources, and
+  the Delete… confirmation (Cancel default, keystroke-data language, row
+  removal only after backend success, failure keeps the row and surfaces
+  the error).
 - Build: `npm run build` passes.
 - Independent command: `npm run build && (cd src-tauri && cargo test)`
 - UI gate: snapshot_required_human_deferred
@@ -146,7 +149,10 @@ by the backend inside the workflow root.
 ## Implementation Route
 
 - Requested model and effort: claude-fable-5 high
-- Selection predicates: stateful editing flows over persistence; one
-  critical predicate (destructive deletion of user data with
-  root-confinement validation); multi-file backend/frontend integration
+- Selection predicates: stateful editing flows over persistence; the
+  DEC-008 mutation-serialization and active-workflow-guard invariants;
+  one critical predicate (destructive deletion of user data with
+  root-confinement validation); multi-file backend/frontend integration.
+  The single coordinator mutex is one serialization invariant, not
+  interacting concurrency domains, so High rather than xHigh.
 - Binding: Claude task adapter request

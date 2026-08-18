@@ -1,0 +1,25 @@
+{
+  "schema": "spec-work-pro-applicability",
+  "workKind": "feature",
+  "workId": "2026-08-17-review-ui",
+  "workBundle": "2026-08-17-review-ui",
+  "responseDigest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833",
+  "fromDigest": "cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e",
+  "toDigest": "2959a7a474d89e05d106edf75e8f277364eb53ddd29e44f89e2032e00f1d669f",
+  "fromSourceCommit": "439ecaae197e005874771694358a65b923cb4bd7",
+  "toSourceCommit": "09a980d557e675f7253785c231ab00f60b463756",
+  "classification": "non_material",
+  "changedPaths": [
+    "ACCEPTANCE.md"
+  ],
+  "recommendationsChanged": false,
+  "implementationSlicesChanged": false,
+  "validationResult": "prior_evidence_applicable",
+  "evidenceAnchors": [
+    "ACCEPTANCE.md",
+    "discovery/pro-lifecycle-evidence/aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5.md"
+  ],
+  "semanticDiffSummary": "AC-001's build identity corrected from 'dev build' to the locally built signed app after the blind completeness audit: the Pro response's own final-proof step requires the signed app because macOS TCC binds permission grants to the signed bundle identity, matching the capture proven gate's recorded prerequisite.",
+  "applicabilityRationale": "The change adopts the immutable Pro response's explicit signed-app final-proof requirement verbatim; no goal, scope, slice boundary, or analyzed recommendation changed, so the prior response remains fully applicable without a fresh primary.",
+  "assessmentEpoch": 2
+}

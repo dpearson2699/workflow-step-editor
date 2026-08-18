@@ -2,7 +2,7 @@
   "acceptance": {
     "AC-001": {
       "assignment_digest": null,
-      "criterion_digest": "8eeda76541e05aab9c44bc20ef1367a0c89144b4d61b1e3dbff0db997b18dbb5",
+      "criterion_digest": "e3af00e160c5710d071b4a4a76a72a85d6e5982f66b510c457d4089790a4f036",
       "evidence": [],
       "evidence_digests": {},
       "locked": false,
@@ -66,24 +66,24 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": null,
-  "observation_epoch_high_water": 1,
-  "observed_main_sha": "439ecaae197e005874771694358a65b923cb4bd7",
+  "observation_epoch_high_water": 2,
+  "observed_main_sha": "09a980d557e675f7253785c231ab00f60b463756",
   "parallel_assessments": [],
   "phase": "plan",
   "planning": {
     "active_response_digest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833",
     "blind_completeness": null,
     "blind_requirement": {
-      "plan_digest": "a2280dd871308524c49210cbbfa1e25223597388be2e14cf7748e5d697e0531a",
+      "plan_digest": "dd6e868c63b5f810250325c40968171229f3acd15765ea1bb40b95be91829d7a",
       "requirement": "required_multi_slice_reconciliation"
     },
-    "current_plan_digest": "a2280dd871308524c49210cbbfa1e25223597388be2e14cf7748e5d697e0531a",
-    "current_source_commit": "439ecaae197e005874771694358a65b923cb4bd7",
-    "current_specification_digest": "cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e",
+    "current_plan_digest": "dd6e868c63b5f810250325c40968171229f3acd15765ea1bb40b95be91829d7a",
+    "current_source_commit": "09a980d557e675f7253785c231ab00f60b463756",
+    "current_specification_digest": "2959a7a474d89e05d106edf75e8f277364eb53ddd29e44f89e2032e00f1d669f",
     "evidence": [
       {
-        "accepted_for_digest": "cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e",
-        "accepted_source_commit": "439ecaae197e005874771694358a65b923cb4bd7",
+        "accepted_for_digest": "2959a7a474d89e05d106edf75e8f277364eb53ddd29e44f89e2032e00f1d669f",
+        "accepted_source_commit": "09a980d557e675f7253785c231ab00f60b463756",
         "annotations": [],
         "answer_artifact": "discovery/pro-lifecycle-evidence/aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5.md",
         "applicability": [
@@ -114,6 +114,30 @@
             "to_digest": "cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e",
             "to_source_commit": "439ecaae197e005874771694358a65b923cb4bd7",
             "validation_result": "prior_evidence_applicable"
+          },
+          {
+            "changed_paths": [
+              "ACCEPTANCE.md"
+            ],
+            "classification": "non_material",
+            "correction_receipt": null,
+            "correction_receipt_digest": null,
+            "epoch": 2,
+            "evidence_anchors": [
+              "ACCEPTANCE.md",
+              "discovery/pro-lifecycle-evidence/aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5.md"
+            ],
+            "from_digest": "cf2a14450c477c675726e952da9c1eaaa52af5042b2521fd5ca91189d4a2a30e",
+            "from_source_commit": "439ecaae197e005874771694358a65b923cb4bd7",
+            "implementation_slices_changed": false,
+            "original_receipt": null,
+            "original_receipt_digest": null,
+            "receipt": "discovery/pro-applicability-0002.json",
+            "receipt_digest": "f72168fd3285290438d6784d5d1e2e4c81663d201083d5f28a7d3ac4c880855e",
+            "recommendations_changed": false,
+            "to_digest": "2959a7a474d89e05d106edf75e8f277364eb53ddd29e44f89e2032e00f1d669f",
+            "to_source_commit": "09a980d557e675f7253785c231ab00f60b463756",
+            "validation_result": "prior_evidence_applicable"
           }
         ],
         "contract_disposition": "clean",
@@ -131,12 +155,12 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 9,
+  "revision": 14,
   "schema": "spec-workflow-state",
   "slices": [
     {
       "base_ref": "origin/main",
-      "base_sha": "439ecaae197e005874771694358a65b923cb4bd7",
+      "base_sha": "09a980d557e675f7253785c231ab00f60b463756",
       "branch": "feat/pr-01-landing-page",
       "depends_on": [],
       "execution_mode": "serial",
@@ -210,7 +234,7 @@
       ],
       "plan": "pr/PR-01/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "fac1c511a04f6e60070081fe89a741c0c4cbb1183194757f9a74a8d561dead9a",
+      "plan_digest": "977a432b90b9d3093201f82f2e8112f3b70e0b490af36331cfb9e5ae12249913",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -272,7 +296,7 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "439ecaae197e005874771694358a65b923cb4bd7",
+      "base_sha": "09a980d557e675f7253785c231ab00f60b463756",
       "branch": "feat/pr-02-detail-review",
       "depends_on": [
         "PR-01"
@@ -399,7 +423,7 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "439ecaae197e005874771694358a65b923cb4bd7",
+      "base_sha": "09a980d557e675f7253785c231ab00f60b463756",
       "branch": "feat/pr-03-record-flow",
       "depends_on": [
         "PR-02"
@@ -460,12 +484,13 @@
       "merge_receipt_digest": null,
       "owned_paths": [
         "README.md",
+        "dev",
         "src",
         "src-tauri/src"
       ],
       "plan": "pr/PR-03/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "9c7ce154a708e2f1c1336baaddf6cb8798a8cf7ac0e97e75212a1fbbac5d6e8d",
+      "plan_digest": "08453df4cb45ca35513f59b74f052608303ae48af9d8484e34436e3eafba63d2",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -609,7 +634,7 @@
     ],
     "primary_digest": "efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18"
   },
-  "updated_at": "2026-08-17T23:46:01Z",
+  "updated_at": "2026-08-17T23:54:56Z",
   "work_id": "2026-08-17-review-ui",
   "work_kind": "feature"
 }
