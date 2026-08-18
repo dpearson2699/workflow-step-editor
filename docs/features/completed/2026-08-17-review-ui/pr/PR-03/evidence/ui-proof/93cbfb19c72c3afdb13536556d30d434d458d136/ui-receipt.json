@@ -1,0 +1,43 @@
+{
+  "schema": "project-ui-verification",
+  "gatePhase": "implementation_proof",
+  "taskStage": "final_orchestrated_pr",
+  "workKind": "feature",
+  "workBundle": "docs/features/in_progress/2026-08-17-review-ui",
+  "sliceId": "PR-03",
+  "finalUiSliceId": "PR-03",
+  "prNumber": null,
+  "headSha": null,
+  "headTree": null,
+  "worktreeTree": "93cbfb19c72c3afdb13536556d30d434d458d136",
+  "verdict": "DEFERRED_TO_PR_FINAL",
+  "changeKind": "ui",
+  "acceptanceCriterion": "AC-004",
+  "proofTarget": "stop-recording-banner",
+  "evidenceSource": "local",
+  "adapterRequested": "macos-signed-app-ax-observer",
+  "adapterActual": "macos-signed-app-ax-observer",
+  "proofSessionId": "pr03-record-ax-2026-08-18",
+  "builtFromCurrentWorktree": true,
+  "snapshotEvidence": [
+    {
+      "artifact": "docs/features/in_progress/2026-08-17-review-ui/pr/PR-03/evidence/ui-proof/93cbfb19c72c3afdb13536556d30d434d458d136/snapshot.json",
+      "sha256": "72a884bd46cc910150b53e5c30a4acca5d38b6c3a6e4f5404d573cda951ff445",
+      "identityKind": "worktree_tree",
+      "identity": "93cbfb19c72c3afdb13536556d30d434d458d136"
+    }
+  ],
+  "screenshotPaths": [],
+  "testsReviewed": [
+    "npx vitest run: src/RecordFlow.test.tsx, src/views/DetailView.test.tsx, src/views/LandingView.test.tsx, src/view.test.ts, src/App.test.tsx, src/lib/autosave.test.ts (57 tests)",
+    "cargo test (src-tauri): live-channel timestamp envelope, capture ordering, terminal-last, fail-stop, mutation and deletion suites (149 tests)"
+  ],
+  "automatedGates": {
+    "build": "PASS",
+    "tests": "PASS",
+    "snapshot": "PASS"
+  },
+  "humanConfirmation": "deferred_to_final_ui_gate",
+  "sessionReleased": true,
+  "blocker": null
+}

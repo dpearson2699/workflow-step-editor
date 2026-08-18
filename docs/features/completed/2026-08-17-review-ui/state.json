@@ -22,7 +22,7 @@
         "pr/PR-01/evidence/ui-proof/2cd06e7f716d9b6d42008da6f49f3c4b23f20d66/snapshot.json": "a41ff8bc8897702239efb3bb661f4e53a58fb29ccb123e094807cfbcbd1bbe0e",
         "pr/PR-01/evidence/ui-proof/2cd06e7f716d9b6d42008da6f49f3c4b23f20d66/ui-receipt.json": "31ac014ef10d09fef4ba1e5a2e14e99b0614a8293e3eb1218f324ba4efa1f921"
       },
-      "locked": false,
+      "locked": true,
       "producer_head_sha": "e9d316bf256fa3fbe63c68c8829aaef236ca5bdd",
       "producer_slice": "PR-01",
       "scope": "slice",
@@ -39,22 +39,28 @@
         "pr/PR-02/evidence/ui-proof/0cc4de640003b5c997cd9bd0cae27ec790e4d8e4/snapshot.json": "b6c816dc68e4d8b1c473848bd39ce76e42643b58dfecc55725bf09e81b28efc7",
         "pr/PR-02/evidence/ui-proof/0cc4de640003b5c997cd9bd0cae27ec790e4d8e4/ui-receipt.json": "594b94c123840bfbca5f01a394b133591bcb611d1bb86729e30287d3fd05eee7"
       },
-      "locked": false,
+      "locked": true,
       "producer_head_sha": "545e1b616aaded4a748a6543f0f6e10f47d3b350",
       "producer_slice": "PR-02",
       "scope": "slice",
       "status": "passed"
     },
     "AC-004": {
-      "assignment_digest": null,
+      "assignment_digest": "6a342e26930bf48165a5d90bc3b7ec7baceb696089c934b0284f0bcf4e0c9551",
       "criterion_digest": "8a98119b4b2f94935f0dfd8a6cd12ab902c2224c8eb7b4439c4ac2033632d0a1",
-      "evidence": [],
-      "evidence_digests": {},
-      "locked": false,
-      "producer_head_sha": null,
-      "producer_slice": null,
-      "scope": null,
-      "status": "pending"
+      "evidence": [
+        "pr/PR-03/evidence/ui-proof/93cbfb19c72c3afdb13536556d30d434d458d136/snapshot.json",
+        "pr/PR-03/evidence/ui-proof/93cbfb19c72c3afdb13536556d30d434d458d136/ui-receipt.json"
+      ],
+      "evidence_digests": {
+        "pr/PR-03/evidence/ui-proof/93cbfb19c72c3afdb13536556d30d434d458d136/snapshot.json": "72a884bd46cc910150b53e5c30a4acca5d38b6c3a6e4f5404d573cda951ff445",
+        "pr/PR-03/evidence/ui-proof/93cbfb19c72c3afdb13536556d30d434d458d136/ui-receipt.json": "94faef42afe0c4266d4c6c74ff7cedb37892eb4ffd9d51c5882a8665011bf950"
+      },
+      "locked": true,
+      "producer_head_sha": "40f5431b3ef5dc0a2134388dfe997a557f6eb527",
+      "producer_slice": "PR-03",
+      "scope": "slice",
+      "status": "passed"
     },
     "AC-005": {
       "assignment_digest": "15c2e2af3b887ddf342e4f9d07dadc9d31a572e28db04ab3b5067387929d9a3a",
@@ -65,7 +71,7 @@
       "evidence_digests": {
         "pr/PR-02/evidence/ac-005-verification-final.md": "eeffb7115a1fcb4ee19923cfd3f31e5aa30f428b3e40fa3d4dbee0bf74d1c0a7"
       },
-      "locked": false,
+      "locked": true,
       "producer_head_sha": "545e1b616aaded4a748a6543f0f6e10f47d3b350",
       "producer_slice": "PR-02",
       "scope": "slice",
@@ -81,11 +87,11 @@
   },
   "blockers": [],
   "completion_binding": null,
-  "completion_specification_digest": null,
+  "completion_specification_digest": "84bf72fe25d06ce0a0164c5358a43b460207ab4bb1172144365914e8d580fa18",
   "observation_epoch_high_water": 16,
-  "observed_main_sha": "c9f34571d4d0050fa42ef3bd455cab0ffba2eba8",
+  "observed_main_sha": "4e53b63f27b44bcd69bb59b26a6220054600a475",
   "parallel_assessments": [],
-  "phase": "delivery",
+  "phase": "complete",
   "planning": {
     "active_response_digest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833",
     "blind_completeness": null,
@@ -197,7 +203,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 67,
+  "revision": 78,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -505,19 +511,19 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "1fca0753a7e4b5c81e22964c3347d38e15f81f79",
+      "base_sha": "4e53b63f27b44bcd69bb59b26a6220054600a475",
       "branch": "feat/pr-03-record-flow",
       "depends_on": [
         "PR-02"
       ],
       "execution_mode": "serial",
-      "head_sha": null,
+      "head_sha": "40f5431b3ef5dc0a2134388dfe997a557f6eb527",
       "id": "PR-03",
       "implementation_task": {
-        "adoption_start_sha": null,
-        "attempt": 0,
-        "authorization_digest": null,
-        "bound_sha": null,
+        "adoption_start_sha": "4e53b63f27b44bcd69bb59b26a6220054600a475",
+        "attempt": 1,
+        "authorization_digest": "c712a27b52684dd2c64580b2e718d9efb40b7894d0c794da5bf982b2e1505482",
+        "bound_sha": "4e53b63f27b44bcd69bb59b26a6220054600a475",
         "branch_attachment_digest": null,
         "branch_attachment_epoch": null,
         "branch_attachment_receipt": null,
@@ -525,7 +531,7 @@
         "branch_release_epoch": null,
         "branch_release_receipt": null,
         "changed_paths_digest": null,
-        "client_thread_id": null,
+        "client_thread_id": "a94d6fe2451de9a3e",
         "companion_probe_digest": null,
         "companion_probe_epoch": null,
         "companion_probe_receipt": null,
@@ -536,7 +542,7 @@
         "head_adoption_terminal_lineage": [],
         "implementation_receipt": null,
         "implementation_receipt_digest": null,
-        "launch_marker": null,
+        "launch_marker": "feature/PR-03/implementation/1",
         "output_head_sha": null,
         "output_pr": null,
         "replacement_observation_digest": null,
@@ -550,13 +556,13 @@
         "review_receipt_digest": null,
         "review_task_quiescence_digest": null,
         "snapshot_authorization": null,
-        "state": "unbound",
+        "state": "active",
         "stop_proof_digest": null,
         "stop_proof_epoch": null,
         "stop_proof_receipt": null,
-        "task_worktree": null,
+        "task_worktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a94d6fe2451de9a3e",
         "terminal_result": null,
-        "thread_id": null,
+        "thread_id": "local_agent:a94d6fe2451de9a3e",
         "verification_digest": null,
         "verification_verdict": null
       },
@@ -571,11 +577,11 @@
         "src-tauri/src"
       ],
       "plan": "pr/PR-03/PLAN.md",
-      "plan_checkpoint_sha": null,
+      "plan_checkpoint_sha": "4e53b63f27b44bcd69bb59b26a6220054600a475",
       "plan_digest": "08453df4cb45ca35513f59b74f052608303ae48af9d8484e34436e3eafba63d2",
-      "pr": null,
+      "pr": 36,
       "premerge_drift": null,
-      "receipt": null,
+      "receipt": "pr/PR-03/RECEIPT.md",
       "replacement_lineage": null,
       "review_task": {
         "adoption_start_sha": null,
@@ -624,9 +630,9 @@
         "verification_digest": null,
         "verification_verdict": null
       },
-      "revision_epoch": 0,
+      "revision_epoch": 1,
       "revision_history": [],
-      "status": "blocked",
+      "status": "pr_open",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Record flow and draft save/discard",
@@ -716,7 +722,7 @@
     ],
     "primary_digest": "efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18"
   },
-  "updated_at": "2026-08-18T03:31:18Z",
+  "updated_at": "2026-08-18T04:06:34Z",
   "work_id": "2026-08-17-review-ui",
   "work_kind": "feature"
 }
