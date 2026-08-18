@@ -1,11 +1,41 @@
 {
   "current_pass_id": "aa6bf429d5b771b66b635150e0e8cf3563f133da5c66848b3e7c2dc4e7019932",
-  "parent_cursor": null,
-  "passes": [],
+  "parent_cursor": {
+    "blind_receipt_digest": null,
+    "bundle_revision": 4,
+    "candidate_plan_digest": null,
+    "consultation_id": "aa6bf429d5b771b66b635150e0e8cf3563f133da5c66848b3e7c2dc4e7019932",
+    "expected_successor": null,
+    "replacement_heartbeat": null,
+    "stage": "resolve_material_findings"
+  },
+  "passes": [
+    {
+      "attempt_ordinal": 1,
+      "consultation_id": "aa6bf429d5b771b66b635150e0e8cf3563f133da5c66848b3e7c2dc4e7019932",
+      "conversation_binding_digest": "74d86b03b178a1687550c6048e3b68b04ba6d1538cd7cd520a6751952c458a38",
+      "conversation_generation_id": "b0ebaca9-2f99-4674-865f-a8fe8cc14ca0",
+      "conversation_origin_anchor_digest": "62c05db187a0aef3858fb83397579fd8d4a6d63a2feadffda2229439969c9b60",
+      "conversation_ref_digest": "6e19cb2d827f5d6e9a45215cbbca9b58c9dfe2e23d05543fa6f2ce6422a5442b",
+      "invalidation": null,
+      "invoking_automation_ref_digest": "d31bf91ce164f26ada299428f84f90932d20ac43617f84d06042619a8348d9fa",
+      "pass_id": "4f90863eb9f5be4f39685db12a456330d348f4173134a2e27b220b61768dac34",
+      "prompt_digest": "57f2f761e8c25218982e1cdeaf805c4447948ca7dcaac4480283a69362ebab42",
+      "repository": "dpearson2699/workflow-step-editor",
+      "response_digest": "0009245cf1bc7b71ba6a8432eb0127e44b4200434a87fca0a4ae9cbe333e02ce",
+      "response_evidence": "discovery/pro-lifecycle-evidence/aa6bf429d5b771b66b635150e0e8cf3563f133da5c66848b3e7c2dc4e7019932.md",
+      "response_evidence_digest": "0009245cf1bc7b71ba6a8432eb0127e44b4200434a87fca0a4ae9cbe333e02ce",
+      "source_branch": "claude/spec-driven-orchestrator-issue-38-072a42",
+      "source_commit": "cb938b4b2166ffb90c659ad42bf0c70f6fe60deb",
+      "specification_digest": "6ded6b17311006b1e991d10d10f1b5772abc9942dc902c35409c78715c80ae0a",
+      "status": "consumed",
+      "terminal_candidate_digest": "0009245cf1bc7b71ba6a8432eb0127e44b4200434a87fca0a4ae9cbe333e02ce"
+    }
+  ],
   "repository": "dpearson2699/workflow-step-editor",
-  "revision": 0,
+  "revision": 1,
   "schema": "planning-continuation",
-  "updated_at": "2026-08-18T14:09:43.714020Z",
+  "updated_at": "2026-08-18T14:46:32.935057Z",
   "work_bundle": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/spec-driven-orchestrator-issue-38-072a42/docs/features/in_progress/2026-08-18-key-down-post-event-frames",
   "work_id": "2026-08-18-key-down-post-event-frames",
   "work_kind": "feature"

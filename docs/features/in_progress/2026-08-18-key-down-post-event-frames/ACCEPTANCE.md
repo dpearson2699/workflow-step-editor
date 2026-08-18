@@ -10,26 +10,41 @@
   menu as it looked at click time.
 - Owning seam: The recorded workflow folder on disk and the review UI,
   inspected by the user.
-- Evidence required: The user runs the recording and accepts; the root
-  records the run under `review/timing-gate-run.md`.
+- Evidence required: Build the exact PR-01 head with `npm run tauri build`
+  (the signed app, because macOS TCC binds permission grants to the signed
+  bundle identity) and launch it; the user records the `hello` typing, a
+  menu-item click, and one run where Stop is pressed promptly after the
+  final key; the user inspects the steps and accepts. The root records the
+  exact PR head, app identity, workflow id, event ids, inspected shot
+  files, `frame_age_ms` values for the key-down events, and the verdict
+  under `review/timing-gate-run.md`.
 
 ## AC-002: Per-kind frame selection invariant
 
 - Ownership: slice
-- Invariant: For a click, the selected frame is the newest retained frame
-  with a display timestamp not later than the event (unchanged). For a
-  key-down, the selected frame is the oldest retained frame with a display
-  timestamp after the event once such a frame exists; the wait for it runs
-  on the capture worker with a deadline anchored to the event timestamp,
-  and when the deadline passes without such a frame the pinned pre-event
-  frame is used. Event order at the emitter is preserved, the tap callback
-  never blocks, and `frame_age_ms` reports `0` for a post-event frame.
+- Invariant: For a click, frame selection is byte-for-byte the current
+  pre-event behavior (`RetainedFrames::eligible` and the pinned snapshot
+  are unchanged, including the existing bounded-retention approximation).
+  For a key-down, the selected frame is the oldest retained frame on the
+  selected display whose display timestamp lies in
+  `(event_ts, event_ts + 250 ms]`; the wait for it runs on the capture
+  worker with the deadline anchored to the event timestamp; when no
+  in-window frame exists at the deadline, when the display retains no live
+  frame, or when the candidate frame's geometry differs from the event
+  snapshot, the pinned pre-event frame is used. Event order at the emitter
+  is preserved, the tap callback never blocks, orderly stop lets an
+  accepted key-down finish its bounded wait before the streams stop, and
+  `frame_age_ms` reports `0` for a post-event frame.
 - Owning seam: `FrameBroker` selection plus the capture worker's packet
   assembly, observed at the packet emitter.
-- Evidence required: Rust unit tests on the broker selection rule (click
-  unchanged, key-down post-event, deadline fallback) and a worker-level
-  test that emits packets in event order with the post-event frame chosen
-  when it arrives after enqueue.
+- Evidence required: Rust unit tests on the broker range query (in-window
+  frame chosen, oldest of two, event-equal excluded, deadline-equal
+  included, after-deadline excluded, other display ignored; existing click
+  tests unchanged) and deterministic worker-level tests under an injected
+  wait runtime that decode emitted PNG pixels: post frame arriving during
+  the wait, active deadline timeout to the pinned frame, late job with an
+  in-window frame, late job with only an after-deadline frame, key-down
+  then click then key-down in emitter order, and drain after sender close.
 
 ## AC-003: Documentation records the per-kind timing rule
 

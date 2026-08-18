@@ -14,15 +14,25 @@ triple keeps showing the control as it looked at click time.
 
 - Key-down events select the first buffered frame whose display timestamp
   is after the event, instead of the latest pre-event frame. One frame
-  interval of added latency is acceptable.
-- Click events keep the current pre-event selection (ADR-0001 rationale
-  stands: the artifact must show the control before the UI repaints).
+  interval (~100 ms) of added latency is the expected cost; the wait is
+  bounded at 250 ms after the event (DEC-002), which is the single accepted
+  latency limit. Operationally this is the oldest retained frame on the
+  selected display inside the bounded window `(event_ts, event_ts + 250 ms]`
+  (the broker retains two frames per display).
+- Click events keep the current pre-event selection byte-for-byte
+  (`RetainedFrames::eligible` unchanged, including its bounded-retention
+  approximation; ADR-0001 rationale stands: the artifact must show the
+  control before the UI repaints).
 - The bounded wait for a post-event frame runs on the capture worker,
   never in the tap callback (DEC-009: the tap never blocks). Its deadline
   is anchored to the event timestamp so a burst of key-downs on a static
   screen shares one wait instead of stacking waits (see DEC-002).
-- When no post-event frame arrives before the deadline (about 250 ms
-  after the event), the key-down uses its pinned pre-event frame
+- When no in-window post-event frame exists (none arrived before the
+  deadline, the display retains no live frame, or the candidate frame's
+  display geometry differs from the event snapshot), the key-down uses its
+  pinned pre-event frame (DEC-002, GA-006).
+- Orderly pipeline stop joins the capture worker before it stops the
+  display streams, so an accepted key-down can finish its bounded wait
   (DEC-002).
 - `frame_age_ms` keeps its `u64` schema type; a post-event frame reports
   `0` and the field's doc comments say so (GA-003).

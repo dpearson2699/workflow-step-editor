@@ -44,7 +44,9 @@ are what the issue and the current code do not settle.
 - Question: none
 - Closure: The wait runs on the capture worker after metadata resolution
   and display selection; the tap still pins the pre-event snapshot for
-  every event (DEC-001).
+  every event (DEC-001). Pro primary (2026-08-18) confirmed the seam and
+  added: the query must be bounded on both sides of the window, and
+  orderly stop must join the worker before stopping the streams.
 
 ## GA-003: `frame_age_ms` for a post-event frame
 
@@ -97,6 +99,30 @@ are what the issue and the current code do not settle.
 - Question: Q-002
 - Closure: User answered Q-002 (2026-08-18): AC-001 stays feature-owned and
   blocks the final PR merge (DEC-003).
+
+## GA-006: Display geometry change inside the key-down timing window
+
+- Status: closed
+- Kind: decision
+- Uncertainty: A post-event frame can belong to a newer display-set
+  generation than the event-time snapshot (`FrameBroker::publish_displays`
+  replaces the set while pinned leases survive), so its geometry can differ
+  from the geometry the crops are computed against.
+- Why it matters: Mixing generations would produce inconsistent crop
+  geometry; the plan needs a defined outcome.
+- Evidence inspected: `src-tauri/src/capture/broker.rs`
+  (`publish_displays`, `FrameData.display`); Pro primary
+  (`discovery/pro-lifecycle-evidence/aa6bf429...md`, "Display selection
+  and selected-frame handoff").
+- Confidence: high
+- Question: none
+- Closure: Coordinator engineering default inside accepted scope: when the
+  candidate post-event frame's `display` geometry differs from the selected
+  event-time display, use the pinned pre-event frame (DEC-002). Capturing
+  through a display-topology change is outside this feature's goal
+  (Non-Goals: no architecture change beyond what post-event selection
+  needs); a reconfiguration inside a 250 ms window is not a supported use
+  case worth a product decision.
 
 ## Q-001: What does a key-down step use when no post-event frame arrives?
 
