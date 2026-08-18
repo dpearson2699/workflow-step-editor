@@ -12,15 +12,21 @@
       "status": "pending"
     },
     "AC-002": {
-      "assignment_digest": null,
+      "assignment_digest": "6808807362bd9073da2f6041d0993d0164100862728891b54ad6ca615b7f2f29",
       "criterion_digest": "d5cfa66485e7c75f57dee14f75f2399bc8a18ca16cd8fdf23446a45139745f89",
-      "evidence": [],
-      "evidence_digests": {},
+      "evidence": [
+        "pr/PR-01/evidence/ui-proof/30bca81179cdbe28e57ff39070788f298cc318ba/snapshot.json",
+        "pr/PR-01/evidence/ui-proof/30bca81179cdbe28e57ff39070788f298cc318ba/ui-receipt.json"
+      ],
+      "evidence_digests": {
+        "pr/PR-01/evidence/ui-proof/30bca81179cdbe28e57ff39070788f298cc318ba/snapshot.json": "1c26f2eb52602bf4303ed527558e41836a60bc08cecc9aba6017f7d35e0a5cf9",
+        "pr/PR-01/evidence/ui-proof/30bca81179cdbe28e57ff39070788f298cc318ba/ui-receipt.json": "b2e06fd41a7362b484e9e0073f07dabcbfa12cf959acf54cb70a77b6601fea7a"
+      },
       "locked": false,
-      "producer_head_sha": null,
-      "producer_slice": null,
-      "scope": null,
-      "status": "pending"
+      "producer_head_sha": "0827494f77b50a3b39e6ea774dc2764de3accdba",
+      "producer_slice": "PR-01",
+      "scope": "slice",
+      "status": "passed"
     },
     "AC-003": {
       "assignment_digest": null,
@@ -67,16 +73,12 @@
   "completion_binding": null,
   "completion_specification_digest": null,
   "observation_epoch_high_water": 4,
-  "observed_main_sha": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
+  "observed_main_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
   "parallel_assessments": [],
   "phase": "delivery",
   "planning": {
     "active_response_digest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833",
-    "blind_completeness": {
-      "epoch": 4,
-      "receipt": "discovery/blind-completeness-0001.json",
-      "receipt_digest": "cd5b7d8eeafe684ac0361a262807b66426860dfa6d8de622af1343886869e294"
-    },
+    "blind_completeness": null,
     "blind_requirement": {
       "plan_digest": "3d195f5aae0b1358917f1369d05614d89992761c7a2903aef8302e2fadc80774",
       "requirement": "required_multi_slice_reconciliation"
@@ -185,22 +187,22 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 21,
+  "revision": 35,
   "schema": "spec-workflow-state",
   "slices": [
     {
       "base_ref": "origin/main",
-      "base_sha": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
+      "base_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
       "branch": "feat/pr-01-landing-page",
       "depends_on": [],
       "execution_mode": "serial",
-      "head_sha": null,
+      "head_sha": "0827494f77b50a3b39e6ea774dc2764de3accdba",
       "id": "PR-01",
       "implementation_task": {
-        "adoption_start_sha": null,
-        "attempt": 0,
-        "authorization_digest": null,
-        "bound_sha": null,
+        "adoption_start_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
+        "attempt": 1,
+        "authorization_digest": "e4e85514556b4410adfbce53b1a3403b7313f0aff119e5bd21eb11dffab5b147",
+        "bound_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
         "branch_attachment_digest": null,
         "branch_attachment_epoch": null,
         "branch_attachment_receipt": null,
@@ -208,7 +210,7 @@
         "branch_release_epoch": null,
         "branch_release_receipt": null,
         "changed_paths_digest": null,
-        "client_thread_id": null,
+        "client_thread_id": "ab0adb18453e4cab1",
         "companion_probe_digest": null,
         "companion_probe_epoch": null,
         "companion_probe_receipt": null,
@@ -219,7 +221,7 @@
         "head_adoption_terminal_lineage": [],
         "implementation_receipt": null,
         "implementation_receipt_digest": null,
-        "launch_marker": null,
+        "launch_marker": "feature/PR-01/implementation/1",
         "output_head_sha": null,
         "output_pr": null,
         "replacement_observation_digest": null,
@@ -233,13 +235,13 @@
         "review_receipt_digest": null,
         "review_task_quiescence_digest": null,
         "snapshot_authorization": null,
-        "state": "unbound",
+        "state": "active",
         "stop_proof_digest": null,
         "stop_proof_epoch": null,
         "stop_proof_receipt": null,
-        "task_worktree": null,
+        "task_worktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-ab0adb18453e4cab1",
         "terminal_result": null,
-        "thread_id": null,
+        "thread_id": "local_agent:ab0adb18453e4cab1",
         "verification_digest": null,
         "verification_verdict": null
       },
@@ -263,11 +265,11 @@
         "vite.config.ts"
       ],
       "plan": "pr/PR-01/PLAN.md",
-      "plan_checkpoint_sha": null,
+      "plan_checkpoint_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
       "plan_digest": "977a432b90b9d3093201f82f2e8112f3b70e0b490af36331cfb9e5ae12249913",
-      "pr": null,
+      "pr": 30,
       "premerge_drift": null,
-      "receipt": null,
+      "receipt": "pr/PR-01/RECEIPT.md",
       "replacement_lineage": null,
       "review_task": {
         "adoption_start_sha": null,
@@ -316,9 +318,9 @@
         "verification_digest": null,
         "verification_verdict": null
       },
-      "revision_epoch": 0,
+      "revision_epoch": 1,
       "revision_history": [],
-      "status": "pending",
+      "status": "pr_open",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Landing page over extended workflow summaries",
@@ -326,7 +328,7 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
+      "base_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
       "branch": "feat/pr-02-detail-review",
       "depends_on": [
         "PR-01"
@@ -453,7 +455,7 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
+      "base_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
       "branch": "feat/pr-03-record-flow",
       "depends_on": [
         "PR-02"
@@ -664,7 +666,7 @@
     ],
     "primary_digest": "efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18"
   },
-  "updated_at": "2026-08-18T00:08:47Z",
+  "updated_at": "2026-08-18T00:32:42Z",
   "work_id": "2026-08-17-review-ui",
   "work_kind": "feature"
 }
