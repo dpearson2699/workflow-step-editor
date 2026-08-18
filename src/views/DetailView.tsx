@@ -623,11 +623,15 @@ export function DetailView(props: DetailViewProps) {
         )}
       </header>
 
-      {draftActive && props.draft?.failure != null && (
+      {/* Not gated on draftActive: a genuine failed terminal can settle
+          after the user already saved the draft (the supersedable
+          fallback race), and the incomplete recording must not present
+          as an ordinary saved workflow. */}
+      {props.draft?.failure != null && (
         <p className="record-failed-banner" role="alert">
           Recording failed and may be incomplete: {props.draft.failure}.
-          The steps below were captured before the failure — review and
-          save them, or discard the recording.
+          The steps below were captured before the failure — review them
+          before relying on this workflow.
         </p>
       )}
 

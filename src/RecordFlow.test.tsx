@@ -463,6 +463,70 @@ describe("record flow", () => {
     expect(banner?.textContent).toContain("ended unexpectedly");
   });
 
+  it("surfaces a late failed terminal even after the draft was already saved", async () => {
+    const capture = recorder();
+    await renderShell(capture);
+    fireEvent.click(recordButton());
+    await act(async () => {
+      capture.starts[0].resolve(WORKFLOW_ID);
+    });
+
+    // The stop result enters draft; the user completes the save
+    // ceremony before the genuine terminal ever arrives.
+    fireEvent.click(stopButton());
+    await act(async () => {
+      capture.stops[0].resolve(WORKFLOW_ID);
+    });
+    await screen.findByText("draft");
+    fireEvent.click(screen.getByRole("button", { name: "Save…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(screen.queryByText("draft")).toBeNull();
+    });
+
+    // The trailing genuine failed terminal must still disclose the
+    // incomplete recording instead of presenting it as an ordinary
+    // saved workflow.
+    await act(async () => {
+      capture.sinks[0]({
+        type: "failed",
+        workflow_id: WORKFLOW_ID,
+        error: "tap disabled",
+      });
+    });
+    const banner = await screen.findByText(
+      /Recording failed and may be incomplete/,
+    );
+    expect(banner.textContent).toContain("tap disabled");
+  });
+
+  it("resolves a finalization-failed stop through draft review without a second click", async () => {
+    const capture = recorder();
+    await renderShell(capture);
+    fireEvent.click(recordButton());
+    await act(async () => {
+      capture.starts[0].resolve(WORKFLOW_ID);
+    });
+
+    // The recording ended but the manifest save failed; the matching
+    // failed terminal was lost. The defined rejection resolves the
+    // session through the load-check path instead of re-arming Stop.
+    fireEvent.click(stopButton());
+    await act(async () => {
+      capture.stops[0].reject(
+        new Error("recording finalization failed: manifest save failed: disk full"),
+      );
+    });
+    await screen.findByText("draft");
+    const banner = screen
+      .getAllByRole("alert")
+      .find((alert) =>
+        alert.textContent?.includes("Recording failed and may be incomplete"),
+      );
+    expect(banner?.textContent).toContain("manifest save failed: disk full");
+    expect(capture.stopRecording).toHaveBeenCalledTimes(1);
+  });
+
   it("ignores messages from a stale session after a new recording starts", async () => {
     const capture = recorder();
     const deleteWorkflow = vi.fn(async () => {});
@@ -482,7 +546,11 @@ describe("record flow", () => {
     await screen.findByText("draft");
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     fireEvent.click(screen.getByRole("button", { name: "Discard Recording" }));
-    await screen.findByRole("button", { name: "● Record New Workflow" });
+    // The remounted landing re-checks permissions before enabling
+    // Record; wait for the enable gate, not just the button's presence.
+    await waitFor(() => {
+      expect(recordButton().disabled).toBe(false);
+    });
     expect(deleteWorkflow).toHaveBeenCalledWith(WORKFLOW_ID);
 
     // Session 2 starts; the stale session-1 channel keeps talking.

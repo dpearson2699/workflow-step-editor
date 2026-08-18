@@ -161,17 +161,27 @@ export function startRecordSession(api: ApiClient): RecordSession {
           return;
         }
         const message = String(caught);
-        if (message.includes("no active recording") && startedWorkflowId !== null) {
-          // The recording ended behind this session: an autonomous
-          // fail-stop finished (the backend is Idle again) and its
-          // `failed` terminal was lost on the best-effort channel.
-          // Resolve the session through DEC-009's load-decides-
-          // reviewability path instead of re-arming a dead Stop.
+        // Two defined stop rejections mean the recording is over with a
+        // published workflow id, so re-arming Stop would strand a dead
+        // view: `no active recording` (an autonomous fail-stop finished
+        // and its `failed` terminal was lost on the best-effort
+        // channel) and `recording finalization failed` (the recording
+        // ended but the manifest save failed; the matching `failed`
+        // terminal may also be lost). Both resolve through DEC-009's
+        // load-decides-reviewability path, supersedable by the genuine
+        // terminal.
+        const endedUnnoticed = message.includes("no active recording");
+        const finalizationFailed = message.includes(
+          "recording finalization failed",
+        );
+        if ((endedUnnoticed || finalizationFailed) && startedWorkflowId !== null) {
           syntheticTerminal = true;
           handleTerminal({
             type: "failed",
             workflow_id: startedWorkflowId,
-            error: "the recording ended unexpectedly before this stop",
+            error: endedUnnoticed
+              ? "the recording ended unexpectedly before this stop"
+              : message,
           });
           return;
         }
