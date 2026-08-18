@@ -41,3 +41,49 @@ export function formatSummaryMeta(summary: {
     formatDuration(summary.duration_ms),
   ].join(" · ");
 }
+
+/** Event timestamp -> local `HH:MM:SS` for the step list and metadata. */
+export function formatEventTime(ts: string): string {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  return date.toLocaleTimeString("en-US", { hour12: false });
+}
+
+const MODIFIER_LABELS: Record<string, string> = {
+  fn: "Fn",
+  control: "Ctrl",
+  option: "Option",
+  shift: "Shift",
+  command: "Cmd",
+  caps_lock: "CapsLock",
+};
+
+/** Key metadata -> `Cmd+s` / `h` / `key 36` for the metadata grid. */
+export function formatKey(key: {
+  key_code: number;
+  chars: string;
+  modifiers: string[];
+}): string {
+  const parts = key.modifiers.map(
+    (modifier) => MODIFIER_LABELS[modifier] ?? modifier,
+  );
+  parts.push(key.chars !== "" ? key.chars : `key ${key.key_code}`);
+  return parts.join("+");
+}
+
+/** Element metadata -> `AXButton "OK" · ax`; fallback -> `— · fallback`. */
+export function formatElement(element: {
+  role: string | null;
+  title: string | null;
+  source: string;
+}): string {
+  const named = [
+    element.role ?? "",
+    element.title !== null && element.title !== "" ? `"${element.title}"` : "",
+  ]
+    .filter((part) => part !== "")
+    .join(" ");
+  return `${named !== "" ? named : "—"} · ${element.source}`;
+}

@@ -29,15 +29,21 @@
       "status": "passed"
     },
     "AC-003": {
-      "assignment_digest": null,
+      "assignment_digest": "670d98cb1577a1140749354464ab159890491ddeb8762e6b1e508a9d47fe42e9",
       "criterion_digest": "2cd813c4a870181b81298a918c869bc9312927fab069b18be004164c788017c2",
-      "evidence": [],
-      "evidence_digests": {},
+      "evidence": [
+        "pr/PR-02/evidence/ui-proof/c50b8f869823b8e11ce6e1e332c4d0b3b827172b/snapshot.json",
+        "pr/PR-02/evidence/ui-proof/c50b8f869823b8e11ce6e1e332c4d0b3b827172b/ui-receipt.json"
+      ],
+      "evidence_digests": {
+        "pr/PR-02/evidence/ui-proof/c50b8f869823b8e11ce6e1e332c4d0b3b827172b/snapshot.json": "6c462842b2f079e162348e568b9de1fa3a2173e2a7ac39e577115018fd8ebd68",
+        "pr/PR-02/evidence/ui-proof/c50b8f869823b8e11ce6e1e332c4d0b3b827172b/ui-receipt.json": "4d3b06ba98c72871e95a8b3272a6de8a84d83a29d6b614358cef519e98fe400e"
+      },
       "locked": false,
-      "producer_head_sha": null,
-      "producer_slice": null,
-      "scope": null,
-      "status": "pending"
+      "producer_head_sha": "5e665b1a5b511ed2f098f73f30757604ded17fe5",
+      "producer_slice": "PR-02",
+      "scope": "slice",
+      "status": "passed"
     },
     "AC-004": {
       "assignment_digest": null,
@@ -51,15 +57,19 @@
       "status": "pending"
     },
     "AC-005": {
-      "assignment_digest": null,
+      "assignment_digest": "15c2e2af3b887ddf342e4f9d07dadc9d31a572e28db04ab3b5067387929d9a3a",
       "criterion_digest": "347d05a71d0e13ddb842ab01d0f0dfba0b1e06bad6a65b95e1552ff3fc11b057",
-      "evidence": [],
-      "evidence_digests": {},
+      "evidence": [
+        "pr/PR-02/evidence/ac-005-verification.md"
+      ],
+      "evidence_digests": {
+        "pr/PR-02/evidence/ac-005-verification.md": "a245f71a7d8884308267af468bb67c89e990e86290a36ad703656738685cfc1b"
+      },
       "locked": false,
-      "producer_head_sha": null,
-      "producer_slice": null,
-      "scope": null,
-      "status": "pending"
+      "producer_head_sha": "5e665b1a5b511ed2f098f73f30757604ded17fe5",
+      "producer_slice": "PR-02",
+      "scope": "slice",
+      "status": "passed"
     }
   },
   "artifacts": {
@@ -73,7 +83,7 @@
   "completion_binding": null,
   "completion_specification_digest": null,
   "observation_epoch_high_water": 10,
-  "observed_main_sha": "3ce68a082eee42db99d697c84d26b770ef510139",
+  "observed_main_sha": "1fca0753a7e4b5c81e22964c3347d38e15f81f79",
   "parallel_assessments": [],
   "phase": "delivery",
   "planning": {
@@ -187,7 +197,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 44,
+  "revision": 57,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -348,19 +358,19 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
+      "base_sha": "1fca0753a7e4b5c81e22964c3347d38e15f81f79",
       "branch": "feat/pr-02-detail-review",
       "depends_on": [
         "PR-01"
       ],
       "execution_mode": "serial",
-      "head_sha": null,
+      "head_sha": "5e665b1a5b511ed2f098f73f30757604ded17fe5",
       "id": "PR-02",
       "implementation_task": {
-        "adoption_start_sha": null,
-        "attempt": 0,
-        "authorization_digest": null,
-        "bound_sha": null,
+        "adoption_start_sha": "1fca0753a7e4b5c81e22964c3347d38e15f81f79",
+        "attempt": 1,
+        "authorization_digest": "854bfa6f67e5e395cde4bf736591bac9aa2e51ba2c7cef118f628fab8561c317",
+        "bound_sha": "1fca0753a7e4b5c81e22964c3347d38e15f81f79",
         "branch_attachment_digest": null,
         "branch_attachment_epoch": null,
         "branch_attachment_receipt": null,
@@ -368,7 +378,7 @@
         "branch_release_epoch": null,
         "branch_release_receipt": null,
         "changed_paths_digest": null,
-        "client_thread_id": null,
+        "client_thread_id": "a271b0bf836944fea",
         "companion_probe_digest": null,
         "companion_probe_epoch": null,
         "companion_probe_receipt": null,
@@ -379,7 +389,7 @@
         "head_adoption_terminal_lineage": [],
         "implementation_receipt": null,
         "implementation_receipt_digest": null,
-        "launch_marker": null,
+        "launch_marker": "feature/PR-02/implementation/1",
         "output_head_sha": null,
         "output_pr": null,
         "replacement_observation_digest": null,
@@ -393,13 +403,13 @@
         "review_receipt_digest": null,
         "review_task_quiescence_digest": null,
         "snapshot_authorization": null,
-        "state": "unbound",
+        "state": "active",
         "stop_proof_digest": null,
         "stop_proof_epoch": null,
         "stop_proof_receipt": null,
-        "task_worktree": null,
+        "task_worktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a271b0bf836944fea",
         "terminal_result": null,
-        "thread_id": null,
+        "thread_id": "local_agent:a271b0bf836944fea",
         "verification_digest": null,
         "verification_verdict": null
       },
@@ -412,11 +422,11 @@
         "src-tauri/src"
       ],
       "plan": "pr/PR-02/PLAN.md",
-      "plan_checkpoint_sha": null,
+      "plan_checkpoint_sha": "1fca0753a7e4b5c81e22964c3347d38e15f81f79",
       "plan_digest": "3c327792162decb6350df6cc17a47db960ba9fe5abf7cd81623417e7973a9c1a",
-      "pr": null,
+      "pr": 31,
       "premerge_drift": null,
-      "receipt": null,
+      "receipt": "pr/PR-02/RECEIPT.md",
       "replacement_lineage": null,
       "review_task": {
         "adoption_start_sha": null,
@@ -465,9 +475,9 @@
         "verification_digest": null,
         "verification_verdict": null
       },
-      "revision_epoch": 0,
+      "revision_epoch": 1,
       "revision_history": [],
-      "status": "blocked",
+      "status": "pr_open",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Detail review, editing, and saved-workflow deletion",
@@ -475,7 +485,7 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "098611e95e1ef1cacefdbcaaded95bfc0f8e8e4d",
+      "base_sha": "1fca0753a7e4b5c81e22964c3347d38e15f81f79",
       "branch": "feat/pr-03-record-flow",
       "depends_on": [
         "PR-02"
@@ -596,7 +606,7 @@
       },
       "revision_epoch": 0,
       "revision_history": [],
-      "status": "blocked",
+      "status": "pending",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Record flow and draft save/discard",
@@ -686,7 +696,7 @@
     ],
     "primary_digest": "efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18"
   },
-  "updated_at": "2026-08-18T01:23:53Z",
+  "updated_at": "2026-08-18T02:00:04Z",
   "work_id": "2026-08-17-review-ui",
   "work_kind": "feature"
 }

@@ -16,8 +16,12 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 
+use serde::Deserialize;
+
 use crate::domain::parser::parse_step;
-use crate::domain::schema::{CaptureMeta, Event, EventKind, Manifest, ShotPaths};
+use crate::domain::schema::{
+    CaptureMeta, Classification, Event, EventKind, Manifest, ShotPaths,
+};
 use crate::permissions::{PermissionReport, PermissionService, PermissionSource, PermissionStatus};
 use crate::recording::channel::{LiveEnvelope, StepSink};
 use crate::recording::clock::{default_workflow_name, event_timestamp, Clock};
@@ -60,6 +64,17 @@ pub enum RecordingError {
     NotRecording,
     /// One or more of the three required permissions did not pass.
     PermissionsMissing(PermissionReport),
+    /// The target workflow is the active or stopping recording; manifest
+    /// mutations and deletion are rejected until finalization completes
+    /// (DEC-008).
+    WorkflowBusy(String),
+    /// The step id does not exist in the workflow's manifest.
+    StepNotFound {
+        workflow_id: String,
+        step_id: String,
+    },
+    /// The rename target name is empty after trimming.
+    EmptyWorkflowName,
     Store(StoreError),
     PipelineStart(String),
     /// The recording stopped, but finalization could not persist the
@@ -81,6 +96,15 @@ impl std::fmt::Display for RecordingError {
                  current status: input_monitoring={:?}, accessibility={:?}, screen_recording={:?}",
                 report.input_monitoring, report.accessibility, report.screen_recording,
             ),
+            Self::WorkflowBusy(id) => write!(
+                f,
+                "workflow {id} is recording or stopping; wait for it to finish",
+            ),
+            Self::StepNotFound {
+                workflow_id,
+                step_id,
+            } => write!(f, "step {step_id} not found in workflow {workflow_id}"),
+            Self::EmptyWorkflowName => write!(f, "workflow name cannot be empty"),
             Self::Store(error) => write!(f, "storage error: {error}"),
             Self::PipelineStart(error) => write!(f, "capture pipeline failed to start: {error}"),
             Self::FinalizationFailed(error) => {
@@ -153,10 +177,25 @@ enum Phase {
     Idle,
     Starting,
     Recording(Session),
-    /// A stop owns the session and is joining the worker.
-    Stopping,
-    /// The worker owns a fail-stop finalization.
-    Failed,
+    /// A stop owns the session and is joining the worker. The workflow
+    /// id stays visible so mutations targeting it are rejected until
+    /// finalization completes (DEC-008).
+    Stopping { workflow_id: String },
+    /// The worker owns a fail-stop finalization; the id stays visible
+    /// for the same DEC-008 guard.
+    Failed { workflow_id: String },
+}
+
+/// A transient patch for one step (DEC-004): only the supplied fields
+/// change. `deny_unknown_fields` keeps the patch surface exactly title,
+/// description, and classification, and the `Classification` enum
+/// rejects values outside its four variants at deserialization.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StepPatch {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub classification: Option<Classification>,
 }
 
 /// The capture-lifecycle application service.
@@ -166,6 +205,12 @@ pub struct RecordingCoordinator {
     factory: PipelineFactory,
     clock: Arc<dyn Clock>,
     state: Arc<Mutex<Phase>>,
+    /// The DEC-008 mutation lock: every manifest load–mutate–save and
+    /// the worker's finalization save serialize behind it, so two
+    /// concurrent read-modify-write cycles cannot drop each other's
+    /// changes. Distinct from `state`, which is never held during
+    /// filesystem I/O.
+    mutation: Arc<Mutex<()>>,
 }
 
 impl RecordingCoordinator {
@@ -181,6 +226,7 @@ impl RecordingCoordinator {
             factory,
             clock,
             state: Arc::new(Mutex::new(Phase::Idle)),
+            mutation: Arc::new(Mutex::new(())),
         }
     }
 
@@ -270,6 +316,7 @@ impl RecordingCoordinator {
             pipeline: pipeline.clone(),
             install: install.clone(),
             save_failure: save_failure.clone(),
+            mutation: self.mutation.clone(),
         };
         let worker = thread::Builder::new()
             .name("recording-worker".into())
@@ -302,17 +349,18 @@ impl RecordingCoordinator {
     pub fn stop_recording(&self) -> Result<String, RecordingError> {
         let session = {
             let mut phase = self.lock_state();
-            match std::mem::replace(&mut *phase, Phase::Stopping) {
-                Phase::Recording(session) => session,
-                other => {
-                    let error = match other {
-                        Phase::Idle => RecordingError::NotRecording,
-                        Phase::Starting => RecordingError::StartInProgress,
-                        Phase::Stopping | Phase::Failed => RecordingError::StopInProgress,
-                        Phase::Recording(_) => unreachable!("matched above"),
-                    };
-                    *phase = other;
-                    return Err(error);
+            match &*phase {
+                Phase::Recording(session) => {
+                    let workflow_id = session.workflow_id.clone();
+                    match std::mem::replace(&mut *phase, Phase::Stopping { workflow_id }) {
+                        Phase::Recording(session) => session,
+                        _ => unreachable!("matched Recording above"),
+                    }
+                }
+                Phase::Idle => return Err(RecordingError::NotRecording),
+                Phase::Starting => return Err(RecordingError::StartInProgress),
+                Phase::Stopping { .. } | Phase::Failed { .. } => {
+                    return Err(RecordingError::StopInProgress)
                 }
             }
         };
@@ -368,8 +416,121 @@ impl RecordingCoordinator {
         Ok(self.store.read_shot(workflow_id, event_id, variant)?)
     }
 
+    /// Applies a transient patch to one step: only supplied fields
+    /// change. Unknown workflow or step ids write nothing.
+    pub fn update_step(
+        &self,
+        workflow_id: &str,
+        step_id: &str,
+        patch: StepPatch,
+    ) -> Result<(), RecordingError> {
+        self.mutate_manifest(workflow_id, |manifest| {
+            let step = manifest
+                .steps
+                .iter_mut()
+                .find(|step| step.id == step_id)
+                .ok_or_else(|| RecordingError::StepNotFound {
+                    workflow_id: workflow_id.to_owned(),
+                    step_id: step_id.to_owned(),
+                })?;
+            if let Some(title) = patch.title {
+                step.title = title;
+            }
+            if let Some(description) = patch.description {
+                step.description = description;
+            }
+            if let Some(classification) = patch.classification {
+                step.classification = classification;
+            }
+            Ok(())
+        })
+    }
+
+    /// Removes the step entry from the manifest. Its raw events and
+    /// screenshots stay byte-identical: only the manifest changes.
+    pub fn delete_step(&self, workflow_id: &str, step_id: &str) -> Result<(), RecordingError> {
+        self.mutate_manifest(workflow_id, |manifest| {
+            let before = manifest.steps.len();
+            manifest.steps.retain(|step| step.id != step_id);
+            if manifest.steps.len() == before {
+                return Err(RecordingError::StepNotFound {
+                    workflow_id: workflow_id.to_owned(),
+                    step_id: step_id.to_owned(),
+                });
+            }
+            Ok(())
+        })
+    }
+
+    /// Renames the workflow: manifest name only, trimmed and non-empty.
+    /// The folder and the workflow id never change.
+    pub fn rename_workflow(&self, workflow_id: &str, name: &str) -> Result<(), RecordingError> {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return Err(RecordingError::EmptyWorkflowName);
+        }
+        self.mutate_manifest(workflow_id, |manifest| {
+            manifest.name = trimmed.to_owned();
+            Ok(())
+        })
+    }
+
+    /// Hard-deletes a saved workflow through the store's removal
+    /// primitive (ADR 0003). The active or stopping workflow is
+    /// rejected; deleting another workflow while one records is safe.
+    pub fn delete_workflow(&self, workflow_id: &str) -> Result<(), RecordingError> {
+        self.guard_not_active(workflow_id)?;
+        let _mutation = self.lock_mutation();
+        Ok(self.store.remove(workflow_id)?)
+    }
+
+    /// One serialized manifest load–mutate–save cycle (DEC-008). The
+    /// guard runs before the mutation lock so a mutation targeting the
+    /// finalizing workflow rejects immediately instead of queueing
+    /// behind the finalization save. The single pre-check is sufficient:
+    /// every recording session mints a fresh workflow id, so a workflow
+    /// observed outside the Recording/Stopping/Failed phases can never
+    /// become the active one afterwards, and `Idle` is only entered
+    /// after the finalization save completed.
+    fn mutate_manifest(
+        &self,
+        workflow_id: &str,
+        mutate: impl FnOnce(&mut Manifest) -> Result<(), RecordingError>,
+    ) -> Result<(), RecordingError> {
+        self.guard_not_active(workflow_id)?;
+        let _mutation = self.lock_mutation();
+        let mut manifest = self.store.load(workflow_id)?.manifest;
+        mutate(&mut manifest)?;
+        Ok(self.store.save_manifest(workflow_id, &manifest)?)
+    }
+
+    /// Rejects mutations and deletion targeting the active or stopping
+    /// workflow (DEC-008). The state lock is held only for this check,
+    /// never during filesystem I/O.
+    fn guard_not_active(&self, workflow_id: &str) -> Result<(), RecordingError> {
+        let phase = self.lock_state();
+        let busy = match &*phase {
+            Phase::Recording(session) => session.workflow_id == workflow_id,
+            Phase::Stopping { workflow_id: id } | Phase::Failed { workflow_id: id } => {
+                id == workflow_id
+            }
+            // `Starting` has not published its fresh id yet, so no
+            // caller can target it; other workflows stay editable.
+            Phase::Idle | Phase::Starting => false,
+        };
+        if busy {
+            Err(RecordingError::WorkflowBusy(workflow_id.to_owned()))
+        } else {
+            Ok(())
+        }
+    }
+
     fn lock_state(&self) -> std::sync::MutexGuard<'_, Phase> {
         self.state.lock().expect("recording state mutex poisoned")
+    }
+
+    fn lock_mutation(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.mutation.lock().expect("mutation lock poisoned")
     }
 }
 
@@ -393,6 +554,8 @@ struct WorkerContext {
     pipeline: SharedPipeline,
     install: Arc<InstallSignal>,
     save_failure: Arc<Mutex<Option<String>>>,
+    /// The DEC-008 mutation lock; finalization's manifest save takes it.
+    mutation: Arc<Mutex<()>>,
 }
 
 enum Outcome {
@@ -412,6 +575,7 @@ fn run_worker(context: WorkerContext) {
         pipeline,
         install,
         save_failure,
+        mutation,
     } = context;
     let workflow_id = manifest.id.clone();
 
@@ -492,8 +656,11 @@ fn run_worker(context: WorkerContext) {
         let mut phase = state.lock().expect("recording state mutex poisoned");
         if matches!(*phase, Phase::Recording(_)) {
             // Dropping the taken session detaches this worker's own join
-            // handle and closes the packet channel.
-            *phase = Phase::Failed;
+            // handle and closes the packet channel. The workflow id
+            // stays visible for the DEC-008 guard until Idle.
+            *phase = Phase::Failed {
+                workflow_id: workflow_id.clone(),
+            };
             true
         } else {
             false
@@ -501,7 +668,12 @@ fn run_worker(context: WorkerContext) {
     };
 
     manifest.steps = steps;
-    let save_result = store.save_manifest(&workflow_id, &manifest);
+    // Finalization writes the whole manifest, so it serializes behind
+    // the same DEC-008 mutation lock as the edit commands.
+    let save_result = {
+        let _mutation = mutation.lock().expect("mutation lock poisoned");
+        store.save_manifest(&workflow_id, &manifest)
+    };
     if let Err(error) = &save_result {
         // Recorded for the stop path, which surfaces it to its caller.
         *save_failure.lock().expect("save failure mutex poisoned") =
@@ -1079,6 +1251,10 @@ mod tests {
         ) -> Result<Vec<u8>, StoreError> {
             self.inner.read_shot(workflow_id, event_id, variant)
         }
+
+        fn remove(&self, workflow_id: &str) -> Result<(), StoreError> {
+            self.inner.remove(workflow_id)
+        }
     }
 
     /// Store wrapper whose `save_manifest` always fails.
@@ -1126,6 +1302,10 @@ mod tests {
             variant: ShotVariant,
         ) -> Result<Vec<u8>, StoreError> {
             self.inner.read_shot(workflow_id, event_id, variant)
+        }
+
+        fn remove(&self, workflow_id: &str) -> Result<(), StoreError> {
+            self.inner.remove(workflow_id)
         }
     }
 
@@ -1273,5 +1453,404 @@ mod tests {
             matches!(error, RecordingError::Store(StoreError::NotFound(_))),
             "got {error}",
         );
+    }
+
+    /// Records `packets` alternating click/key events through fake
+    /// pipeline `controller` and stops, returning the workflow id.
+    fn record_workflow(
+        harness: &Harness,
+        controller: usize,
+        name: &str,
+        packets: usize,
+    ) -> String {
+        let (sink, _log) = TestSink::recording();
+        let id = harness
+            .coordinator
+            .start_recording(Some(name), Box::new(sink))
+            .unwrap();
+        for index in 0..packets {
+            if index % 2 == 0 {
+                harness.controllers[controller].emit(click_packet());
+            } else {
+                harness.controllers[controller].emit(key_packet());
+            }
+        }
+        harness.coordinator.stop_recording().unwrap();
+        id
+    }
+
+    #[test]
+    fn update_step_patches_only_the_supplied_fields() {
+        let harness = harness(1);
+        let id = record_workflow(&harness, 0, "w", 2);
+        let before = harness.coordinator.get_workflow(&id).unwrap().manifest;
+
+        harness
+            .coordinator
+            .update_step(
+                &id,
+                "step_0001",
+                StepPatch {
+                    title: Some("Edited title".into()),
+                    ..StepPatch::default()
+                },
+            )
+            .unwrap();
+        let after_title = harness.coordinator.get_workflow(&id).unwrap().manifest;
+        assert_eq!(after_title.steps[0].title, "Edited title");
+        assert_eq!(after_title.steps[0].description, before.steps[0].description);
+        assert_eq!(
+            after_title.steps[0].classification,
+            before.steps[0].classification,
+        );
+        assert_eq!(after_title.steps[0].event_ids, before.steps[0].event_ids);
+        assert_eq!(after_title.steps[1], before.steps[1], "other steps untouched");
+
+        harness
+            .coordinator
+            .update_step(
+                &id,
+                "step_0001",
+                StepPatch {
+                    description: Some("checked the total".into()),
+                    classification: Some(Classification::Assert),
+                    ..StepPatch::default()
+                },
+            )
+            .unwrap();
+        let manifest = harness.coordinator.get_workflow(&id).unwrap().manifest;
+        assert_eq!(manifest.steps[0].title, "Edited title", "title survives");
+        assert_eq!(manifest.steps[0].description, "checked the total");
+        assert_eq!(manifest.steps[0].classification, Classification::Assert);
+    }
+
+    /// The IPC boundary rejects classifications outside the four-value
+    /// enum and any field beyond title/description/classification.
+    #[test]
+    fn step_patch_rejects_unknown_fields_and_classifications() {
+        let bad_classification = serde_json::json!({ "classification": "hover" });
+        assert!(serde_json::from_value::<StepPatch>(bad_classification).is_err());
+
+        let unknown_field = serde_json::json!({ "title": "x", "event_ids": ["evt_0001"] });
+        assert!(serde_json::from_value::<StepPatch>(unknown_field).is_err());
+
+        let full = serde_json::json!({
+            "title": "t",
+            "description": "d",
+            "classification": "wait"
+        });
+        let patch: StepPatch = serde_json::from_value(full).unwrap();
+        assert_eq!(patch.title.as_deref(), Some("t"));
+        assert_eq!(patch.description.as_deref(), Some("d"));
+        assert_eq!(patch.classification, Some(Classification::Wait));
+    }
+
+    #[test]
+    fn unknown_workflow_or_step_writes_nothing() {
+        let harness = harness(1);
+        let id = record_workflow(&harness, 0, "w", 1);
+        let before = harness.coordinator.get_workflow(&id).unwrap().manifest;
+
+        let error = harness
+            .coordinator
+            .update_step("missing", "step_0001", StepPatch::default())
+            .unwrap_err();
+        assert!(
+            matches!(error, RecordingError::Store(StoreError::NotFound(_))),
+            "got {error}",
+        );
+        let error = harness
+            .coordinator
+            .update_step(
+                &id,
+                "step_9999",
+                StepPatch {
+                    title: Some("never lands".into()),
+                    ..StepPatch::default()
+                },
+            )
+            .unwrap_err();
+        assert!(
+            matches!(error, RecordingError::StepNotFound { .. }),
+            "got {error}",
+        );
+        let error = harness.coordinator.delete_step(&id, "step_9999").unwrap_err();
+        assert!(
+            matches!(error, RecordingError::StepNotFound { .. }),
+            "got {error}",
+        );
+
+        assert_eq!(
+            harness.coordinator.get_workflow(&id).unwrap().manifest,
+            before,
+            "failed mutations write nothing",
+        );
+    }
+
+    /// DEC-008: two concurrent load–mutate–save patches serialize
+    /// behind the mutation lock, so neither field change is lost.
+    #[test]
+    fn concurrent_title_and_description_patches_lose_neither_change() {
+        let harness = harness(1);
+        let id = record_workflow(&harness, 0, "w", 1);
+
+        for round in 0..16 {
+            let title = format!("title {round}");
+            let description = format!("description {round}");
+            let title_writer = {
+                let coordinator = harness.coordinator.clone();
+                let id = id.clone();
+                let title = title.clone();
+                thread::spawn(move || {
+                    coordinator.update_step(
+                        &id,
+                        "step_0001",
+                        StepPatch {
+                            title: Some(title),
+                            ..StepPatch::default()
+                        },
+                    )
+                })
+            };
+            let description_writer = {
+                let coordinator = harness.coordinator.clone();
+                let id = id.clone();
+                let description = description.clone();
+                thread::spawn(move || {
+                    coordinator.update_step(
+                        &id,
+                        "step_0001",
+                        StepPatch {
+                            description: Some(description),
+                            ..StepPatch::default()
+                        },
+                    )
+                })
+            };
+            title_writer.join().unwrap().unwrap();
+            description_writer.join().unwrap().unwrap();
+
+            let step = &harness.coordinator.get_workflow(&id).unwrap().manifest.steps[0];
+            assert_eq!(step.title, title, "round {round} lost the title patch");
+            assert_eq!(
+                step.description, description,
+                "round {round} lost the description patch",
+            );
+        }
+    }
+
+    #[test]
+    fn rename_changes_the_manifest_name_but_not_id_or_folder() {
+        let harness = harness(1);
+        let id = record_workflow(&harness, 0, "original", 1);
+
+        harness
+            .coordinator
+            .rename_workflow(&id, "  Renamed flow  ")
+            .unwrap();
+        let loaded = harness.coordinator.get_workflow(&id).unwrap();
+        assert_eq!(loaded.manifest.name, "Renamed flow", "name is trimmed");
+        assert_eq!(loaded.manifest.id, id, "id never changes");
+        assert!(workflow_dir(&harness, &id).is_dir(), "folder never moves");
+        assert_eq!(loaded.manifest.steps.len(), 1, "steps untouched");
+
+        for blank in ["", "   "] {
+            let error = harness.coordinator.rename_workflow(&id, blank).unwrap_err();
+            assert!(
+                matches!(error, RecordingError::EmptyWorkflowName),
+                "name {blank:?} got {error}",
+            );
+        }
+        assert_eq!(
+            harness.coordinator.get_workflow(&id).unwrap().manifest.name,
+            "Renamed flow",
+        );
+    }
+
+    #[test]
+    fn delete_step_leaves_events_and_shots_byte_identical() {
+        let harness = harness(1);
+        let id = record_workflow(&harness, 0, "w", 2);
+        let dir = workflow_dir(&harness, &id);
+        let events_before = fs::read(dir.join("events.jsonl")).unwrap();
+        let shot_files: Vec<PathBuf> = fs::read_dir(dir.join("shots"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(shot_files.len(), 6);
+        let shots_before: Vec<Vec<u8>> = shot_files
+            .iter()
+            .map(|path| fs::read(path).unwrap())
+            .collect();
+
+        harness.coordinator.delete_step(&id, "step_0001").unwrap();
+
+        let loaded = harness.coordinator.get_workflow(&id).unwrap();
+        let step_ids: Vec<&str> = loaded
+            .manifest
+            .steps
+            .iter()
+            .map(|step| step.id.as_str())
+            .collect();
+        assert_eq!(step_ids, vec!["step_0002"], "only the entry is removed");
+        assert_eq!(
+            fs::read(dir.join("events.jsonl")).unwrap(),
+            events_before,
+            "the raw event log stays byte-identical",
+        );
+        for (path, before) in shot_files.iter().zip(&shots_before) {
+            assert_eq!(&fs::read(path).unwrap(), before, "{path:?} changed");
+        }
+        assert_eq!(loaded.events.len(), 2, "events still load by id");
+    }
+
+    /// DEC-008 guard: the active workflow rejects every mutation and
+    /// deletion, while another saved workflow stays fully editable.
+    #[test]
+    fn active_workflow_mutations_are_rejected_while_others_stay_editable() {
+        let harness = harness(2);
+        let saved = record_workflow(&harness, 0, "saved", 1);
+
+        let (sink, _log) = TestSink::recording();
+        let active = harness
+            .coordinator
+            .start_recording(Some("active"), Box::new(sink))
+            .unwrap();
+
+        let busy = |result: Result<(), RecordingError>| {
+            let error = result.unwrap_err();
+            assert!(
+                matches!(error, RecordingError::WorkflowBusy(_)),
+                "got {error}",
+            );
+        };
+        busy(harness
+            .coordinator
+            .update_step(&active, "step_0001", StepPatch::default()));
+        busy(harness.coordinator.delete_step(&active, "step_0001"));
+        busy(harness.coordinator.rename_workflow(&active, "nope"));
+        busy(harness.coordinator.delete_workflow(&active));
+
+        // Another saved workflow stays editable while recording.
+        harness
+            .coordinator
+            .rename_workflow(&saved, "edited while recording")
+            .unwrap();
+        harness
+            .coordinator
+            .update_step(
+                &saved,
+                "step_0001",
+                StepPatch {
+                    description: Some("still editable".into()),
+                    ..StepPatch::default()
+                },
+            )
+            .unwrap();
+
+        harness.coordinator.stop_recording().unwrap();
+        // After finalization the recorded workflow becomes editable.
+        harness
+            .coordinator
+            .rename_workflow(&active, "now editable")
+            .unwrap();
+        assert_eq!(
+            harness.coordinator.get_workflow(&active).unwrap().manifest.name,
+            "now editable",
+        );
+    }
+
+    /// DEC-008 finalization-versus-edit ordering: while the stop owns
+    /// the session (Stopping), mutations targeting the workflow are
+    /// rejected; once finalization completes, an edit applies on top of
+    /// the finalized manifest and is never overwritten by it.
+    #[test]
+    fn stopping_workflow_rejects_edits_until_finalization_completes() {
+        let harness = harness(1);
+        let gate = Arc::new(EmitGate::default());
+        let (sink, _log) = TestSink::recording();
+        let sink = sink.with_gate(gate.clone());
+        let id = harness
+            .coordinator
+            .start_recording(Some("w"), Box::new(sink))
+            .unwrap();
+
+        // The worker blocks inside the step emission; the stop then owns
+        // the session and waits for the worker to finalize.
+        harness.controllers[0].emit(click_packet());
+        gate.wait_for_waiter();
+        let stopper = {
+            let coordinator = harness.coordinator.clone();
+            thread::spawn(move || coordinator.stop_recording())
+        };
+        assert!(
+            wait_until(Duration::from_secs(5), || {
+                harness.controllers[0].stop_count() >= 1
+            }),
+            "stop did not take the session",
+        );
+
+        // Stopping: the finalization has not saved yet, so edits and
+        // deletion targeting this workflow are rejected.
+        let error = harness
+            .coordinator
+            .update_step(
+                &id,
+                "step_0001",
+                StepPatch {
+                    title: Some("too early".into()),
+                    ..StepPatch::default()
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(error, RecordingError::WorkflowBusy(_)), "got {error}");
+        let error = harness.coordinator.delete_workflow(&id).unwrap_err();
+        assert!(matches!(error, RecordingError::WorkflowBusy(_)), "got {error}");
+
+        gate.open();
+        assert_eq!(stopper.join().unwrap().unwrap(), id);
+
+        // The completed edit lands after finalization and persists: the
+        // finalized step is present and carries the edit.
+        harness
+            .coordinator
+            .update_step(
+                &id,
+                "step_0001",
+                StepPatch {
+                    title: Some("Edited after stop".into()),
+                    ..StepPatch::default()
+                },
+            )
+            .unwrap();
+        let manifest = harness.coordinator.get_workflow(&id).unwrap().manifest;
+        assert_eq!(manifest.steps.len(), 1, "finalized step present");
+        assert_eq!(manifest.steps[0].title, "Edited after stop");
+    }
+
+    #[test]
+    fn deleting_one_workflow_while_another_records_is_safe() {
+        let harness = harness(2);
+        let old = record_workflow(&harness, 0, "old", 1);
+
+        let (sink, _log) = TestSink::recording();
+        let active = harness
+            .coordinator
+            .start_recording(Some("active"), Box::new(sink))
+            .unwrap();
+        harness.controllers[1].emit(click_packet());
+
+        harness.coordinator.delete_workflow(&old).unwrap();
+        assert!(!workflow_dir(&harness, &old).exists());
+
+        // The active recording is untouched and finalizes normally.
+        harness.controllers[1].emit(key_packet());
+        harness.coordinator.stop_recording().unwrap();
+        let loaded = harness.coordinator.get_workflow(&active).unwrap();
+        assert_eq!(loaded.events.len(), 2);
+        assert_eq!(loaded.manifest.steps.len(), 2);
+        let list = harness.coordinator.list_workflows().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, active);
     }
 }

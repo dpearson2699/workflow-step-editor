@@ -8,7 +8,7 @@ use tauri::ipc::Channel;
 use tauri::State;
 
 use crate::recording::channel::{LiveEnvelope, StepSink};
-use crate::recording::coordinator::{RecordingCoordinator, RecordingError};
+use crate::recording::coordinator::{RecordingCoordinator, RecordingError, StepPatch};
 use crate::recording::store::{LoadedWorkflow, ShotVariant, StoreError, WorkflowSummary};
 
 /// Renders a DEC-007 command failure for IPC without any filesystem
@@ -131,6 +131,77 @@ pub async fn read_screenshot(
     .await
     .map_err(|error| format!("screenshot read task failed: {error}"))?
     .map(tauri::ipc::Response::new)
+}
+
+/// Applies a transient step patch (title, description, classification)
+/// through the coordinator's DEC-008-serialized manifest mutation path.
+#[tauri::command]
+pub async fn update_step(
+    state: State<'_, RecorderState>,
+    workflow_id: String,
+    step_id: String,
+    patch: StepPatch,
+) -> Result<(), String> {
+    let coordinator = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        coordinator
+            .update_step(&workflow_id, &step_id, patch)
+            .map_err(|error| path_free_error(&error))
+    })
+    .await
+    .map_err(|error| format!("step update task failed: {error}"))?
+}
+
+/// Removes one step entry from the manifest; its raw events and
+/// screenshots stay byte-identical.
+#[tauri::command]
+pub async fn delete_step(
+    state: State<'_, RecorderState>,
+    workflow_id: String,
+    step_id: String,
+) -> Result<(), String> {
+    let coordinator = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        coordinator
+            .delete_step(&workflow_id, &step_id)
+            .map_err(|error| path_free_error(&error))
+    })
+    .await
+    .map_err(|error| format!("step deletion task failed: {error}"))?
+}
+
+/// Renames the workflow: manifest name only, trimmed and non-empty; the
+/// folder and id never change.
+#[tauri::command]
+pub async fn rename_workflow(
+    state: State<'_, RecorderState>,
+    id: String,
+    name: String,
+) -> Result<(), String> {
+    let coordinator = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        coordinator
+            .rename_workflow(&id, &name)
+            .map_err(|error| path_free_error(&error))
+    })
+    .await
+    .map_err(|error| format!("rename task failed: {error}"))?
+}
+
+/// Hard-deletes a saved workflow (ADR 0003): the backend resolves and
+/// validates the folder inside the workflow root and removes it whole.
+/// Success means the directory is absent; an already-missing directory
+/// counts as deleted.
+#[tauri::command]
+pub async fn delete_workflow(state: State<'_, RecorderState>, id: String) -> Result<(), String> {
+    let coordinator = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        coordinator
+            .delete_workflow(&id)
+            .map_err(|error| path_free_error(&error))
+    })
+    .await
+    .map_err(|error| format!("workflow deletion task failed: {error}"))?
 }
 
 #[cfg(test)]
