@@ -12,9 +12,15 @@
 // - Stop issues at most one stop command; a second click is a no-op.
 // - Draft entry is driven by the terminal envelope or, because channel
 //   delivery is documented best-effort, by a successful stop result —
-//   whichever settles first wins exactly once, so both orders of
-//   stop-command resolution versus terminal-envelope arrival converge
-//   and a lost terminal can never strand the live view.
+//   whichever settles first wins, so both orders of stop-command
+//   resolution versus terminal-envelope arrival converge and a lost
+//   terminal can never strand the live view. A synthesized entry stays
+//   supersedable by the genuine channel terminal exactly once, so a
+//   fail-stop that resolved the stop command Ok keeps its banner.
+// - A stop rejected with `no active recording` after start published
+//   the workflow id means an autonomous fail-stop finished and its
+//   `failed` terminal was lost; the session resolves through DEC-009's
+//   load-decides-reviewability path instead of re-arming a dead Stop.
 // - A disposed session ignores every late channel message and promise
 //   settlement (stale-session suppression).
 //
@@ -64,6 +70,14 @@ export function startRecordSession(api: ApiClient): RecordSession {
   let startSettled = false;
   let stopRequested = false;
   let terminalHandled = false;
+  // True while the handled terminal was synthesized (from a stop result
+  // or a `no active recording` rejection) rather than received on the
+  // channel: the genuine terminal still supersedes it, so a fail-stop
+  // queued ahead of the stop keeps its failure banner.
+  let syntheticTerminal = false;
+  // The workflow id published by the resolved start command; resolves a
+  // fail-stopped session whose `failed` terminal was lost.
+  let startedWorkflowId: string | null = null;
   let pendingTerminal: Terminal | null = null;
   const seenStepIds = new Set<string>();
   let rows: LiveRow[] = [];
@@ -135,25 +149,53 @@ export function startRecordSession(api: ApiClient): RecordSession {
         // channel is documented best-effort while the stop command
         // resolves only after finalization saved the manifest. Its
         // workflow id is the reliable fallback into draft review; a
-        // terminal that already landed keeps precedence, and one that
-        // trails in is ignored via `terminalHandled`.
+        // terminal that already landed keeps precedence. The synthesis
+        // stays supersedable: a fail-stop queued ahead of this stop can
+        // resolve it Ok while the worker emits `failed`, and that
+        // genuine terminal must still deliver its failure banner.
+        syntheticTerminal = true;
         handleTerminal({ type: "stopped", workflow_id: workflowId });
       },
       (caught: unknown) => {
         if (disposed || terminalHandled) {
           return;
         }
+        const message = String(caught);
+        if (message.includes("no active recording") && startedWorkflowId !== null) {
+          // The recording ended behind this session: an autonomous
+          // fail-stop finished (the backend is Idle again) and its
+          // `failed` terminal was lost on the best-effort channel.
+          // Resolve the session through DEC-009's load-decides-
+          // reviewability path instead of re-arming a dead Stop.
+          syntheticTerminal = true;
+          handleTerminal({
+            type: "failed",
+            workflow_id: startedWorkflowId,
+            error: "the recording ended unexpectedly before this stop",
+          });
+          return;
+        }
         // Re-arm Stop: the recording may still be active. When the
         // rejection raced a fail-stop, the imminent terminal envelope
         // supersedes this state.
         stopRequested = false;
-        setState(liveState(String(caught)));
+        setState(liveState(message));
       },
     );
   }
 
   function onEnvelope(envelope: LiveEnvelope): void {
-    if (disposed || terminalHandled) {
+    if (disposed) {
+      return;
+    }
+    if (terminalHandled) {
+      // The genuine channel terminal supersedes a synthesized one
+      // exactly once, so a trailing `failed` envelope still lands its
+      // failure banner over a fallback-entered draft.
+      if (envelope.type !== "step" && syntheticTerminal) {
+        syntheticTerminal = false;
+        handleTerminal(envelope);
+      }
       return;
     }
     if (envelope.type === "step") {
@@ -183,8 +225,9 @@ export function startRecordSession(api: ApiClient): RecordSession {
   }
 
   api.startRecording(onEnvelope).then(
-    () => {
+    (workflowId: string) => {
       startSettled = true;
+      startedWorkflowId = workflowId;
       if (disposed || terminalHandled) {
         return;
       }

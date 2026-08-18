@@ -401,6 +401,68 @@ describe("record flow", () => {
     expect(screen.getByText("draft")).toBeTruthy();
   });
 
+  it("lets a trailing failed terminal supersede the stop-result draft with its failure banner", async () => {
+    const capture = recorder();
+    await renderShell(capture);
+    fireEvent.click(recordButton());
+    await act(async () => {
+      capture.starts[0].resolve(WORKFLOW_ID);
+    });
+
+    // A pipeline failure queued ahead of the Stop resolves the stop
+    // command Ok while the worker emits `failed`; the command result
+    // can beat the channel, so the fallback enters draft first.
+    fireEvent.click(stopButton());
+    await act(async () => {
+      capture.stops[0].resolve(WORKFLOW_ID);
+    });
+    await screen.findByText("draft");
+    expect(
+      screen.queryByText(/Recording failed and may be incomplete/),
+    ).toBeNull();
+
+    // The genuine failed terminal supersedes the synthesized draft and
+    // lands its failure banner, still exactly one draft.
+    await act(async () => {
+      capture.sinks[0]({
+        type: "failed",
+        workflow_id: WORKFLOW_ID,
+        error: "tap disabled",
+      });
+    });
+    const banner = await screen.findByText(
+      /Recording failed and may be incomplete/,
+    );
+    expect(banner.textContent).toContain("tap disabled");
+    expect(screen.getAllByText("draft")).toHaveLength(1);
+  });
+
+  it("resolves a fail-stopped session whose lost terminal left nothing to stop", async () => {
+    const capture = recorder();
+    await renderShell(capture);
+    fireEvent.click(recordButton());
+    await act(async () => {
+      capture.starts[0].resolve(WORKFLOW_ID);
+    });
+
+    // The pipeline fail-stopped on its own and the `failed` terminal
+    // was lost on the best-effort channel: the backend is Idle, so the
+    // user's Stop rejects with the defined NotRecording error. The
+    // session resolves through the load-check path instead of
+    // re-arming a dead Stop.
+    fireEvent.click(stopButton());
+    await act(async () => {
+      capture.stops[0].reject(new Error("no active recording"));
+    });
+    await screen.findByText("draft");
+    const banner = screen
+      .getAllByRole("alert")
+      .find((alert) =>
+        alert.textContent?.includes("Recording failed and may be incomplete"),
+      );
+    expect(banner?.textContent).toContain("ended unexpectedly");
+  });
+
   it("ignores messages from a stale session after a new recording starts", async () => {
     const capture = recorder();
     const deleteWorkflow = vi.fn(async () => {});
