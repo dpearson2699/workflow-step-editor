@@ -1,0 +1,23 @@
+{
+  "schema": "spec-work-implementation-terminal",
+  "workKind": "feature",
+  "workId": "2026-08-18-key-down-post-event-frames",
+  "workBundle": "2026-08-18-key-down-post-event-frames",
+  "implementationWorktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a1a6ee8d3ee6108d2",
+  "sliceId": "PR-01",
+  "branch": "feat/pr-01-key-down-post-event-frames",
+  "baseSha": "26ade421f69ac061533d4507de6c87b49ad94106",
+  "boundSha": "26ade421f69ac061533d4507de6c87b49ad94106",
+  "taskType": "slice_implementation",
+  "attempt": 1,
+  "revisionEpoch": 1,
+  "threadId": "local_agent:a1a6ee8d3ee6108d2",
+  "outputHeadSha": "176be565676b5abc383f684a81597893c3260524",
+  "pr": 39,
+  "result": "SUCCEEDED",
+  "verificationVerdict": "PASS",
+  "verificationDigest": "6e23096faeaee64f01762ce211a374c044909b020c7835fb9be65207a5c0978f",
+  "changedPathsDigest": "1d1181efe59f657251934d9b82dea79290477e630a4ea4c82ba7a8ae136b7569",
+  "descendantQuiescenceVerdict": "PASS",
+  "descendantQuiescenceDigest": "416b666dc1b33dcfcdcc3cc7176c383d04245a9930d350f98224185d9f310f9a"
+}

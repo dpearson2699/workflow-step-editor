@@ -171,3 +171,60 @@ are what the issue and the current code do not settle.
 - Closure reason: The user selected the recommended acceptance ownership.
 - Decision: DEC-003
 - Canonical-doc impact: none
+
+## GA-007: The first post-event frame can be an intermediate repaint
+
+- Status: closed
+- Kind: decision
+- Uncertainty: Whether the oldest in-window frame after a key-down reliably
+  contains the typed glyph.
+- Why it matters: AC-001 (typed character visible) is the accepted outcome;
+  the operational rule in DEC-002 decides whether it holds.
+- Evidence inspected: AC-001 gate run on PR #39 head `176be565`
+  (workflow `2026-08-18-155755-1d2a`): `evt_0002` (first key `T`,
+  `frame_age_ms` 0) shows the window title already `— Edited` but no glyph;
+  `evt_0003` shows `Te`. The first keystroke into a clean document
+  triggers a dirty-state title repaint before the glyph paints, and the
+  oldest in-window frame captured that repaint. Later keys have no
+  intervening repaint and were correct (user report and root inspection).
+- Confidence: high
+- Question: Q-003
+
+## Q-003: Which in-window frame does a key-down select?
+
+- Status: answered
+- Recommendation: Wait until a frame with timestamp `>= event + 100 ms`
+  (one minimum frame interval) is retained or the 250 ms deadline passes;
+  then select the newest retained frame in `(event, event + 250 ms]`; else
+  the pinned pre-event frame. The glyph frame supersedes an earlier
+  intermediate repaint; continuous typing keeps low latency; an isolated
+  key waits up to 250 ms.
+- Options and tradeoffs: (a) Recommended: newest in-window frame after a
+  100 ms settle. (b) Newest in-window frame at the 250 ms deadline: one
+  constant, but every typing step pays 250 ms of worker latency. (c) Keep
+  the oldest-frame rule and accept the first-keystroke defect.
+- If wrong: With (a) a glyph that paints later than 250 ms after the key
+  with no other repaint still misses (pinned fallback). With (c) AC-001
+  fails.
+- Answer/source: User answer 2026-08-18: option (a).
+- Closure reason: The user selected the recommended rule.
+- Decision: DEC-004 (supersedes the selection clause of DEC-002)
+- Canonical-doc impact: `docs/adr/0001` amendment wording; README sentence.
+
+## Q-004: Fresh Pro primary or waiver for the material rule change?
+
+- Status: answered
+- Recommendation: Waive the fresh Pro primary: the change is a bounded rule
+  correction inside the same slice, seam, and architecture; the immutable
+  Pro response already flagged the risk that the first post frame may not
+  carry the glyph; a fresh blind-completeness audit still runs.
+- Options and tradeoffs: (a) Recommended: user explicitly stops further Pro
+  sends; adopt under the Pro-primary waiver with a fresh CLEAN blind
+  receipt. (b) Fresh Pro primary plus consensus (~30-40 minutes).
+- If wrong: With (a) a provider-diverse critique of the settle rule is
+  skipped; the blind audit and the AC-001 rerun remain the checks.
+- Answer/source: User answer 2026-08-18: option (a).
+- Closure reason: The user explicitly revoked authority for another Pro send
+  for this change.
+- Decision: DEC-005
+- Canonical-doc impact: none.

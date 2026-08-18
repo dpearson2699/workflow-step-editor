@@ -25,26 +25,28 @@
 - Invariant: For a click, frame selection is byte-for-byte the current
   pre-event behavior (`RetainedFrames::eligible` and the pinned snapshot
   are unchanged, including the existing bounded-retention approximation).
-  For a key-down, the selected frame is the oldest retained frame on the
-  selected display whose display timestamp lies in
-  `(event_ts, event_ts + 250 ms]`; the wait for it runs on the capture
-  worker with the deadline anchored to the event timestamp; when no
-  in-window frame exists at the deadline, when the display retains no live
-  frame, or when the candidate frame's geometry differs from the event
-  snapshot, the pinned pre-event frame is used. Event order at the emitter
+  For a key-down, the capture worker waits until a retained frame with
+  `ts >= event_ts + 100 ms` exists on the selected display or the 250 ms
+  deadline passes (deadline anchored to the event timestamp), then selects
+  the newest retained frame whose display timestamp lies in
+  `(event_ts, event_ts + 250 ms]`; when no in-window frame exists, when the
+  display retains no live frame, or when the candidate frame's geometry
+  differs from the event snapshot, the pinned pre-event frame is used. Event order at the emitter
   is preserved, the tap callback never blocks, orderly stop lets an
   accepted key-down finish its bounded wait before the streams stop, and
   `frame_age_ms` reports `0` for a post-event frame.
 - Owning seam: `FrameBroker` selection plus the capture worker's packet
   assembly, observed at the packet emitter.
 - Evidence required: Rust unit tests on the broker range query (in-window
-  frame chosen, oldest of two, event-equal excluded, deadline-equal
+  frame chosen, newest of two, event-equal excluded, deadline-equal
   included, after-deadline excluded, other display ignored; existing click
   tests unchanged) and deterministic worker-level tests under an injected
-  wait runtime that decode emitted PNG pixels: post frame arriving during
-  the wait, active deadline timeout to the pinned frame, late job with an
-  in-window frame, late job with only an after-deadline frame, key-down
-  then click then key-down in emitter order, and drain after sender close.
+  wait runtime that decode emitted PNG pixels: an early in-window frame
+  followed by a settle-satisfying frame selects the later frame; a single
+  early frame with no later frame is selected at the deadline; active
+  deadline timeout to the pinned frame; late job with an in-window frame;
+  late job with only an after-deadline frame; key-down then click then
+  key-down in emitter order; and drain after sender close.
 
 ## AC-003: Documentation records the per-kind timing rule
 

@@ -3,12 +3,12 @@
 
 - Work kind: `feature`
 - Work ID: `2026-08-18-key-down-post-event-frames`
-- Phase: `delivery`
-- Revision: `9`
+- Phase: `plan`
+- Revision: `16`
 - Observed origin/main: `26ade421f69ac061533d4507de6c87b49ad94106`
 - Task roster: `28038c289b7454195abcf7d2b68e35c621278ed39f81f9600e9d546af33a4a6f`
-- Active slices: `none`
-- Last update: `2026-08-18T15:08:26Z`
+- Active slices: `PR-01`
+- Last update: `2026-08-18T16:08:28Z`
 
 ## ChatGPT Pro Planning Evidence
 
@@ -21,13 +21,13 @@
 - Latest applicability: `prior_evidence_applicable`
 - Fresh primary required: `no`
 - Explicit Pro primary waiver: `not recorded`
-- Blind completeness: `not required (exact Pro plan)`
+- Blind completeness: `decision required`
 
 ## Slices
 
 - Completed: none
-- Active: none
-- Trunk ready: PR-01
+- Active: PR-01
+- Trunk ready: none
 - Stackable: none
 - Blocked: none
 - Pending: none
@@ -41,8 +41,8 @@
 
 ## Tasks
 
-- PR-01 implementation: state=unbound; attempt=0; revision=0; history=0; thread=none; client_thread=none; worktree=none; launch=none; bound_sha=none; adoption_start_sha=none; roster_entry=none; probe=none; stop=none; branch_release=none; branch_attachment=none; replacement=none; observation=none; implementation_receipt=none; terminal_result=none; verification_verdict=none; output_head=none; output_pr=none; review_receipt=none; review_epoch=none; replacement_lineage=none; plan_checkpoint=none
-- PR-01 review: state=unbound; attempt=0; revision=0; history=0; thread=none; client_thread=none; worktree=none; launch=none; bound_sha=none; adoption_start_sha=none; roster_entry=none; probe=none; stop=none; branch_release=none; branch_attachment=none; replacement=none; observation=none; implementation_receipt=none; terminal_result=none; verification_verdict=none; output_head=none; output_pr=none; review_receipt=none; review_epoch=none; replacement_lineage=not_applicable; plan_checkpoint=not_applicable
+- PR-01 implementation: state=quiescent; attempt=1; revision=1; history=0; thread=local_agent:a1a6ee8d3ee6108d2; client_thread=none; worktree=/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a1a6ee8d3ee6108d2; launch=2026-08-18-key-down-post-event-frames/PR-01/implementation/1; bound_sha=26ade421f69ac061533d4507de6c87b49ad94106; adoption_start_sha=26ade421f69ac061533d4507de6c87b49ad94106; roster_entry=5ad1a02259d26d1717934aabe8f7d2956c0fac88db861a6b99e47bd9899e9b64; probe=none; stop=none; branch_release=pr/PR-01/evidence/branch-release.json; branch_attachment=none; replacement=none; observation=none; implementation_receipt=pr/PR-01/evidence/implementation-terminal.json; terminal_result=SUCCEEDED; verification_verdict=PASS; output_head=176be565676b5abc383f684a81597893c3260524; output_pr=39; review_receipt=none; review_epoch=none; replacement_lineage=none; plan_checkpoint=dae8ca30fc919730a87438f621106ca440e227e2
+- PR-01 review: state=unbound; attempt=0; revision=1; history=0; thread=none; client_thread=none; worktree=none; launch=none; bound_sha=none; adoption_start_sha=none; roster_entry=none; probe=none; stop=none; branch_release=none; branch_attachment=none; replacement=none; observation=none; implementation_receipt=none; terminal_result=none; verification_verdict=none; output_head=none; output_pr=none; review_receipt=none; review_epoch=none; replacement_lineage=not_applicable; plan_checkpoint=not_applicable
 
 ## Parallel Assessments
 
@@ -54,4 +54,4 @@
 
 ## Pull Requests
 
-- none
+- PR-01: #39

@@ -16,9 +16,11 @@ triple keeps showing the control as it looked at click time.
   is after the event, instead of the latest pre-event frame. One frame
   interval (~100 ms) of added latency is the expected cost; the wait is
   bounded at 250 ms after the event (DEC-002), which is the single accepted
-  latency limit. Operationally this is the oldest retained frame on the
-  selected display inside the bounded window `(event_ts, event_ts + 250 ms]`
-  (the broker retains two frames per display).
+  latency limit. Operationally the worker waits until a frame at least
+  100 ms after the event is retained or the deadline passes, then selects
+  the newest retained frame on the selected display inside the bounded
+  window `(event_ts, event_ts + 250 ms]` (DEC-004; the broker retains two
+  frames per display).
 - Click events keep the current pre-event selection byte-for-byte
   (`RetainedFrames::eligible` unchanged, including its bounded-retention
   approximation; ADR-0001 rationale stands: the artifact must show the
@@ -74,6 +76,8 @@ triple keeps showing the control as it looked at click time.
 - Status: registered
 - Entry: PR-01 | implementation | claude-fable-5 high | unrecoverable_task_runtime, unrecoverable_worktree, repository_identity_mismatch, pr_identity_unrecoverable, separate_deliverable_user_decision
 - Entry: PR-01 | review | claude-fable-5 high | unrecoverable_task_runtime, unrecoverable_worktree, repository_identity_mismatch, pr_identity_unrecoverable, separate_deliverable_user_decision
+- Entry: PR-02 | implementation | claude-fable-5 high | unrecoverable_task_runtime, unrecoverable_worktree, repository_identity_mismatch, pr_identity_unrecoverable, separate_deliverable_user_decision
+- Entry: PR-02 | review | claude-fable-5 high | unrecoverable_task_runtime, unrecoverable_worktree, repository_identity_mismatch, pr_identity_unrecoverable, separate_deliverable_user_decision
 
 ## Durable Sources
 

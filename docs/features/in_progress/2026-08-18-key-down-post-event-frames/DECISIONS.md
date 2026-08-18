@@ -33,10 +33,10 @@
   anchored to the event timestamp (about 250 ms, roughly 2.5 minimum
   frame intervals at the ~10 fps stream rate); a job that reaches the
   worker after its deadline does not wait, but it may still use a
-  retained frame from inside that window. The selected frame is the
-  oldest eligible frame still retained (intended to be the first
-  post-event frame under normal worker latency; the broker retains two
-  frames per display). When no in-window frame exists, when the selected
+  retained frame from inside that window. Which in-window frame is
+  selected is decided by DEC-004 (the original "oldest eligible frame"
+  clause of this decision was superseded on 2026-08-18 after the AC-001
+  gate). When no in-window frame exists, when the selected
   display retains no live frame, or when the candidate frame's display
   geometry differs from the event-time snapshot's geometry, the step uses
   its pinned pre-event frame. The wait never fail-stops the recording by
@@ -71,4 +71,43 @@
   foundation bundle's proven gate is the precedent.
 - Rejected alternatives: Automated selection tests only with AC-001
   waived.
+- Canonical docs: none.
+
+## DEC-004: Newest in-window frame after a 100 ms settle
+
+- Status: accepted
+- Decision: For a key-down, the worker waits until either a retained frame
+  with `ts >= event_ts + 100 ms` (one minimum frame interval,
+  `POST_EVENT_SETTLE_NS`) exists on the selected display or the 250 ms
+  deadline (`event_ts + POST_EVENT_FRAME_WINDOW_NS`) passes; it then
+  selects the newest retained frame with `ts` in
+  `(event_ts, event_ts + 250 ms]`. A job that reaches the worker after its
+  deadline queries once (newest in-window) and never waits. When no
+  in-window frame exists, DEC-002's fallback set applies (pinned pre-event
+  frame). This supersedes DEC-002's "oldest eligible frame" clause; every
+  other DEC-002 rule (worker-side, event-anchored deadline, fallback set,
+  never fail-stop, never in the tap, stop order) is unchanged.
+- Rationale: User answer to Q-003 (2026-08-18) after the AC-001 gate on PR
+  #39 showed the first keystroke's oldest in-window frame captured the
+  dirty-state title repaint before the glyph (GA-007). Newest-in-window
+  lets the glyph frame supersede an intermediate repaint; the settle bound
+  keeps latency low while the screen keeps changing (typing) and caps an
+  isolated key at 250 ms.
+- Rejected alternatives: Newest in-window frame only at the 250 ms
+  deadline (every typing step pays 250 ms); keeping the oldest-frame rule.
+- Canonical docs: `docs/adr/0001-pre-buffered-screen-capture.md`
+  amendment; `README.md` sentence.
+
+## DEC-005: Pro-primary waiver for the DEC-004 change
+
+- Status: accepted
+- Decision: The user explicitly stopped further ChatGPT Pro sends for the
+  DEC-004 rule change (Q-004). The material specification change is
+  adopted under the `adopt-plan` Pro-primary waiver with a fresh CLEAN
+  blind-completeness receipt; the immutable Pro response
+  (`discovery/pro-lifecycle-evidence/aa6bf429...md`) remains recorded
+  evidence.
+- Rationale: Bounded rule correction inside the same slice, seam, and
+  architecture; time budget of the take-home project.
+- Rejected alternatives: Fresh Pro primary plus consensus loop.
 - Canonical docs: none.
