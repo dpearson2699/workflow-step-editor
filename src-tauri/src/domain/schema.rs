@@ -123,7 +123,9 @@ impl ShotPaths {
 /// Capture metadata for the event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CaptureMeta {
-    /// Age of the buffered pre-event frame when the event fired.
+    /// Nonnegative event-to-selected-frame age in milliseconds,
+    /// saturating at zero; a post-event key-down frame therefore
+    /// reports 0.
     pub frame_age_ms: u64,
 }
 

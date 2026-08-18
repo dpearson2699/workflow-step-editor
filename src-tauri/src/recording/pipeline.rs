@@ -31,7 +31,9 @@ pub struct CapturePacket {
     /// The frontmost application name at capture time, used for the
     /// null-window title fallback.
     pub frontmost_app: Option<String>,
-    /// Age of the buffered pre-event frame when the event fired.
+    /// Nonnegative event-to-selected-frame age in milliseconds,
+    /// saturating at zero; a post-event key-down frame therefore
+    /// reports 0.
     pub frame_age_ms: u64,
     /// The encoded screenshot triple.
     pub shots: ShotPayloads,
