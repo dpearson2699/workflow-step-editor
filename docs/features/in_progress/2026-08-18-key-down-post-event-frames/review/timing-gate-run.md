@@ -39,3 +39,10 @@ and reviewed the steps in the app; the root spot-checked artifacts on disk.
   known-limitation follow-up.
 
 Verdict: AC-001 PASS (user), first-keystroke residual waived by the user.
+
+## Follow-up publication receipt (first-keystroke residual)
+
+- issue_url: https://github.com/dpearson2699/workflow-step-editor/issues/43
+- verified_state: OPEN | fingerprint: 590ff7206fba07d1884c28eb5997320b301f8e2e2193d39e36569581f2e94141
+- fingerprint_comparison: exact (no prior owner) | issue_type: bug | severity: P3
+- expected_labels: [bug, P3] | disposition: created | label_verification_status: verified
