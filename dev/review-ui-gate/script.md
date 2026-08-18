@@ -1,7 +1,8 @@
 # Review UI gate — final human script (AC-001, bundle 2026-08-17-review-ui)
 
 This is the user-run final design acceptance for the review UI bundle
-(`docs/features/in_progress/2026-08-17-review-ui`, policy
+(`docs/features/completed/2026-08-17-review-ui` — the final PR-03
+snapshot relocates the bundle from `in_progress` to `completed`; policy
 `final_pr_design_gate`). It runs on the locally built, signed `.app`
 from the exact final code head of PR-03, because macOS TCC binds
 permission grants to the signed bundle identity. The implementer readies

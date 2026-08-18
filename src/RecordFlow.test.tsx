@@ -527,6 +527,70 @@ describe("record flow", () => {
     expect(capture.stopRecording).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores a stale synthetic load check once the genuine terminal superseded it", async () => {
+    const capture = recorder();
+    const loads: Array<ReturnType<typeof deferred<LoadedWorkflow>>> = [];
+    await renderShell({
+      ...capture,
+      getWorkflow: () => {
+        const gate = deferred<LoadedWorkflow>();
+        loads.push(gate);
+        return gate.promise;
+      },
+    });
+    fireEvent.click(recordButton());
+    await act(async () => {
+      capture.starts[0].resolve(WORKFLOW_ID);
+    });
+
+    // A finalization-failed stop synthesizes a failed terminal whose
+    // load check stays in flight...
+    fireEvent.click(stopButton());
+    await act(async () => {
+      capture.stops[0].reject(
+        new Error("recording finalization failed: manifest save failed: disk full"),
+      );
+    });
+    expect(loads).toHaveLength(1);
+
+    // ...then the genuine failed terminal supersedes it with its own
+    // load check.
+    await act(async () => {
+      capture.sinks[0]({
+        type: "failed",
+        workflow_id: WORKFLOW_ID,
+        error: "tap disabled",
+      });
+    });
+    expect(loads).toHaveLength(2);
+
+    // The genuine check resolves into draft with the genuine error...
+    await act(async () => {
+      loads[1].resolve(draftWorkflow());
+    });
+    const banner = await screen.findByText(
+      /Recording failed and may be incomplete/,
+    );
+    expect(banner.textContent).toContain("tap disabled");
+
+    // ...and the stale synthetic check settling last (even as a
+    // rejection) must neither overwrite the banner nor bounce the flow
+    // to the landing page.
+    await act(async () => {
+      loads[0].reject(new Error("workflow not found"));
+    });
+    expect(screen.getAllByText("draft")).toHaveLength(1);
+    const lateBanner = screen
+      .getAllByRole("alert")
+      .find((alert) =>
+        alert.textContent?.includes("Recording failed and may be incomplete"),
+      );
+    expect(lateBanner?.textContent).toContain("tap disabled");
+    expect(
+      screen.queryByRole("button", { name: "● Record New Workflow" }),
+    ).toBeNull();
+  });
+
   it("ignores messages from a stale session after a new recording starts", async () => {
     const capture = recorder();
     const deleteWorkflow = vi.fn(async () => {});

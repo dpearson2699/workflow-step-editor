@@ -101,8 +101,15 @@ export function startRecordSession(api: ApiClient): RecordSession {
     return { phase: "live", rows, stopPending: stopRequested, stopError };
   }
 
+  // Monotonic terminal generation: a superseding terminal invalidates
+  // every in-flight load check of an earlier one, so a stale synthetic
+  // check settling late can never overwrite the genuine outcome or
+  // bounce a good draft to the landing page.
+  let terminalGeneration = 0;
+
   function handleTerminal(terminal: Terminal): void {
     terminalHandled = true;
+    const generation = ++terminalGeneration;
     if (terminal.type === "stopped") {
       setState({
         phase: "draft",
@@ -115,7 +122,7 @@ export function startRecordSession(api: ApiClient): RecordSession {
     // envelope fields (DEC-009).
     api.getWorkflow(terminal.workflow_id).then(
       () => {
-        if (disposed) {
+        if (disposed || generation !== terminalGeneration) {
           return;
         }
         setState({
@@ -125,7 +132,7 @@ export function startRecordSession(api: ApiClient): RecordSession {
         });
       },
       (caught: unknown) => {
-        if (disposed) {
+        if (disposed || generation !== terminalGeneration) {
           return;
         }
         setState({
