@@ -1,0 +1,21 @@
+{
+  "schema": "spec-work-task-observation",
+  "kind": "stop",
+  "workKind": "feature",
+  "workId": "2026-08-18-key-down-post-event-frames",
+  "workBundle": "2026-08-18-key-down-post-event-frames",
+  "sliceId": "PR-01",
+  "role": "implementation",
+  "taskType": "slice_implementation",
+  "attempt": 1,
+  "launchMarker": "2026-08-18-key-down-post-event-frames/PR-01/implementation/1",
+  "threadId": "local_agent:a1a6ee8d3ee6108d2",
+  "clientThreadId": null,
+  "branch": "feat/pr-01-key-down-post-event-frames",
+  "headSha": "176be565676b5abc383f684a81597893c3260524",
+  "predicate": "task quiescent",
+  "priorAttempt": 1,
+  "priorThreadId": "local_agent:a1a6ee8d3ee6108d2",
+  "result": "QUIESCENT",
+  "observationEpoch": 5
+}
