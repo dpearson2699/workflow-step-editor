@@ -132,14 +132,18 @@ button {
   padding: 0;
 }
 
+/* Three flow siblings per row — open target, Reveal, chevron — matching
+   the pinned prototype Home row, so the hover-revealed control and the
+   chevron each keep their own slot and never overlap. */
 .workflow-row {
-  position: relative;
   display: flex;
   align-items: center;
+  gap: 10px;
   background: #232327;
   border: 1px solid #313136;
   border-radius: 12px;
   margin-bottom: 10px;
+  padding-right: 14px;
 }
 
 .workflow-row:hover {
@@ -201,21 +205,21 @@ button {
 .row-chevron {
   color: #666;
   font-size: 22px;
-  /* Keeps the chevron clear of the hover-revealed reveal control. */
-  margin-right: 84px;
+  flex-shrink: 0;
 }
 
 .row-reveal {
-  position: absolute;
-  right: 40px;
+  flex-shrink: 0;
   background: none;
   border: 1px solid #444;
   border-radius: 8px;
   color: #aaa;
   padding: 5px 10px;
   font-size: 12px;
+  white-space: nowrap;
   /* Opacity (not visibility) keeps the control keyboard-focusable
-     while visually hidden, so :focus-visible can reveal it. */
+     while visually hidden, so :focus-visible can reveal it — and its
+     flow slot stays reserved, so nothing shifts on hover. */
   opacity: 0;
 }
 
