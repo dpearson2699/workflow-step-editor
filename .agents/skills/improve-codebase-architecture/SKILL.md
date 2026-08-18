@@ -159,7 +159,10 @@ skill never implements it.
 - When the user wants it recorded but not built now: create one
   `enhancement` issue through the API or CLI, mirroring the repository
   issue template, containing the candidate card's problem, solution, and
-  wins. It carries no defect fingerprint and does not enter the defect
+  wins, and add it to the Spec Work board as a `Backlog` card in the same
+  step per the Backlog projection section of
+  `../../workflows/spec-work-orchestrator/references/github-board-sync.md`.
+  It carries no defect fingerprint and does not enter the defect
   lifecycle; the future bundle adopts it as its owning issue.
 - If the grilling reveals an actual defect (a failed invariant with
   affected surfaces), that part alone routes through the durable GitHub

@@ -124,7 +124,10 @@ scope, do not leave it only in chat or silently work around it:
 5. When no open owner exists, create one issue containing reproduction or
    evidence, actual and expected behavior, impact, discovery context, and
    exactly one canonical marker. Link closed history when the observation is a
-   new regression after a completed fix.
+   new regression after a completed fix. In the same step, add the new issue
+   to the Spec Work board as a `Backlog` card per the Backlog projection
+   section of
+   `.agents/workflows/spec-work-orchestrator/references/github-board-sync.md`.
 6. After every mutation, repeat all-state marker discovery and authoritative
    direct fetches. Record the policy's required receipt fields in the task or
    slice handoff.
@@ -132,6 +135,8 @@ scope, do not leave it only in chat or silently work around it:
    owning system, append missing completion evidence, reconcile labels, and
    close the verified owner without asking for separate closure consent. A
    local, uncommitted, inactive, or unverified correction is not completion.
+   When no bundle owns the issue, set its board card to `Complete` in the
+   same step.
 
 Create new issues proactively without a separate approval prompt, then continue
 the current task unless the defect blocks it. Do not create issues for
@@ -144,6 +149,13 @@ unrelated title changes, comments, reopening, or mutation of a non-owner.
 Use `bug` for defects in product behavior and `harness` for defects in the
 agent harness, agent instructions, skills, or workflow infrastructure. Choose
 the remaining types and P1/P2/P3 severity from the repository policy.
+
+Every issue created in this repository lands on the Spec Work board: an
+`enhancement` or other issue created outside this defect lifecycle gets its
+`Backlog` card from the creating session in the same step, under the same
+reference. A board fault is a recoverable warning recorded with the issue
+receipt, never a reason to skip or delay the issue; the next root-owned board
+sync sweeps every uncarded open issue into `Backlog`.
 
 ## Pull-request delivery
 

@@ -19,15 +19,18 @@ the file to empty — so a stale fault can never move the card backward or
 forward past publication. A fault that
 survives the completion handoff is reported to the user as the one
 remaining manual step, so the board can never stay silently stale. The
-map-exit projection below runs with no bundle and records its faults on
-the map issue instead.
+Backlog projection of a newly created issue and the map-exit projection
+below run with no bundle; each names its own fault home.
 
 Verification status: every bundle-lifecycle operation below was exercised
 end to end on 2026-08-14 (gh 2.97.0) against a live repository: creation,
 linking, column rewrite, board layout switch, card add, and the full
 Discuss -> Blocked -> Delivery -> Complete status walk. The map-exit
 projection composes those same verified operations; its Backlog option
-and marker guard were not part of that exercise.
+and marker guard were not part of that exercise. The Backlog sweep
+below was exercised on 2026-08-18 (gh 2.97.0) against this repository:
+board item listing, open-issue listing, card add, and the `Backlog`
+Status set for fourteen uncarded open issues.
 
 ## Tooling rules
 
@@ -37,9 +40,11 @@ and marker guard were not part of that exercise.
   `command -v gh` (and confirm it is not a wrapper via `gh --version`
   printing a `gh version` line), then invoke that exact path. Homebrew
   layouts differ across machines; never hardcode one.
-- All board mutations are root-owned semantic receipt work, the same
-  pattern as follow-up issue publication. Support agents never sync the
-  board.
+- Board mutations are root-owned semantic receipt work, the same pattern
+  as follow-up issue publication: bundle-card Status sync and fault
+  reconciliation belong to the root, and the session or delegated task
+  that publishes an issue adds that issue's `Backlog` card in the same
+  publication step. Read-only support agents never touch the board.
 - Prerequisite: the token must carry the `project` scope. Check with
   `gh auth status`. When it is missing, record one recoverable warning
   naming the operator command `gh auth refresh -s project` (an interactive
@@ -128,6 +133,49 @@ creation); more than one is a fail-closed condition — record a recoverable
 warning naming the project numbers and perform no mutation until the
 operator removes the duplicate marker.
 
+## Backlog projection: every new issue
+
+The board's `Backlog` column is the repository's open work inventory,
+not only the wayfinder hand-off. Membership rule: every **open** issue in
+this repository has a card, except wayfinder planning tickets (any
+`wayfinder:*` label — the label policy's `wayfinder.contract` keeps them
+out of every spec-work lifecycle) and the `spec-work-board-bootstrap`
+claim issue. An issue that no active bundle owns has desired Status
+`Backlog`; a bundle-owned issue follows the Status mapping below.
+
+Projection at creation: whichever route creates a qualifying issue —
+the durable GitHub issue lifecycle in `AGENTS.md` (`bug`, `harness`, and
+the other creation types), a standalone `enhancement` recorded outside a
+bundle, the map-exit mint below, or a feature owner created at bundle
+initialization — runs the board rediscovery above and, when exactly one
+marked board exists, adds the card and sets `Backlog` in the same step,
+using the item-add and item-edit commands in the card contract below.
+No card is added for a closed issue. A bundle-owned card then leaves
+`Backlog` at that bundle's next sync; a bug or enhancement fixed without
+a bundle leaves it at closure (below).
+
+Fault home: when no marked board exists, the token lacks the `project`
+scope, or a command fails, record one recoverable warning — the intended
+Status, the error, and for scope the operator command
+`gh auth refresh -s project` — where the creating route records its
+issue receipt (the task or slice handoff), on the map issue for a
+wayfinder session, or in `review/board-sync.md` for a bundle root, and
+continue: issue publication never waits on the board.
+
+Sweep: deferred or missed projection has a durable owner. Before every
+root-owned board sync in this repository — ordinarily bundle
+initialization, a phase or blocker sync, or completion — the root first
+lists the board's items once (`gh project item-list <number> --owner
+<repo-owner> --format json --limit 500`), lists the repository's open
+issues once, and for every qualifying open issue absent from the board
+adds the card and sets `Backlog`. It never edits the Status of a card
+that already exists, so a sweep can never move a bundle card backward.
+
+Closure: when a route closes a qualifying issue that no bundle owns
+(step 7 of the durable lifecycle, or an `enhancement` dropped by the
+user), it sets that card's Status to `Complete` in the same step. A
+bundle-owned issue keeps the completion contract below.
+
 ## Map-exit backlog projection (wayfinder repositories)
 
 When a wayfinder map classifies **Complete**, the same closing session
@@ -172,18 +220,16 @@ section, including board bootstrap, and proceeds to its closing comment.
 A backlog card's issue becomes a feature bundle's owning issue at bundle
 initialization through the user-supplied-owner path in the card contract
 below. Cards are ordered manually within the column; the workflow
-assigns no priority. For a minted issue not yet adopted by any bundle,
-the recomputed desired Status is always `Backlog`.
+assigns no priority. For any issue not yet adopted by any bundle, the
+recomputed desired Status is always `Backlog`.
 
 A wayfinder session has no bundle, so `review/board-sync.md` is not
 available as the fault home. Record a board fault (including a missing
 `project` scope) as one comment on the map issue naming the fault — and,
 for scope, the operator command `gh auth refresh -s project` — then
 continue: minting requires only the `repo` scope and proceeds
-regardless. Deferred projection has a durable owner: every later
-root-owned board sync in this repository — ordinarily the next bundle
-initialization — first sweeps every open `spec-work-backlog:` issue
-that lacks a card into `Backlog`, then performs its own sync.
+regardless. The sweep in the Backlog projection section above is the
+durable owner of deferred projection.
 
 ## The card: one owning issue per bundle
 
