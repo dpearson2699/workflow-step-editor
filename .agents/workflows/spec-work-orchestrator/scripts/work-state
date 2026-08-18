@@ -4415,6 +4415,27 @@ def git_binding_receipt_value(
         )
         else task["output_head_sha"] or task["bound_sha"]
     )
+    if (
+        kind == "implementation_attachment"
+        and bound_sha is not None
+        and value["boundSha"] != bound_sha
+        and final_ui_checkpoint_clean_release(
+            bundle, state, item, before_epoch=value["observationEpoch"]
+        )
+        is not None
+    ):
+        # Final-UI remediation reattachment: the released branch may already
+        # carry remediation commits, so accept a receipt bound to a strict
+        # descendant of the reauthorized head on the same branch.
+        descendant = subprocess.run(
+            [
+                "git", "-C", str(REPO), "merge-base", "--is-ancestor",
+                bound_sha, value["boundSha"],
+            ],
+            check=False, capture_output=True, timeout=20,
+        )
+        if descendant.returncode == 0:
+            bound_sha = value["boundSha"]
     if bound_sha is None or task["task_worktree"] is None:
         raise StateError(f"{label} requires a resolved task worktree and head")
     receipt_branch = (
