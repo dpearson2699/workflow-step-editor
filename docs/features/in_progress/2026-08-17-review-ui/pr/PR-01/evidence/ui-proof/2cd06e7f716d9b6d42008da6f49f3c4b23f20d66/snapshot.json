@@ -1,0 +1,14 @@
+{
+  "schema": "project-ui-proof",
+  "source": "project_ui_adapter",
+  "taskStage": "intermediate_orchestrated_pr",
+  "sliceId": "PR-01",
+  "identityKind": "worktree_tree",
+  "identity": "2cd06e7f716d9b6d42008da6f49f3c4b23f20d66",
+  "automatedAcceptanceId": "AC-002",
+  "proofTarget": "landing-workflow-list",
+  "observation": {
+    "kind": "displayed_value",
+    "value": "First step of 2026-08-17 20:59:48 2026-08-17 20:59:48 Aug 17 at 4:59 PM \u00b7 76 steps \u00b7 59s \u2318 Reveal"
+  }
+}

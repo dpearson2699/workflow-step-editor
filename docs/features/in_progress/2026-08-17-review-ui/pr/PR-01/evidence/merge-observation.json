@@ -1,0 +1,16 @@
+{
+  "schema": "spec-work-merge-observation",
+  "workKind": "feature",
+  "workId": "2026-08-17-review-ui",
+  "workBundle": "2026-08-17-review-ui",
+  "reviewWorktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a3912913156c57d17",
+  "sliceId": "PR-01",
+  "branch": "feat/pr-01-landing-page",
+  "pr": 30,
+  "reviewedHeadSha": "e9d316bf256fa3fbe63c68c8829aaef236ca5bdd",
+  "result": "MERGED",
+  "resultMainSha": "3ce68a082eee42db99d697c84d26b770ef510139",
+  "premergeReceipt": "pr/PR-01/evidence/merge-receipt.json",
+  "premergeReceiptDigest": "8058999433185ce0dc900b8234341f0e7af21542998ec536a1d58d4901137585",
+  "observationEpoch": 10
+}
