@@ -128,7 +128,9 @@ to the signed bundle identity.
 
 ## Walkthrough
 
-_Walkthrough link: to be added before submission._
+- Video: _link to be added before submission._
+- Written: [docs/walkthrough/WALKTHROUGH.md](docs/walkthrough/WALKTHROUGH.md)
+  follows the video and carries the points that do not fit on screen.
 
 ## Scope: completed and removed
 
