@@ -1,0 +1,29 @@
+{
+  "schema": "spec-work-pro-applicability",
+  "workKind": "feature",
+  "workId": "2026-08-18-key-down-post-event-frames",
+  "workBundle": "2026-08-18-key-down-post-event-frames",
+  "responseDigest": "0009245cf1bc7b71ba6a8432eb0127e44b4200434a87fca0a4ae9cbe333e02ce",
+  "fromDigest": "6ded6b17311006b1e991d10d10f1b5772abc9942dc902c35409c78715c80ae0a",
+  "toDigest": "a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c",
+  "fromSourceCommit": "cb938b4b2166ffb90c659ad42bf0c70f6fe60deb",
+  "toSourceCommit": "7db98414fd59608ca0b2ff4323ce5a190a9ef3b2",
+  "classification": "non_material",
+  "changedPaths": [
+    "ACCEPTANCE.md",
+    "DECISIONS.md",
+    "FEATURE.md",
+    "INTERVIEW.md"
+  ],
+  "recommendationsChanged": false,
+  "implementationSlicesChanged": false,
+  "validationResult": "prior_evidence_applicable",
+  "evidenceAnchors": [
+    "DECISIONS.md",
+    "review/plan-consensus-log.md",
+    "discovery/pro-lifecycle-evidence/aa6bf429d5b771b66b635150e0e8cf3563f133da5c66848b3e7c2dc4e7019932.md"
+  ],
+  "semanticDiffSummary": "The specification delta adopts the captured Pro response's own corrections and the cross-model consensus corrections inside the same accepted goal and single slice: DEC-002 now states the bounded window (event_ts, event_ts + 250 ms], the oldest-retained-frame reading, the fallback set (no in-window frame, no live frame, display-geometry mismatch), the corrected saturation rationale (waits do not stack linearly; a burst can still fill a small queue), and the stop-order consequence; DEC-001 and FEATURE.md state that click selection keeps RetainedFrames::eligible unchanged and that 250 ms is the single accepted bound with one frame interval as expected cost; AC-002 pins the bounded window, the fallback set, order and stop invariants, and the deterministic test matrix; AC-001 names the exact-head signed build/launch route, the prompt-Stop run, and the recorded facts; GA-006 records the geometry-mismatch engineering default; GA-002 records the Pro confirmation.",
+  "applicabilityRationale": "Every change implements what the immutable Pro response itself recommended (bounded range query, injectable wait runtime, explicit selected frame, geometry-mismatch fallback, shutdown reorder, saturation wording, oldest-retained wording, gate evidence specificity) or folds consensus-loop corrections that preserve the same accepted goal, decisions, single-slice topology, and architecture; no scope boundary, product decision, or architectural recommendation the response analyzed was altered, so the prior response remains fully applicable to the revised specification without a fresh primary.",
+  "assessmentEpoch": 1
+}

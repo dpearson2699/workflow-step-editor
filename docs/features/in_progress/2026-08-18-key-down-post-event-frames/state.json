@@ -2,7 +2,7 @@
   "acceptance": {
     "AC-001": {
       "assignment_digest": null,
-      "criterion_digest": "2b268ae0d789c21515d731f14c3c81f64e45a722d9420049c6c36d0939b73dde",
+      "criterion_digest": "3cafb0ec6dc2ff8931f555cb0510014fd5b971863c328b4bd282bf0649ff4798",
       "evidence": [],
       "evidence_digests": {},
       "locked": false,
@@ -13,7 +13,7 @@
     },
     "AC-002": {
       "assignment_digest": null,
-      "criterion_digest": "ba3292d57ea84c39e4fbd79f514280cdf08a53317e10300357314a29b0a00d93",
+      "criterion_digest": "269a13835076be920e270d36afea2cb743112be56c3c595ec5dfe0b8f4b36228",
       "evidence": [],
       "evidence_digests": {},
       "locked": false,
@@ -44,24 +44,56 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": null,
-  "observation_epoch_high_water": 0,
+  "observation_epoch_high_water": 1,
   "observed_main_sha": "26ade421f69ac061533d4507de6c87b49ad94106",
   "parallel_assessments": [],
-  "phase": "plan",
+  "phase": "delivery",
   "planning": {
     "active_response_digest": "0009245cf1bc7b71ba6a8432eb0127e44b4200434a87fca0a4ae9cbe333e02ce",
     "blind_completeness": null,
-    "blind_requirement": null,
-    "current_plan_digest": null,
-    "current_source_commit": "cb938b4b2166ffb90c659ad42bf0c70f6fe60deb",
-    "current_specification_digest": "6ded6b17311006b1e991d10d10f1b5772abc9942dc902c35409c78715c80ae0a",
+    "blind_requirement": {
+      "plan_digest": "ff911e61b8ddaff31c3deb94811c6ac70b315ba1c6bbfc1e9335be6acaf6ed90",
+      "requirement": "not_required_exact_pro_plan"
+    },
+    "current_plan_digest": "ff911e61b8ddaff31c3deb94811c6ac70b315ba1c6bbfc1e9335be6acaf6ed90",
+    "current_source_commit": "7db98414fd59608ca0b2ff4323ce5a190a9ef3b2",
+    "current_specification_digest": "a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c",
     "evidence": [
       {
-        "accepted_for_digest": "6ded6b17311006b1e991d10d10f1b5772abc9942dc902c35409c78715c80ae0a",
-        "accepted_source_commit": "cb938b4b2166ffb90c659ad42bf0c70f6fe60deb",
+        "accepted_for_digest": "a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c",
+        "accepted_source_commit": "7db98414fd59608ca0b2ff4323ce5a190a9ef3b2",
         "annotations": [],
         "answer_artifact": "discovery/pro-lifecycle-evidence/aa6bf429d5b771b66b635150e0e8cf3563f133da5c66848b3e7c2dc4e7019932.md",
-        "applicability": [],
+        "applicability": [
+          {
+            "changed_paths": [
+              "ACCEPTANCE.md",
+              "DECISIONS.md",
+              "FEATURE.md",
+              "INTERVIEW.md"
+            ],
+            "classification": "non_material",
+            "correction_receipt": null,
+            "correction_receipt_digest": null,
+            "epoch": 1,
+            "evidence_anchors": [
+              "DECISIONS.md",
+              "review/plan-consensus-log.md",
+              "discovery/pro-lifecycle-evidence/aa6bf429d5b771b66b635150e0e8cf3563f133da5c66848b3e7c2dc4e7019932.md"
+            ],
+            "from_digest": "6ded6b17311006b1e991d10d10f1b5772abc9942dc902c35409c78715c80ae0a",
+            "from_source_commit": "cb938b4b2166ffb90c659ad42bf0c70f6fe60deb",
+            "implementation_slices_changed": false,
+            "original_receipt": null,
+            "original_receipt_digest": null,
+            "receipt": "discovery/pro-applicability-0001.json",
+            "receipt_digest": "9b9239fcd70da209afa5ad5f5614e8705453dd72365bf0e0c11cea7bd0d8c198",
+            "recommendations_changed": false,
+            "to_digest": "a4940717a1aac5e7ce89f6f719142cb2338b3f5a19cd6c98318f2481b71fa33c",
+            "to_source_commit": "7db98414fd59608ca0b2ff4323ce5a190a9ef3b2",
+            "validation_result": "prior_evidence_applicable"
+          }
+        ],
         "contract_disposition": "clean",
         "generated_for_digest": "6ded6b17311006b1e991d10d10f1b5772abc9942dc902c35409c78715c80ae0a",
         "generated_source_commit": "cb938b4b2166ffb90c659ad42bf0c70f6fe60deb",
@@ -77,7 +109,7 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 5,
+  "revision": 9,
   "schema": "spec-workflow-state",
   "slices": [
     {
@@ -142,11 +174,16 @@
       "owned_paths": [
         "README.md",
         "docs/adr/0001-pre-buffered-screen-capture.md",
-        "src-tauri/src"
+        "src-tauri/src/capture/broker.rs",
+        "src-tauri/src/capture/packets.rs",
+        "src-tauri/src/capture/pipeline.rs",
+        "src-tauri/src/capture/worker.rs",
+        "src-tauri/src/domain/schema.rs",
+        "src-tauri/src/recording/pipeline.rs"
       ],
       "plan": "pr/PR-01/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "e1466e3fbf360dc6127c74860bb77a7aa0dfa6bff1ccc94b0afb485236042ac1",
+      "plan_digest": "4a8da590b128c1e0dd4a3f5880731e033ef85d75cdca030135ab082e6f701e11",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -238,7 +275,7 @@
     ],
     "primary_digest": "28038c289b7454195abcf7d2b68e35c621278ed39f81f9600e9d546af33a4a6f"
   },
-  "updated_at": "2026-08-18T14:47:27Z",
+  "updated_at": "2026-08-18T15:08:26Z",
   "work_id": "2026-08-18-key-down-post-event-frames",
   "work_kind": "feature"
 }
