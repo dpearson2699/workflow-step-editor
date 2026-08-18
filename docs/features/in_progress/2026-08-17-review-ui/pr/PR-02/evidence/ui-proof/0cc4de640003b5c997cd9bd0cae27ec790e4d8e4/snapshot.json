@@ -1,0 +1,14 @@
+{
+  "schema": "project-ui-proof",
+  "source": "project_ui_adapter",
+  "taskStage": "intermediate_orchestrated_pr",
+  "sliceId": "PR-02",
+  "identityKind": "worktree_tree",
+  "identity": "0cc4de640003b5c997cd9bd0cae27ec790e4d8e4",
+  "automatedAcceptanceId": "AC-003",
+  "proofTarget": "step-detail-pane",
+  "observation": {
+    "kind": "displayed_value",
+    "value": "Step detail pane: 76 step rows; selected step title 'Click \"Allow\" \u2014 Claude'; triple viewer with full large and window/element click-to-swap; classification dropdown 'click'; metadata Time 16:59:50 \u00b7 App Claude \u2014 Claude \u00b7 Coords (888.1171875, 509.49609375) \u00b7 Key \u2014 \u00b7 Element AXButton \"Allow\" \u00b7 ax"
+  }
+}

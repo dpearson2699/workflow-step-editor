@@ -1,0 +1,14 @@
+{
+  "schema": "project-ui-proof",
+  "source": "project_ui_adapter",
+  "taskStage": "intermediate_orchestrated_pr",
+  "sliceId": "PR-02",
+  "identityKind": "worktree_tree",
+  "identity": "c50b8f869823b8e11ce6e1e332c4d0b3b827172b",
+  "automatedAcceptanceId": "AC-003",
+  "proofTarget": "step-detail-pane",
+  "observation": {
+    "kind": "displayed_value",
+    "value": "Click \"Allow\" \u2014 Claude \u00b7 Time 16:59:50 \u00b7 App Claude \u2014 Claude \u00b7 Element AXButton \"Allow\" \u00b7 ax \u00b7 76 steps listed"
+  }
+}

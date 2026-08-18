@@ -1,0 +1,23 @@
+{
+  "schema": "spec-work-implementation-terminal",
+  "workKind": "feature",
+  "workId": "2026-08-17-review-ui",
+  "workBundle": "2026-08-17-review-ui",
+  "implementationWorktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a271b0bf836944fea",
+  "sliceId": "PR-02",
+  "branch": "feat/pr-02-detail-review",
+  "baseSha": "1fca0753a7e4b5c81e22964c3347d38e15f81f79",
+  "boundSha": "1fca0753a7e4b5c81e22964c3347d38e15f81f79",
+  "taskType": "slice_implementation",
+  "attempt": 1,
+  "revisionEpoch": 1,
+  "threadId": "local_agent:a271b0bf836944fea",
+  "outputHeadSha": "a66990a6e685e04a7c26bf8a7ae5775048611c7a",
+  "pr": 31,
+  "result": "SUCCEEDED",
+  "verificationVerdict": "PASS",
+  "verificationDigest": "c267034ac4c4329709571b1f1c8e086ef18525b0d0aa42bc54792f668f468f59",
+  "changedPathsDigest": "1c4c589c16892b8151a2be757fc43d55e5550a40a0dc87a1de8eca2e17378fa0",
+  "descendantQuiescenceVerdict": "PASS",
+  "descendantQuiescenceDigest": "c83dc8ecec4ae02bed2ed7bca6e76a2553434603b593f782bc87eff67c1e6cab"
+}
