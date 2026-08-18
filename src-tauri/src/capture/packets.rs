@@ -1,16 +1,22 @@
 //! Pure assembly of one [`CapturePacket`] from the copied event facts,
-//! the pinned frame snapshot, and the resolved window/AX metadata.
+//! the frame the worker selected, and the resolved window/AX metadata.
 //!
 //! This is where the DEC-008 and DEC-011 rules live as testable logic:
 //! display selection, the deterministic implausible-frame fallback, the
 //! fixed-size fallback crop, and the null-window shapes. No macOS API
-//! is touched here.
+//! is touched here. Which frame a job uses is decided by the worker
+//! ([`crate::capture::worker`]): the pinned pre-event frame for a click,
+//! the bounded post-event frame or the pinned fallback for a key-down
+//! (DEC-001/DEC-002); [`build_packet`] cuts all three shots from that
+//! one [`SelectedFrame`].
+
+use std::sync::Arc;
 
 use crate::capture::broker::FrameData;
 use crate::capture::encoder::encode_crop_png;
 use crate::capture::geometry::{
     crop_px, display_for_point, display_for_rect, fallback_rect_pt, full_display_px,
-    is_implausible, PointPt, RectPt,
+    is_implausible, DisplayGeometry, PointPt, RectPt,
 };
 use crate::capture::queue::{CaptureJob, RawInput};
 use crate::domain::schema::{ElementInfo, ElementSource, Pos, WindowInfo};
@@ -65,43 +71,76 @@ impl std::fmt::Display for PacketBuildError {
     }
 }
 
-/// Builds the complete capture packet for one job.
-pub fn build_packet(
+/// The frame one job's screenshot triple is cut from: the event-time
+/// display it was selected for plus the frame lease. The worker builds
+/// it from the pinned snapshot ([`select_pinned_frame`]) and, for a
+/// key-down, may swap in the bounded post-event frame of the same
+/// display geometry.
+#[derive(Debug, Clone)]
+pub struct SelectedFrame {
+    pub display: DisplayGeometry,
+    pub frame: Arc<FrameData>,
+}
+
+/// Display selection shared by the worker and packet assembly. Clicks:
+/// the display containing the click point, else the main display
+/// (DEC-011). Key-downs (DEC-008): the display containing the focused
+/// element's center, else the focused window's center, else the main
+/// display. The backend lists the main display first; `None` only for
+/// an empty display set.
+pub fn select_display<'a>(
+    displays: &'a [DisplayGeometry],
     job: &CaptureJob,
     meta: &ResolvedMetadata,
-) -> Result<CapturePacket, PacketBuildError> {
-    let displays = &job.snapshot.displays;
-    let point = PointPt { x: job.x, y: job.y };
-    let is_click = matches!(job.input, RawInput::Click { .. });
-
-    // Display selection. Clicks: the display containing the click
-    // point, else the main display (DEC-011). Key-downs (DEC-008): the
-    // display containing the focused element's center, else the focused
-    // window's center, else the main display.
-    let display = if is_click {
-        display_for_point(displays, point)
-    } else {
-        meta.element
+) -> Option<&'a DisplayGeometry> {
+    let display = match job.input {
+        RawInput::Click { .. } => display_for_point(displays, PointPt { x: job.x, y: job.y }),
+        RawInput::KeyDown { .. } => meta
+            .element
             .as_ref()
             .and_then(|element| display_for_rect(displays, &element.frame_pt))
             .or_else(|| {
                 meta.window
                     .as_ref()
                     .and_then(|window| display_for_rect(displays, &window.bounds_pt))
-            })
+            }),
     };
-    // The backend lists the main display first.
-    let display = display.or_else(|| displays.first());
-    let Some(display) = display.cloned() else {
+    display.or_else(|| displays.first())
+}
+
+/// Selects the job's display and reads its pinned pre-event frame from
+/// the event-time snapshot. A display without any retained frame is the
+/// explicit fail-stop (DEC-007), for every event kind.
+pub fn select_pinned_frame(
+    job: &CaptureJob,
+    meta: &ResolvedMetadata,
+) -> Result<SelectedFrame, PacketBuildError> {
+    let Some(display) = select_display(&job.snapshot.displays, job, meta).cloned() else {
         return Err(PacketBuildError::NoRetainedFrame { display_id: 0 });
     };
-
     let frame = job
         .snapshot
         .frame_for(display.id)
+        .cloned()
         .ok_or(PacketBuildError::NoRetainedFrame {
             display_id: display.id,
         })?;
+    Ok(SelectedFrame { display, frame })
+}
+
+/// Builds the complete capture packet for one job from the frame the
+/// worker selected. All three shots come from that one frame;
+/// `frame_age_ms` is the saturating event-to-frame age, so a
+/// post-event frame reports `0`.
+pub fn build_packet(
+    job: &CaptureJob,
+    meta: &ResolvedMetadata,
+    selected: &SelectedFrame,
+) -> Result<CapturePacket, PacketBuildError> {
+    let point = PointPt { x: job.x, y: job.y };
+    let is_click = matches!(job.input, RawInput::Click { .. });
+    let display = &selected.display;
+    let frame = &selected.frame;
 
     // Window: the resolved window when it overlaps the selected
     // display; DEC-011 null-window otherwise (window crop = the full
@@ -116,7 +155,7 @@ pub fn build_packet(
     // otherwise (DEC-008/DEC-011).
     let click_constraint = is_click.then_some(point);
     let ax_element = meta.element.as_ref().filter(|element| {
-        !is_implausible(&element.frame_pt, &display, click_constraint)
+        !is_implausible(&element.frame_pt, display, click_constraint)
     });
     let element = match ax_element {
         Some(element) => ElementInfo {
@@ -135,7 +174,7 @@ pub fn build_packet(
             // window's center for key-downs; the display center for the
             // null-window key-down (DEC-011).
             let center = if is_click { point } else { container.center() };
-            let rect = fallback_rect_pt(center, &container, &display);
+            let rect = fallback_rect_pt(center, &container, display);
             ElementInfo {
                 role: None,
                 title: None,
@@ -190,8 +229,6 @@ fn encode_triple(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use crate::capture::broker::FrameSnapshot;
     use crate::capture::geometry::DisplayGeometry;
     use crate::domain::schema::{KeyInfo, MouseButton, Rect};
@@ -264,12 +301,25 @@ mod tests {
         }
     }
 
-    fn decode_size(bytes: &[u8]) -> (u32, u32) {
+    /// The production composition for a pinned-frame job: select the
+    /// display and its pinned frame, then assemble.
+    fn assemble(job: &CaptureJob, meta: &ResolvedMetadata) -> Result<CapturePacket, PacketBuildError> {
+        let selected = select_pinned_frame(job, meta)?;
+        build_packet(job, meta, &selected)
+    }
+
+    fn decode(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
         let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
         let mut reader = decoder.read_info().unwrap();
         let mut buffer = vec![0; reader.output_buffer_size().unwrap()];
         let info = reader.next_frame(&mut buffer).unwrap();
-        (info.width, info.height)
+        buffer.truncate(info.buffer_size());
+        (info.width, info.height, buffer)
+    }
+
+    fn decode_size(bytes: &[u8]) -> (u32, u32) {
+        let (width, height, _) = decode(bytes);
+        (width, height)
     }
 
     #[test]
@@ -286,7 +336,7 @@ mod tests {
             }),
             frontmost_app: Some("TextEdit".into()),
         };
-        let packet = build_packet(&job, &meta).unwrap();
+        let packet = assemble(&job, &meta).unwrap();
 
         assert_eq!(packet.display_id, 1);
         assert_eq!(packet.element.source, ElementSource::Ax);
@@ -323,7 +373,7 @@ mod tests {
             }),
             frontmost_app: Some("Google Chrome".into()),
         };
-        let packet = build_packet(&job, &meta).unwrap();
+        let packet = assemble(&job, &meta).unwrap();
 
         assert_eq!(packet.element.source, ElementSource::Fallback);
         assert_eq!(packet.element.role, None);
@@ -352,7 +402,7 @@ mod tests {
             frontmost_app: Some("Finder".into()),
             ..Default::default()
         };
-        let packet = build_packet(&job, &meta).unwrap();
+        let packet = assemble(&job, &meta).unwrap();
 
         assert_eq!(packet.display_id, 2);
         assert_eq!(packet.window, None);
@@ -388,7 +438,7 @@ mod tests {
             }),
             frontmost_app: Some("TextEdit".into()),
         };
-        let packet = build_packet(&job, &meta).unwrap();
+        let packet = assemble(&job, &meta).unwrap();
 
         assert_eq!(packet.display_id, 2);
         assert_eq!(packet.element.source, ElementSource::Ax);
@@ -408,7 +458,7 @@ mod tests {
             element: None,
             frontmost_app: Some("TextEdit".into()),
         };
-        let packet = build_packet(&job, &meta).unwrap();
+        let packet = assemble(&job, &meta).unwrap();
 
         assert_eq!(packet.display_id, 1);
         assert_eq!(packet.element.source, ElementSource::Fallback);
@@ -427,7 +477,7 @@ mod tests {
             frame_for(&displays[1], 9_000_000),
         ];
         let job = key_job(displays, frames);
-        let packet = build_packet(&job, &ResolvedMetadata::default()).unwrap();
+        let packet = assemble(&job, &ResolvedMetadata::default()).unwrap();
 
         // Main display (listed first), window crop = full display,
         // fallback centered at the display center (500, 300).
@@ -448,7 +498,7 @@ mod tests {
         let displays = vec![retina_main(), side_1x()];
         let frames = vec![frame_for(&displays[0], 9_000_000)];
         let job = click_job(1400.0, 300.0, displays, frames);
-        let error = build_packet(&job, &ResolvedMetadata::default()).unwrap_err();
+        let error = assemble(&job, &ResolvedMetadata::default()).unwrap_err();
         assert_eq!(error, PacketBuildError::NoRetainedFrame { display_id: 2 });
     }
 
@@ -464,7 +514,48 @@ mod tests {
             window: Some(window(RectPt::new(5000.0, 50.0, 400.0, 300.0))),
             ..Default::default()
         };
-        let packet = build_packet(&job, &meta).unwrap();
+        let packet = assemble(&job, &meta).unwrap();
         assert_eq!(decode_size(&packet.shots.window), (2000, 1200));
+    }
+
+    #[test]
+    fn an_explicit_post_event_frame_feeds_all_three_shots_with_zero_age() {
+        // The worker hands `build_packet` a post-event frame for a
+        // key-down (DEC-002): every shot decodes from that frame's
+        // pixels, not the pinned frame's, and `frame_age_ms` saturates
+        // to 0 because the frame is later than the event.
+        let display = DisplayGeometry {
+            id: 1,
+            frame_pt: RectPt::new(0.0, 0.0, 40.0, 30.0),
+            scale: 1.0,
+        };
+        let pinned = frame_for(&display, 9_000_000); // pixels: 120
+        let job = key_job(vec![display.clone()], vec![pinned]);
+        let post = Arc::new(FrameData {
+            display: display.clone(),
+            width_px: 40,
+            height_px: 30,
+            bytes_per_row: 160,
+            ts_ns: job.ts_ns + 60_000_000,
+            pixels: [7_u8, 8, 9, 255].repeat(40 * 30),
+        });
+        let meta = ResolvedMetadata {
+            window: Some(window(RectPt::new(4.0, 4.0, 20.0, 20.0))),
+            ..Default::default()
+        };
+        let selected = SelectedFrame {
+            display,
+            frame: post,
+        };
+        let packet = build_packet(&job, &meta, &selected).unwrap();
+
+        assert_eq!(packet.frame_age_ms, 0);
+        for shot in [&packet.shots.full, &packet.shots.window, &packet.shots.element] {
+            let (_, _, rgb) = decode(shot);
+            // BGRA (7, 8, 9) decodes to RGB (9, 8, 7) in every shot.
+            assert_eq!(&rgb[..3], &[9, 8, 7], "shot pixels come from the post frame");
+        }
+        assert_eq!(decode_size(&packet.shots.full), (40, 30));
+        assert_eq!(decode_size(&packet.shots.window), (20, 20));
     }
 }

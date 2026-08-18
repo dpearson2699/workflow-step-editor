@@ -7,7 +7,9 @@
 //! the streams warm up (every display retains a first frame) before the
 //! event tap enables, so no event can arrive without a pre-event frame.
 //! Stop order enforces the `CapturePipeline::stop` quiescence contract:
-//! the tap and streams stop, the queue drains through the worker, and
+//! the tap stops (no new jobs), the queue drains through the worker
+//! while the streams keep publishing (so an accepted key-down can finish
+//! its bounded post-event wait, DEC-002), then the streams stop, and
 //! only then does the emitter guard close — so `stop` never returns
 //! while a packet emission is still in flight.
 
@@ -16,8 +18,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use crate::capture::broker::FrameBroker;
+use crate::capture::broker::{FrameBroker, POST_EVENT_FRAME_WINDOW_NS};
 use crate::capture::health::EmitterGuard;
+use crate::capture::hostclock::host_now_ns;
 use crate::capture::macos::{DisplayReconfigurationObserver, MacosResolver, MacosStreamBackend};
 use crate::capture::queue::{
     capture_queue, CaptureJob, EnqueueError, JobSender, QueueDepth, RawInput, queue_capacity,
@@ -25,13 +28,39 @@ use crate::capture::queue::{
 };
 use crate::capture::streams::{FailureSink, StreamManager};
 use crate::capture::tap::{start_event_tap, TapEvent, TapHandle, TapInput, TapHealthProbe};
-use crate::capture::worker::run_capture_worker;
+use crate::capture::worker::{run_capture_worker, WaitRuntime};
 use crate::recording::pipeline::{CapturePipeline, PacketEmitter};
 
 /// How long to wait for every display to deliver its first frame.
 const WARM_UP_TIMEOUT: Duration = Duration::from_secs(8);
 /// The tap-health poll interval.
 const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(250);
+/// How often the worker re-queries the broker during a key-down's
+/// bounded post-event wait (DEC-002).
+const POST_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(5);
+
+/// The production wait runtime for the worker's key-down post-event
+/// wait: the mach host clock (the event and frame timestamp domain),
+/// a plain thread sleep, the DEC-002 window, and a short poll.
+struct HostWaitRuntime;
+
+impl WaitRuntime for HostWaitRuntime {
+    fn now_ns(&mut self) -> u64 {
+        host_now_ns()
+    }
+
+    fn wait_for(&mut self, duration: Duration) {
+        std::thread::sleep(duration);
+    }
+
+    fn window_ns(&self) -> u64 {
+        POST_EVENT_FRAME_WINDOW_NS
+    }
+
+    fn poll_interval(&self) -> Duration {
+        POST_EVENT_POLL_INTERVAL
+    }
+}
 
 /// The production macOS capture pipeline. One instance serves one
 /// recording session.
@@ -97,13 +126,21 @@ impl CapturePipeline for MacosCapturePipeline {
         let (job_tx, job_rx) = capture_queue(capacity);
         let depth = job_tx.depth();
 
-        // 4. The single ordered capture worker.
+        // 4. The single ordered capture worker. It shares the live
+        //    broker for the key-down post-event query (DEC-002).
         let worker = {
             let guard = guard.clone();
+            let broker = broker.clone();
             match std::thread::Builder::new()
                 .name("capture-worker".into())
                 .spawn(move || {
-                    run_capture_worker(job_rx, Box::new(MacosResolver::new()), guard);
+                    run_capture_worker(
+                        job_rx,
+                        Box::new(MacosResolver::new()),
+                        broker,
+                        HostWaitRuntime,
+                        guard,
+                    );
                 }) {
                 Ok(worker) => worker,
                 Err(error) => {
@@ -165,21 +202,24 @@ impl CapturePipeline for MacosCapturePipeline {
         // probe must quiesce before the tap thread joins (see the
         // `TapHealthProbe` safety contract).
         running.health.stop();
-        // Stop input and frame sources: no new jobs are enqueued.
+        // Stop the input source: no new jobs are enqueued. Stopping the
+        // tap drops the only job sender.
         if let Some(tap) = running.tap.take() {
             tap.stop();
         }
         if let Some(observer) = running.display_observer.take() {
             drop(observer);
         }
-        if let Some(manager) = running.stream_manager.take() {
-            manager.stop();
-        }
-        // Stopping the tap dropped the only job sender; the worker
-        // drains the queue and exits. Join it so every accepted packet
-        // is emitted before the guard closes.
+        // Drain the worker while the streams still publish: an accepted
+        // key-down can finish its bounded post-event wait (DEC-002).
+        // Join it so every accepted packet is emitted before the guard
+        // closes.
         if let Some(worker) = running.worker.take() {
             let _ = worker.join();
+        }
+        // Then stop the frame sources.
+        if let Some(manager) = running.stream_manager.take() {
+            manager.stop();
         }
         // Quiesce: block until no emitter call is in flight, then drop
         // the emitter. `stop` cannot return while a packet emission is

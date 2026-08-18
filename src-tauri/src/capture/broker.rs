@@ -1,10 +1,14 @@
-//! The frame-set broker: timestamped pre-event frames per display on
-//! one monotonic host clock.
+//! The frame-set broker: timestamped frames per display on one
+//! monotonic host clock.
 //!
 //! Streams publish frames; the tap callback pins an immutable
 //! eligible-frame snapshot for the event's timestamp before the event
 //! is enqueued, so a delayed worker can never lose the required
-//! predecessor frame when the live broker advances (ADR 0001).
+//! predecessor frame when the live broker advances (ADR 0001). The
+//! capture worker additionally queries the live broker for a key-down's
+//! post-event frame inside the bounded window
+//! `(event_ts, event_ts + POST_EVENT_FRAME_WINDOW_NS]` (ADR 0001
+//! amendment, DEC-002); the pinned snapshot stays the fallback.
 //!
 //! Display sets are published per generation and replace each other
 //! atomically under the broker lock. Frames retained for a display
@@ -16,6 +20,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::capture::geometry::DisplayGeometry;
+
+/// The bounded post-event window for key-down frame selection
+/// (DEC-002): a key-down step uses the oldest retained frame whose
+/// timestamp lies in `(event_ts, event_ts + 250 ms]`, else its pinned
+/// pre-event frame. About 2.5 minimum frame intervals at ~10 fps.
+pub const POST_EVENT_FRAME_WINDOW_NS: u64 = 250_000_000;
 
 /// One captured frame: the pixels plus the display geometry they were
 /// captured under (which may be an older generation than the current
@@ -59,6 +69,20 @@ impl RetainedFrames {
             }
         }
         self.previous.clone().or_else(|| self.newest.clone())
+    }
+
+    /// The retained frame with the smallest timestamp inside
+    /// `(event_ts_ns, deadline_ns]`, or `None`. Both retained slots are
+    /// compared (`previous` is not assumed older than `newest`). A
+    /// frame equal to the event is not eligible; a frame equal to the
+    /// deadline is.
+    fn oldest_in_window(&self, event_ts_ns: u64, deadline_ns: u64) -> Option<Arc<FrameData>> {
+        [&self.newest, &self.previous]
+            .into_iter()
+            .flatten()
+            .filter(|frame| frame.ts_ns > event_ts_ns && frame.ts_ns <= deadline_ns)
+            .min_by_key(|frame| frame.ts_ns)
+            .cloned()
     }
 }
 
@@ -171,6 +195,22 @@ impl FrameBroker {
             displays: self.displays.clone(),
             frames,
         }
+    }
+
+    /// The key-down post-event query (DEC-002): the oldest retained
+    /// frame on `display_id` whose timestamp lies in
+    /// `(event_ts_ns, deadline_ns]`, or `None` when the display retains
+    /// no such frame. Pure and constant-bounded; the caller owns the
+    /// bounded wait and never holds the broker lock while waiting.
+    pub fn post_event_frame(
+        &self,
+        display_id: u32,
+        event_ts_ns: u64,
+        deadline_ns: u64,
+    ) -> Option<Arc<FrameData>> {
+        self.frames
+            .get(&display_id)
+            .and_then(|retained| retained.oldest_in_window(event_ts_ns, deadline_ns))
     }
 }
 
@@ -318,5 +358,79 @@ mod tests {
     fn an_empty_display_set_is_never_warm() {
         let broker = FrameBroker::new();
         assert!(!broker.is_warm());
+    }
+
+    // --- Key-down post-event window query (DEC-002) ---
+
+    const EVENT: u64 = 1_000_000_000;
+    const DEADLINE: u64 = EVENT + POST_EVENT_FRAME_WINDOW_NS;
+
+    #[test]
+    fn post_event_query_takes_the_oldest_of_two_in_window_frames() {
+        let mut broker = broker_with(vec![1]);
+        broker.publish_frame(frame(1, EVENT + 100_000_000));
+        broker.publish_frame(frame(1, EVENT + 200_000_000));
+
+        let selected = broker.post_event_frame(1, EVENT, DEADLINE).unwrap();
+        assert_eq!(selected.ts_ns, EVENT + 100_000_000);
+    }
+
+    #[test]
+    fn post_event_query_excludes_a_frame_equal_to_the_event() {
+        // The pinned pre-event rule treats equality as "not later"; the
+        // post-event window is open at the event, so the same frame is
+        // never both the pre-event and the post-event candidate.
+        let mut broker = broker_with(vec![1]);
+        broker.publish_frame(frame(1, EVENT));
+        assert!(broker.post_event_frame(1, EVENT, DEADLINE).is_none());
+    }
+
+    #[test]
+    fn post_event_query_includes_a_frame_equal_to_the_deadline() {
+        let mut broker = broker_with(vec![1]);
+        broker.publish_frame(frame(1, DEADLINE));
+        assert_eq!(
+            broker.post_event_frame(1, EVENT, DEADLINE).unwrap().ts_ns,
+            DEADLINE,
+        );
+    }
+
+    #[test]
+    fn post_event_query_ignores_frames_after_the_deadline() {
+        // A late worker must not pick a frame taken after the window,
+        // even when it is the only retained frame later than the event.
+        let mut broker = broker_with(vec![1]);
+        broker.publish_frame(frame(1, EVENT - 50_000_000));
+        broker.publish_frame(frame(1, DEADLINE + 1));
+        assert!(broker.post_event_frame(1, EVENT, DEADLINE).is_none());
+    }
+
+    #[test]
+    fn post_event_query_is_per_display() {
+        let mut broker = broker_with(vec![1, 2]);
+        broker.publish_frame(frame(1, EVENT - 10_000_000));
+        broker.publish_frame(frame(2, EVENT + 30_000_000));
+        assert!(broker.post_event_frame(1, EVENT, DEADLINE).is_none());
+        assert_eq!(
+            broker.post_event_frame(2, EVENT, DEADLINE).unwrap().ts_ns,
+            EVENT + 30_000_000,
+        );
+        // A display that retains nothing at all yields `None`, too.
+        assert!(broker.post_event_frame(3, EVENT, DEADLINE).is_none());
+    }
+
+    #[test]
+    fn post_event_query_leaves_the_pinned_click_selection_unchanged() {
+        // The pre-event snapshot for the same event still pins the
+        // newest frame not later than the event (AC-002 click rule).
+        let mut broker = broker_with(vec![1]);
+        broker.publish_frame(frame(1, EVENT - 10_000_000));
+        broker.publish_frame(frame(1, EVENT + 40_000_000));
+        let snapshot = broker.snapshot(EVENT);
+        assert_eq!(snapshot.frame_for(1).unwrap().ts_ns, EVENT - 10_000_000);
+        assert_eq!(
+            broker.post_event_frame(1, EVENT, DEADLINE).unwrap().ts_ns,
+            EVENT + 40_000_000,
+        );
     }
 }
