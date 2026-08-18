@@ -378,8 +378,17 @@ impl JsonWorkflowStore {
         remove_dir_all: impl FnOnce(&Path) -> std::io::Result<()>,
     ) -> Result<(), StoreError> {
         match fs::symlink_metadata(dir) {
-            // Already gone counts as removed (ADR 0003).
-            Err(_) => return Ok(()),
+            // Already gone counts as removed (ADR 0003). Only `NotFound`
+            // proves absence; any other stat failure (permission, I/O,
+            // symlink loop) must not report success over possibly
+            // retained data.
+            Err(error) if proven_absent(&error) => return Ok(()),
+            Err(source) => {
+                return Err(StoreError::Io {
+                    context: "stat workflow folder".to_owned(),
+                    source,
+                })
+            }
             Ok(metadata) => {
                 if metadata.file_type().is_symlink() {
                     return Err(StoreError::SymlinkRejected(dir.to_owned()));
@@ -404,11 +413,21 @@ impl JsonWorkflowStore {
         // per-child path traversal reopens the substitution window.
         let removal = remove_dir_all(dir);
 
-        // Success is directory absence, never the call's own result.
-        if fs::symlink_metadata(dir).is_err() {
-            return Ok(());
+        // Success is PROVEN directory absence, never the call's own
+        // result: only a `NotFound` stat is proof. An unreadable stat
+        // (permission, I/O, symlink loop) falls through to the failure
+        // report so no remnant hides behind a success (ADR 0003).
+        match fs::symlink_metadata(dir) {
+            Err(error) if proven_absent(&error) => return Ok(()),
+            _ => {}
         }
-        if manifest_cache.is_some() && fs::symlink_metadata(&manifest_path).is_err() {
+        if manifest_cache.is_some()
+            && fs::symlink_metadata(&manifest_path).is_err()
+            // Re-validate the target right before the restore write:
+            // every write in this module refuses a substituted
+            // (symlinked) location, including this one.
+            && require_real_dir(dir, || StoreError::NotFound(String::new())).is_ok()
+        {
             // Best effort: the failure below is reported either way.
             let _ = self.write_via_temp(
                 dir,
@@ -422,7 +441,7 @@ impl JsonWorkflowStore {
                 source,
             },
             Ok(()) => StoreError::Io {
-                context: "workflow folder still present after removal".to_owned(),
+                context: "workflow folder not proven absent after removal".to_owned(),
                 source: std::io::Error::from(std::io::ErrorKind::DirectoryNotEmpty),
             },
         })
@@ -677,8 +696,16 @@ impl WorkflowStore for JsonWorkflowStore {
     fn remove(&self, workflow_id: &str) -> Result<(), StoreError> {
         validate_workflow_id(workflow_id)?;
         match fs::symlink_metadata(&self.root) {
-            // A missing root stores nothing: already removed.
-            Err(_) => return Ok(()),
+            // A missing root stores nothing: already removed. Only
+            // `NotFound` proves that; other stat failures must not
+            // report success over a possibly present store.
+            Err(error) if proven_absent(&error) => return Ok(()),
+            Err(source) => {
+                return Err(StoreError::Io {
+                    context: "stat workflow root".to_owned(),
+                    source,
+                })
+            }
             Ok(metadata) => {
                 if metadata.file_type().is_symlink() {
                     return Err(StoreError::SymlinkRejected(self.root.clone()));
@@ -752,6 +779,14 @@ fn validate_event_id(id: &str) -> Result<(), StoreError> {
     } else {
         Err(StoreError::InvalidEventId(id.to_owned()))
     }
+}
+
+/// True only when a stat error proves the path is absent (ADR 0003):
+/// `NotFound` is proof; permission, I/O, and symlink-loop failures are
+/// not, and the caller must report failure instead of hiding a
+/// possibly retained remnant behind a success result.
+fn proven_absent(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::NotFound
 }
 
 /// Requires `path` to be an existing real directory; symlinks are
@@ -1520,6 +1555,85 @@ mod tests {
         store.remove(&id).unwrap();
         assert!(!dir.exists());
         assert_eq!(store.list().unwrap().len(), 0);
+    }
+
+    /// Sets the mode of `path`; restores are the caller's duty.
+    fn set_mode(path: &Path, mode: u32) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+    }
+
+    /// ADR 0003: only `NotFound` proves absence. A stat that fails for
+    /// another reason (here `EACCES`) must report failure, not success
+    /// over possibly retained keystroke data.
+    #[test]
+    fn an_unreadable_stat_is_not_absence() {
+        // Pre-check: the workflow folder cannot be stat'ed because the
+        // root denies search permission.
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, _) = created(&store, "w");
+        set_mode(temp.path(), 0o000);
+        let result = store.remove(&id);
+        set_mode(temp.path(), 0o755);
+        let error = result.unwrap_err();
+        assert!(matches!(error, StoreError::Io { .. }), "got {error}");
+        assert_eq!(store.list().unwrap().len(), 1, "workflow stays listed");
+
+        // Root check: an unreadable root is not a missing root.
+        let parent = temp.path().join("p");
+        let root = parent.join("root");
+        fs::create_dir_all(&root).unwrap();
+        set_mode(&parent, 0o000);
+        let result = store_in(&root).remove(&id);
+        set_mode(&parent, 0o755);
+        let error = result.unwrap_err();
+        assert!(matches!(error, StoreError::Io { .. }), "got {error}");
+    }
+
+    #[test]
+    fn a_removal_leaving_an_unverifiable_directory_reports_failure() {
+        // The removal call fails AND leaves the directory unverifiable
+        // (root search revoked mid-call): absence is unproven, so the
+        // result must be failure even though the post-stat errs.
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, _) = created(&store, "w");
+        let dir = temp.path().join(&id);
+        let result = store.remove_with(&dir, |_| {
+            set_mode(temp.path(), 0o000);
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        });
+        set_mode(temp.path(), 0o755);
+        let error = result.unwrap_err();
+        assert!(matches!(error, StoreError::Io { .. }), "got {error}");
+        assert_eq!(store.list().unwrap().len(), 1, "workflow stays listed");
+    }
+
+    /// The partial-failure manifest restore re-validates its target: a
+    /// directory substituted with a symlink during the removal window
+    /// must not receive the restored manifest bytes.
+    #[test]
+    fn restore_refuses_a_substituted_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_in(temp.path());
+        let (id, _) = created(&store, "w");
+        let dir = temp.path().join(&id);
+        let elsewhere = temp.path().join("elsewhere");
+        fs::create_dir(&elsewhere).unwrap();
+
+        let error = store
+            .remove_with(&dir, |dir| {
+                fs::remove_dir_all(dir)?;
+                symlink(&elsewhere, dir).unwrap();
+                Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+            })
+            .unwrap_err();
+        assert!(matches!(error, StoreError::Io { .. }), "got {error}");
+        assert!(
+            !elsewhere.join(MANIFEST_FILE).exists(),
+            "no manifest may be written through the substituted link",
+        );
     }
 
     #[test]

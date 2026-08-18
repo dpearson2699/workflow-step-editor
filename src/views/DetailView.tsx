@@ -73,7 +73,10 @@ function DeleteWorkflowDialog(props: {
         aria-modal="true"
         aria-label={`Delete workflow ${props.name}`}
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
+          // While the deletion is in flight the dialog must stay open
+          // (like the disabled Cancel button), so a failure can still
+          // surface inside it (AC-005).
+          if (event.key === "Escape" && !props.deleting) {
             props.onCancel();
           }
         }}
@@ -155,14 +158,29 @@ export function DetailView(props: DetailViewProps) {
     setSteps(next);
   }
 
+  // The selection mirror defeats the stale-closure hazard across the
+  // deleteStep await, exactly like stepsRef does for the list.
+  const selectedIdRef = useRef<string | null>(null);
+  function commitSelected(next: string | null): void {
+    selectedIdRef.current = next;
+    setSelectedId(next);
+  }
+
+  // The latest name and whether the user edited it; the load callback
+  // must not clobber an edit typed while the load was in flight.
+  const nameRef = useRef(props.initialName);
+  const nameEditedRef = useRef(false);
+
+  // Statuses mirror for handlers that must read the current pending
+  // set (the deletion-failure recovery below).
+  const statusesRef = useRef<ReadonlyMap<string, SaveStatus>>(new Map());
   const autosaveRef = useRef<Autosave | null>(null);
   if (autosaveRef.current === null) {
     autosaveRef.current = createAutosave((key, status) => {
-      setStatuses((previous) => {
-        const next = new Map(previous);
-        next.set(key, status);
-        return next;
-      });
+      const next = new Map(statusesRef.current);
+      next.set(key, status);
+      statusesRef.current = next;
+      setStatuses(next);
     });
   }
   const autosave = autosaveRef.current;
@@ -175,11 +193,16 @@ export function DetailView(props: DetailViewProps) {
         if (stale) {
           return;
         }
-        setName(loaded.manifest.name);
+        // A rename typed while this load was in flight wins over the
+        // older manifest name.
+        if (!nameEditedRef.current) {
+          nameRef.current = loaded.manifest.name;
+          setName(loaded.manifest.name);
+        }
         stepsRef.current = loaded.manifest.steps;
         setSteps(loaded.manifest.steps);
         setEvents(loaded.events);
-        setSelectedId(loaded.manifest.steps[0]?.id ?? null);
+        commitSelected(loaded.manifest.steps[0]?.id ?? null);
       })
       .catch((caught) => {
         if (!stale) {
@@ -249,7 +272,11 @@ export function DetailView(props: DetailViewProps) {
           setShotUrls(new Map(urlCache.current));
         })
         .catch(() => {
-          // The labeled placeholder stays for this variant.
+          // The labeled placeholder stays for this variant. Un-cache
+          // the key so re-selecting the step retries a transiently
+          // failed read instead of pinning the placeholder for the
+          // whole session.
+          requestedShots.current.delete(key);
         });
     }
   }, [api, workflowId, selectedEventId]);
@@ -279,6 +306,8 @@ export function DetailView(props: DetailViewProps) {
   }
 
   function editName(value: string): void {
+    nameRef.current = value;
+    nameEditedRef.current = true;
     setName(value);
     const trimmed = value.trim();
     if (trimmed === "") {
@@ -291,13 +320,22 @@ export function DetailView(props: DetailViewProps) {
     );
   }
 
+  // In-flight step deletions; a re-entrant click (double-click on ✕)
+  // must not send a second request that fails with StepNotFound.
+  const deletingSteps = useRef(new Set<string>());
   async function deleteStep(stepId: string): Promise<void> {
+    if (deletingSteps.current.has(stepId)) {
+      return;
+    }
+    deletingSteps.current.add(stepId);
     setActionError(null);
     try {
       await api.deleteStep(workflowId, stepId);
     } catch (caught) {
       setActionError(`Could not delete step: ${String(caught)}`);
       return;
+    } finally {
+      deletingSteps.current.delete(stepId);
     }
     // The deleted step blocks its stale queued updates.
     autosave.block(stepKey(stepId));
@@ -305,9 +343,12 @@ export function DetailView(props: DetailViewProps) {
     const index = previous.findIndex((step) => step.id === stepId);
     const next = previous.filter((step) => step.id !== stepId);
     commitSteps(next);
-    if (selectedId === stepId) {
+    // Reconcile against the LATEST selection, not the one captured when
+    // the deletion started: the user may have selected another row (or
+    // this row) during the request.
+    if (selectedIdRef.current === stepId) {
       const fallback = next[Math.min(Math.max(index, 0), next.length - 1)];
-      setSelectedId(fallback?.id ?? null);
+      commitSelected(fallback?.id ?? null);
     }
   }
 
@@ -315,7 +356,9 @@ export function DetailView(props: DetailViewProps) {
     setDeleteError(null);
     setDeleting(true);
     // Invalidate the autosave generation before deletion: stale queued
-    // completions from the removed workflow are ignored.
+    // completions from the removed workflow are ignored. Keep the
+    // pending set so a FAILED deletion can re-arm it below.
+    const pending = statusesRef.current;
     autosave.invalidate();
     api.deleteWorkflow(workflowId).then(
       () => {
@@ -324,6 +367,44 @@ export function DetailView(props: DetailViewProps) {
       (caught: unknown) => {
         setDeleting(false);
         setDeleteError(String(caught));
+        // The workflow still exists, but the invalidation dropped its
+        // queued and in-flight saves. Re-send the current local value
+        // of every key that had unsettled work so no edit is silently
+        // lost and no indicator sticks on "Saving…".
+        const cleared = new Map<string, SaveStatus>();
+        statusesRef.current = cleared;
+        setStatuses(cleared);
+        for (const [key, status] of pending) {
+          if (status.state === "idle") {
+            continue;
+          }
+          if (key === WORKFLOW_KEY) {
+            const trimmed = nameRef.current.trim();
+            if (trimmed !== "") {
+              autosave.schedule(WORKFLOW_KEY, () =>
+                api.renameWorkflow(workflowId, trimmed),
+              );
+            }
+            continue;
+          }
+          const stepId = key.startsWith("step:")
+            ? key.slice("step:".length)
+            : null;
+          const step =
+            stepId === null
+              ? undefined
+              : stepsRef.current.find((entry) => entry.id === stepId);
+          if (stepId !== null && step !== undefined) {
+            const patch = {
+              title: step.title,
+              description: step.description,
+              classification: step.classification,
+            };
+            autosave.schedule(stepKey(stepId), () =>
+              api.updateStep(workflowId, stepId, patch),
+            );
+          }
+        }
       },
     );
   }
@@ -383,7 +464,7 @@ export function DetailView(props: DetailViewProps) {
                     <button
                       type="button"
                       className="step-row-open"
-                      onClick={() => setSelectedId(step.id)}
+                      onClick={() => commitSelected(step.id)}
                     >
                       <span className="step-index">{index + 1}</span>
                       <span

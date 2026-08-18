@@ -215,6 +215,29 @@ describe("detail view rendering", () => {
     expect(await screen.findByAltText("element screenshot")).toBeTruthy();
   });
 
+  it("retries a transiently failed screenshot read on reselection", async () => {
+    let fail = true;
+    const readScreenshot = vi.fn(async () => {
+      if (fail) {
+        throw new Error("transient read failure");
+      }
+      return new Uint8Array([1]);
+    });
+    await renderDetail({ readScreenshot });
+    await waitFor(() => expect(readScreenshot).toHaveBeenCalledTimes(3));
+    expect(screen.getByText("No full screenshot")).toBeTruthy();
+
+    // The failed keys were un-cached: selecting another step and
+    // returning retries the reads instead of pinning the placeholder.
+    fail = false;
+    fireEvent.click(screen.getByText("Press Cmd+S — TextEdit"));
+    fireEvent.click(screen.getByText('Click "OK" — TextEdit'));
+    await waitFor(() =>
+      expect(screen.queryByText("No full screenshot")).toBeNull(),
+    );
+    expect(screen.getByAltText("full screenshot")).toBeTruthy();
+  });
+
   it("renders the metadata grid for both element sources", async () => {
     await renderDetail();
     const pane = screen.getByRole("region", { name: "Step detail" });
@@ -364,6 +387,35 @@ describe("header rename", () => {
     });
   });
 
+  it("keeps a name typed while the initial load is in flight", async () => {
+    const load = deferred<LoadedWorkflow>();
+    const renameWorkflow = vi.fn(async () => {});
+    const api = apiWith({ getWorkflow: () => load.promise, renameWorkflow });
+    render(
+      <DetailView
+        api={api}
+        workflowId={WORKFLOW_ID}
+        initialName="Approve invoice"
+        onBack={() => {}}
+        onDeleted={() => {}}
+      />,
+    );
+
+    const input = screen.getByRole("textbox", {
+      name: "Workflow name",
+    }) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Renamed early" } });
+
+    await act(async () => {
+      load.resolve(workflowFixture());
+    });
+    // The older manifest name must not clobber the newer local edit.
+    expect(input.value).toBe("Renamed early");
+    expect(renameWorkflow).toHaveBeenCalledWith(WORKFLOW_ID, "Renamed early");
+    // The rest of the load still landed.
+    expect(screen.getByText('Click "OK" — TextEdit')).toBeTruthy();
+  });
+
   it("surfaces a rename failure and blocks an empty name locally", async () => {
     const renameWorkflow = vi
       .fn()
@@ -418,6 +470,43 @@ describe("step deletion", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Could not delete step");
     expect(screen.getByText("Press Cmd+S — TextEdit")).toBeTruthy();
+  });
+
+  it("keeps a selection made while a step deletion is in flight", async () => {
+    const removal = deferred();
+    const deleteStep = vi.fn(() => removal.promise);
+    await renderDetail({ deleteStep });
+
+    // step_0001 is selected; delete it, then select step_0003 before
+    // the backend responds.
+    fireEvent.click(screen.getByRole("button", { name: "Delete step 1" }));
+    fireEvent.click(screen.getByText("Click at (512, 384)"));
+    await act(async () => {
+      removal.resolve();
+    });
+
+    // The newer selection survives the completed deletion; the pane is
+    // not stranded on the removed step.
+    const title = screen.getByRole("textbox", {
+      name: "Step title",
+    }) as HTMLInputElement;
+    expect(title.value).toBe("Click at (512, 384)");
+  });
+
+  it("ignores a second delete click for the same step while one is in flight", async () => {
+    const removal = deferred();
+    const deleteStep = vi.fn(() => removal.promise);
+    await renderDetail({ deleteStep });
+
+    const control = screen.getByRole("button", { name: "Delete step 1" });
+    fireEvent.click(control);
+    fireEvent.click(control);
+    await act(async () => {
+      removal.resolve();
+    });
+
+    expect(deleteStep).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Could not delete step/)).toBeNull();
   });
 
   it("blocks stale queued updates for a deleted step", async () => {
@@ -492,6 +581,63 @@ describe("workflow deletion", () => {
     });
     expect(updateStep).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/workflow not found/)).toBeNull();
+  });
+
+  it("ignores Escape while the deletion runs and still surfaces its failure", async () => {
+    const removal = deferred();
+    const deleteWorkflow = vi.fn(() => removal.promise);
+    await renderDetail({ deleteWorkflow });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Workflow" }));
+    const dialog = screen.getByRole("alertdialog");
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+
+    await act(async () => {
+      removal.reject(
+        new Error("storage error: could not access the workflow data"),
+      );
+    });
+    expect(
+      within(screen.getByRole("alertdialog")).getByRole("alert").textContent,
+    ).toContain("could not access the workflow data");
+
+    // Once the deletion settled, Escape cancels again.
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Escape" });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("re-sends dropped autosaves when the deletion fails", async () => {
+    const firstSave = deferred();
+    const updateStep = vi.fn(() => firstSave.promise);
+    const removal = deferred();
+    const deleteWorkflow = vi.fn(() => removal.promise);
+    await renderDetail({ updateStep, deleteWorkflow });
+
+    const title = screen.getByRole("textbox", { name: "Step title" });
+    fireEvent.change(title, { target: { value: "First" } });
+    fireEvent.change(title, { target: { value: "Final title" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Workflow" }));
+    await act(async () => {
+      removal.reject(new Error("workflow is recording or stopping"));
+    });
+
+    // The latest local trio is re-sent for the key whose save the
+    // invalidation dropped.
+    expect(updateStep).toHaveBeenCalledTimes(2);
+    expect(updateStep).toHaveBeenLastCalledWith(WORKFLOW_ID, "step_0001", {
+      title: "Final title",
+      description: "",
+      classification: "click",
+    });
+    await act(async () => {
+      firstSave.resolve();
+    });
+    // No indicator sticks on "Saving…" after the re-sent save settles.
+    expect(screen.queryByText("Saving…")).toBeNull();
   });
 
   it("keeps the workflow and surfaces the error when deletion fails", async () => {
