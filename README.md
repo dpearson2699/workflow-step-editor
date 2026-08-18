@@ -8,7 +8,8 @@ module; the capture pipeline builds on it.
 
 - macOS. The application is macOS-only; the capture backend uses CGEventTap,
   ScreenCaptureKit, and the Accessibility API.
-- Node.js 20.19+ (or 22.12+) and npm.
+- Node.js 22.22+, 24.15+, or 26+ and npm (the jsdom test harness sets
+  this floor).
 - Rust (stable) with Cargo.
 - Xcode Command Line Tools.
 
@@ -18,6 +19,13 @@ module; the capture pipeline builds on it.
 npm install
 npm run tauri dev     # run the app in development mode
 npm run tauri build   # build the signed release app
+```
+
+## Tests
+
+```sh
+npm test                       # frontend component tests (vitest + jsdom)
+(cd src-tauri && cargo test)   # backend tests
 ```
 
 The built app lands at
