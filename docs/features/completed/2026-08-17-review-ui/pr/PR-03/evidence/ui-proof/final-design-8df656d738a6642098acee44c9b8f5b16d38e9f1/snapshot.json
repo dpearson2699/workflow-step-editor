@@ -1,0 +1,14 @@
+{
+  "schema": "project-ui-proof",
+  "source": "project_ui_adapter",
+  "taskStage": "final_orchestrated_pr",
+  "sliceId": "PR-03",
+  "identityKind": "head_tree",
+  "identity": "8df656d738a6642098acee44c9b8f5b16d38e9f1",
+  "automatedAcceptanceId": "AC-004",
+  "proofTarget": "stop-recording-banner",
+  "observation": {
+    "kind": "displayed_value",
+    "value": "Final design acceptance for the review-UI capability: the user ran the full AC-001 gate loop on the signed build (record across two apps with live streaming rows under the Stop banner, stop, draft review, save, reopen, edit title/description/classification, step delete, reveal in Finder, hard delete through the confirmation). The one reported design issue (Reveal/chevron overlap) was fixed in d62c51f3 and visually verified on the signed rebuild (row-hover screenshot: Reveal fully visible beside the chevron with clear spacing). The user then explicitly directed: no further review pass needed, make the fix and merge \u2014 recorded as the human confirmation of the final design gate. The two capture-domain observations were routed to the capture capability (issue #38 and ADR-0001 semantics) and do not bear on the review-UI direction."
+  }
+}

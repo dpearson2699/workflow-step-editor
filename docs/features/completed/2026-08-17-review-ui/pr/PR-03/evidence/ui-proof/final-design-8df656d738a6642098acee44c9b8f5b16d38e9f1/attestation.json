@@ -1,0 +1,13 @@
+{
+  "acceptanceId": "AC-001",
+  "bundleRevision": 94,
+  "finalSlice": "PR-03",
+  "headSha": "50c30d62007341b44717de84450a530cc2fed1bf",
+  "headTree": "8df656d738a6642098acee44c9b8f5b16d38e9f1",
+  "mode": "final-design-acceptance",
+  "prNumber": 36,
+  "receipt": "pr/PR-03/evidence/ui-proof/final-design-8df656d738a6642098acee44c9b8f5b16d38e9f1/ui-receipt.json",
+  "receiptSha256": "48725d4f6aa3a9c4ba136a3fcded1b79e377e5a2f6f9f2d832e7572f7cad1af7",
+  "schema": "project-ui-attestation",
+  "verdict": "PASS"
+}

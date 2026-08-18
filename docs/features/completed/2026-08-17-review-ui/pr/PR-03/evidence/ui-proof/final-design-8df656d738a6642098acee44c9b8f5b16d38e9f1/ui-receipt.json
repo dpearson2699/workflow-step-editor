@@ -1,0 +1,43 @@
+{
+  "schema": "project-ui-verification",
+  "gatePhase": "final_human_checkpoint",
+  "taskStage": "final_orchestrated_pr",
+  "workKind": "feature",
+  "workBundle": "docs/features/in_progress/2026-08-17-review-ui",
+  "sliceId": "PR-03",
+  "finalUiSliceId": "PR-03",
+  "prNumber": 36,
+  "headSha": "50c30d62007341b44717de84450a530cc2fed1bf",
+  "headTree": "8df656d738a6642098acee44c9b8f5b16d38e9f1",
+  "worktreeTree": null,
+  "verdict": "PASS",
+  "changeKind": "ui",
+  "acceptanceCriterion": "AC-004",
+  "proofTarget": "stop-recording-banner",
+  "evidenceSource": "local",
+  "adapterRequested": "macos-signed-app-ax-observer",
+  "adapterActual": "macos-signed-app-ax-observer",
+  "proofSessionId": "pr03-final-design-2026-08-18",
+  "builtFromCurrentWorktree": true,
+  "snapshotEvidence": [
+    {
+      "artifact": "docs/features/in_progress/2026-08-17-review-ui/pr/PR-03/evidence/ui-proof/final-design-8df656d738a6642098acee44c9b8f5b16d38e9f1/snapshot.json",
+      "sha256": "3df9c765f142994729fd8a273e7286ebb9bb192d904967b62971197984d8e29a",
+      "identityKind": "head_tree",
+      "identity": "8df656d738a6642098acee44c9b8f5b16d38e9f1"
+    }
+  ],
+  "screenshotPaths": [],
+  "testsReviewed": [
+    "npx vitest run at 50c30d62: 63 tests",
+    "cargo test (src-tauri) at 50c30d62: 150 tests"
+  ],
+  "automatedGates": {
+    "build": "PASS",
+    "tests": "PASS",
+    "snapshot": "PASS"
+  },
+  "humanConfirmation": "confirmed",
+  "sessionReleased": true,
+  "blocker": null
+}

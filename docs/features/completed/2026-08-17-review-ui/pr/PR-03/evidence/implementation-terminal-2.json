@@ -1,0 +1,23 @@
+{
+  "schema": "spec-work-implementation-terminal",
+  "workKind": "feature",
+  "workId": "2026-08-17-review-ui",
+  "workBundle": "2026-08-17-review-ui",
+  "implementationWorktree": "/Users/dpearson/repos/workflow-step-editor/.claude/worktrees/agent-a94d6fe2451de9a3e",
+  "sliceId": "PR-03",
+  "branch": "feat/pr-03-record-flow",
+  "baseSha": "02b255adfb6a9c70245f83c5925f6a12d2c45140",
+  "boundSha": "f693fa9640c764fffddd54a01949e385243cff01",
+  "taskType": "slice_implementation",
+  "attempt": 1,
+  "revisionEpoch": 2,
+  "threadId": "local_agent:a94d6fe2451de9a3e",
+  "outputHeadSha": "50c30d62007341b44717de84450a530cc2fed1bf",
+  "pr": 36,
+  "result": "SUCCEEDED",
+  "verificationVerdict": "PASS",
+  "verificationDigest": "0e26670bb69921ee8d8ce40103d3bfac431a23638adfe75cab7cb3ffbdb6b5bf",
+  "changedPathsDigest": "a0a458378495fa41f8fc165fbc0e450c36b40ef00526925fde29552c5bcc4b66",
+  "descendantQuiescenceVerdict": "PASS",
+  "descendantQuiescenceDigest": "84699d16da5cbe38b4c7c00781ab77b021e6b60578bb1983a9b8517828213b98"
+}
