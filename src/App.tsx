@@ -79,14 +79,19 @@ function useThumbnails(
   return urls;
 }
 
-function LandingContainer(props: {
+/** Exported for the container component test only. */
+export function LandingContainer(props: {
   api: ApiClient;
   onOpenWorkflow: (workflow: WorkflowSummary) => void;
 }) {
   const { api } = props;
   const [permissions, setPermissions] = useState<PermissionReport | null>(null);
   const [workflows, setWorkflows] = useState<WorkflowSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Mount-time load failures persist; user-action failures reset per
+  // action. Separate channels keep a permission request or reveal from
+  // clearing the workflow-load error while the list is still missing.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const thumbnails = useThumbnails(api, workflows);
 
   useEffect(() => {
@@ -100,7 +105,7 @@ function LandingContainer(props: {
       })
       .catch((caught) => {
         if (!stale) {
-          setError(String(caught));
+          setLoadError(String(caught));
         }
       });
     api
@@ -112,7 +117,7 @@ function LandingContainer(props: {
       })
       .catch((caught) => {
         if (!stale) {
-          setError(`Could not load workflows: ${String(caught)}`);
+          setLoadError(`Could not load workflows: ${String(caught)}`);
         }
       });
     return () => {
@@ -121,28 +126,28 @@ function LandingContainer(props: {
   }, [api]);
 
   async function requestPermission(kind: PermissionKind) {
-    setError(null);
+    setActionError(null);
     try {
       await api.requestPermission(kind);
       setPermissions(await api.checkPermissions());
     } catch (caught) {
-      setError(String(caught));
+      setActionError(String(caught));
     }
   }
 
   async function revealWorkflow(id: string) {
-    setError(null);
+    setActionError(null);
     try {
       await api.revealWorkflow(id);
     } catch (caught) {
-      setError(String(caught));
+      setActionError(String(caught));
     }
   }
 
   return (
     <LandingView
       workflows={workflows}
-      error={error}
+      error={actionError ?? loadError}
       permissions={permissions}
       thumbnails={thumbnails}
       onRequestPermission={(kind) => void requestPermission(kind)}

@@ -8,7 +8,8 @@ module; the capture pipeline builds on it.
 
 - macOS. The application is macOS-only; the capture backend uses CGEventTap,
   ScreenCaptureKit, and the Accessibility API.
-- Node.js 20.19+ (or 22.12+) and npm.
+- Node.js 22.22+, 24.15+, or 26+ and npm (the jsdom test harness sets
+  this floor).
 - Rust (stable) with Cargo.
 - Xcode Command Line Tools.
 

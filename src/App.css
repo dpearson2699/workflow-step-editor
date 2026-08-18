@@ -214,12 +214,14 @@ button {
   color: #aaa;
   padding: 5px 10px;
   font-size: 12px;
-  visibility: hidden;
+  /* Opacity (not visibility) keeps the control keyboard-focusable
+     while visually hidden, so :focus-visible can reveal it. */
+  opacity: 0;
 }
 
 .workflow-row:hover .row-reveal,
 .row-reveal:focus-visible {
-  visibility: visible;
+  opacity: 1;
 }
 
 /* ---------- Detail shell ---------- */
