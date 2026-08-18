@@ -1,0 +1,43 @@
+{
+  "schema": "project-ui-verification",
+  "gatePhase": "final_human_checkpoint",
+  "taskStage": "final_orchestrated_pr",
+  "workKind": "feature",
+  "workBundle": "docs/features/in_progress/2026-08-17-review-ui",
+  "sliceId": "PR-03",
+  "finalUiSliceId": "PR-03",
+  "prNumber": 36,
+  "headSha": "f693fa9640c764fffddd54a01949e385243cff01",
+  "headTree": "66e75bdce84271e7b85de86436731c68507c725b",
+  "worktreeTree": null,
+  "verdict": "BLOCKED",
+  "changeKind": "ui",
+  "acceptanceCriterion": "AC-004",
+  "proofTarget": "stop-recording-banner",
+  "evidenceSource": "local",
+  "adapterRequested": "macos-signed-app-ax-observer",
+  "adapterActual": "macos-signed-app-ax-observer",
+  "proofSessionId": "pr03-final-checkpoint-2026-08-18",
+  "builtFromCurrentWorktree": true,
+  "snapshotEvidence": [
+    {
+      "artifact": "docs/features/in_progress/2026-08-17-review-ui/pr/PR-03/evidence/ui-proof/final-checkpoint-66e75bdce84271e7b85de86436731c68507c725b/snapshot.json",
+      "sha256": "5f93b8989de77fd7a934add5f22fd4f852d98d7d1b95ad2a2ef0c4b307c49a5d",
+      "identityKind": "head_tree",
+      "identity": "66e75bdce84271e7b85de86436731c68507c725b"
+    }
+  ],
+  "screenshotPaths": [],
+  "testsReviewed": [
+    "npx vitest run at f693fa96: 62 tests",
+    "cargo test (src-tauri) at f693fa96: 150 tests"
+  ],
+  "automatedGates": {
+    "build": "PASS",
+    "tests": "PASS",
+    "snapshot": "PASS"
+  },
+  "humanConfirmation": "blocked",
+  "sessionReleased": true,
+  "blocker": "User-reported design issue at the final checkpoint: the hover Reveal-in-Finder control on landing rows overlaps the row chevron ('>'), visually colliding per the attached screenshot. Capture-domain observations (pre-event frame semantics, key-event element-crop quality) are excluded from this blocker and routed to the capture capability."
+}

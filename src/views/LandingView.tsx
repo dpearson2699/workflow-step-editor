@@ -131,6 +131,9 @@ export function LandingView(props: LandingViewProps) {
         )}
         {props.workflows !== null && props.workflows.length > 0 && (
           <ul className="workflow-list" aria-label="Workflows">
+            {/* Pinned prototype Home row order: open target, then the
+                hover-revealed Reveal control, then the chevron — three
+                flow siblings, so Reveal and the chevron never overlap. */}
             {props.workflows.map((workflow) => (
               <li className="workflow-row" key={workflow.id}>
                 <button
@@ -148,9 +151,6 @@ export function LandingView(props: LandingViewProps) {
                       {formatSummaryMeta(workflow)}
                     </span>
                   </span>
-                  <span className="row-chevron" aria-hidden="true">
-                    ›
-                  </span>
                 </button>
                 <button
                   type="button"
@@ -160,6 +160,9 @@ export function LandingView(props: LandingViewProps) {
                 >
                   ⌘ Reveal
                 </button>
+                <span className="row-chevron" aria-hidden="true">
+                  ›
+                </span>
               </li>
             ))}
           </ul>

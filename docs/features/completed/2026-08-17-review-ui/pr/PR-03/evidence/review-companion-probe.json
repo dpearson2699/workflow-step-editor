@@ -1,0 +1,21 @@
+{
+  "schema": "spec-work-task-observation",
+  "kind": "companion_probe",
+  "workKind": "feature",
+  "workId": "2026-08-17-review-ui",
+  "workBundle": "2026-08-17-review-ui",
+  "sliceId": "PR-03",
+  "role": "review",
+  "taskType": "slice_review",
+  "attempt": 1,
+  "launchMarker": "feature/PR-03/review/1",
+  "threadId": null,
+  "clientThreadId": null,
+  "branch": "feat/pr-03-record-flow",
+  "headSha": "04b4818fb9b2c8faa7775800cca2097e2aa28ad5",
+  "predicate": "gitnexus-pr-review available",
+  "priorAttempt": 0,
+  "priorThreadId": null,
+  "result": "AVAILABLE",
+  "observationEpoch": 18
+}

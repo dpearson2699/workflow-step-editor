@@ -142,6 +142,8 @@ function apiWith(overrides: Partial<ApiClient> = {}): ApiClient {
     deleteStep: async () => {},
     renameWorkflow: async () => {},
     deleteWorkflow: async () => {},
+    startRecording: async () => WORKFLOW_ID,
+    stopRecording: async () => WORKFLOW_ID,
     ...overrides,
   };
 }
@@ -694,5 +696,176 @@ describe("workflow deletion", () => {
     });
     expect(onDeleted).not.toHaveBeenCalled();
     expect(screen.getByText('Click "OK" — TextEdit')).toBeTruthy();
+  });
+});
+
+// Draft review (AC-004, DEC-002, DEC-005): the same detail view mounted
+// with the `draft` prop after a recording stops.
+
+/** The backend's default timestamp name already in the manifest. */
+const DEFAULT_NAME = "2026-08-16 22:31:05";
+
+function draftFixture(): LoadedWorkflow {
+  const loaded = workflowFixture();
+  return {
+    ...loaded,
+    manifest: { ...loaded.manifest, name: DEFAULT_NAME },
+  };
+}
+
+async function renderDraft(
+  overrides: Partial<ApiClient> = {},
+  options?: { failure?: string | null; onDeleted?: () => void; onBack?: () => void },
+) {
+  const api = apiWith({ getWorkflow: async () => draftFixture(), ...overrides });
+  render(
+    <DetailView
+      api={api}
+      workflowId={WORKFLOW_ID}
+      initialName=""
+      draft={{ failure: options?.failure ?? null }}
+      onBack={options?.onBack ?? (() => {})}
+      onDeleted={options?.onDeleted ?? (() => {})}
+    />,
+  );
+  await screen.findByText('Click "OK" — TextEdit');
+  return api;
+}
+
+describe("draft review", () => {
+  it("shows the draft badge with full editing and no rename input or Delete…", async () => {
+    await renderDraft();
+
+    expect(screen.getByText("draft")).toBeTruthy();
+    expect(screen.getByText(DEFAULT_NAME)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save…" })).toBeTruthy();
+    // Naming is the save ceremony: no header rename input, and the
+    // saved-workflow Delete… control belongs to non-draft mode.
+    expect(screen.queryByRole("textbox", { name: "Workflow name" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete…" })).toBeNull();
+    // Full editing stays available.
+    expect(screen.getByRole("textbox", { name: "Step title" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Classification" })).toBeTruthy();
+  });
+
+  it("pre-selects the manifest's default name in the naming dialog and exits draft only on rename success", async () => {
+    const renameWorkflow = vi.fn(async () => {});
+    await renderDraft({ renameWorkflow });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save…" }));
+    const input = screen.getByRole("textbox", {
+      name: "Recording name",
+    }) as HTMLInputElement;
+    // The manifest's existing default timestamp name, pre-selected for
+    // replacement; the frontend generates no separate timestamp.
+    expect(input.value).toBe(DEFAULT_NAME);
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(DEFAULT_NAME.length);
+
+    fireEvent.change(input, { target: { value: "  Approve invoice  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(renameWorkflow).toHaveBeenCalledWith(
+        WORKFLOW_ID,
+        "Approve invoice",
+      );
+    });
+
+    // Draft exited: the dialog closed and the normal header returned
+    // with the saved name.
+    await waitFor(() => {
+      expect(screen.queryByText("draft")).toBeNull();
+    });
+    const nameInput = screen.getByRole("textbox", {
+      name: "Workflow name",
+    }) as HTMLInputElement;
+    expect(nameInput.value).toBe("Approve invoice");
+    expect(screen.getByRole("button", { name: "Delete…" })).toBeTruthy();
+  });
+
+  it("keeps draft state and the dialog error visible when the rename fails", async () => {
+    const renameWorkflow = vi.fn(async () => {
+      throw new Error("workflow is recording or stopping");
+    });
+    await renderDraft({ renameWorkflow });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => {
+      expect(within(dialog).getByRole("alert").textContent).toContain(
+        "workflow is recording or stopping",
+      );
+    });
+    // Still draft: the dialog is open and the badge stands.
+    expect(screen.getByText("draft")).toBeTruthy();
+    expect(
+      screen.getByRole("textbox", { name: "Recording name" }),
+    ).toBeTruthy();
+  });
+
+  it("discards behind a confirmation with Cancel as the default", async () => {
+    const deleteWorkflow = vi.fn(async () => {});
+    const onDeleted = vi.fn();
+    await renderDraft({ deleteWorkflow }, { onDeleted });
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog.textContent).toContain("keystroke data");
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(document.activeElement).toBe(cancel);
+
+    fireEvent.click(cancel);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(deleteWorkflow).not.toHaveBeenCalled();
+
+    // Confirming removes the draft folder through the shared hard
+    // delete and leaves the flow (back to the landing page).
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard Recording" }));
+    await waitFor(() => {
+      expect(onDeleted).toHaveBeenCalledTimes(1);
+    });
+    expect(deleteWorkflow).toHaveBeenCalledWith(WORKFLOW_ID);
+  });
+
+  it("keeps draft state and its data visible when the discard fails", async () => {
+    const deleteWorkflow = vi.fn(async () => {
+      throw new Error("storage error: could not access the workflow data");
+    });
+    const onDeleted = vi.fn();
+    await renderDraft({ deleteWorkflow }, { onDeleted });
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard Recording" }));
+
+    const dialog = screen.getByRole("alertdialog");
+    await waitFor(() => {
+      expect(within(dialog).getByRole("alert").textContent).toContain(
+        "could not access the workflow data",
+      );
+    });
+    expect(onDeleted).not.toHaveBeenCalled();
+    // Draft state and its data stand.
+    expect(screen.getByText("draft")).toBeTruthy();
+    expect(screen.getByText('Click "OK" — TextEdit')).toBeTruthy();
+  });
+
+  it("banners a failed recording over an otherwise loadable draft", async () => {
+    await renderDraft({}, { failure: "event tap disabled" });
+
+    const banner = screen
+      .getAllByRole("alert")
+      .find((alert) =>
+        alert.textContent?.includes("Recording failed and may be incomplete"),
+      );
+    expect(banner).toBeTruthy();
+    expect(banner?.textContent).toContain("event tap disabled");
+    // Review access stands: the committed steps are shown for review,
+    // save, or discard.
+    expect(screen.getByText("draft")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save…" })).toBeTruthy();
   });
 });

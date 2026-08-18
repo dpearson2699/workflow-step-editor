@@ -5,6 +5,15 @@
 // the metadata grid, workflow rename in the header, and the single
 // saved-workflow Delete… control behind its destructive confirmation.
 //
+// Draft review (DEC-002, DEC-005, AC-004): mounted with the `draft`
+// prop after a recording stops, the same view opens in draft mode — a
+// `draft` badge beside the manifest name, full editing, Discard behind
+// a confirmation, and Save…, which opens the naming dialog pre-selected
+// with the manifest's default timestamp name. Draft is UI-session
+// state: it exits only when the rename command succeeds, and Discard
+// removes the folder through the shared hard-delete primitive. A failed
+// recording carries its error banner over the same draft view.
+//
 // Steps resolve their raw events by id (`event_ids[0]`), never by array
 // index. Edits persist through per-entity serialized autosave queues;
 // the workflow's autosave generation is invalidated before deletion so
@@ -58,10 +67,18 @@ function SaveIndicator(props: {
   );
 }
 
-function DeleteWorkflowDialog(props: {
-  name: string;
+/**
+ * The destructive confirmation shared by saved-workflow deletion and
+ * draft Discard. Cancel is the default action (DEC-003), and the dialog
+ * stays open while the removal runs so a failure surfaces inside it.
+ */
+function ConfirmRemovalDialog(props: {
+  ariaLabel: string;
+  title: string;
+  body: string;
+  confirmLabel: string;
   error: string | null;
-  deleting: boolean;
+  busy: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -71,22 +88,18 @@ function DeleteWorkflowDialog(props: {
         className="modal"
         role="alertdialog"
         aria-modal="true"
-        aria-label={`Delete workflow ${props.name}`}
+        aria-label={props.ariaLabel}
         onKeyDown={(event) => {
-          // While the deletion is in flight the dialog must stay open
+          // While the removal is in flight the dialog must stay open
           // (like the disabled Cancel button), so a failure can still
-          // surface inside it (AC-005).
-          if (event.key === "Escape" && !props.deleting) {
+          // surface inside it (AC-004, AC-005).
+          if (event.key === "Escape" && !props.busy) {
             props.onCancel();
           }
         }}
       >
-        <h3>Delete “{props.name}”?</h3>
-        <p>
-          This permanently deletes the saved workflow — its recorded
-          keystroke data, screenshots, and event log. This cannot be
-          undone.
-        </p>
+        <h3>{props.title}</h3>
+        <p>{props.body}</p>
         {props.error !== null && (
           <p className="landing-error" role="alert">
             {props.error}
@@ -99,7 +112,7 @@ function DeleteWorkflowDialog(props: {
             type="button"
             className="modal-cancel"
             autoFocus
-            disabled={props.deleting}
+            disabled={props.busy}
             onClick={props.onCancel}
           >
             Cancel
@@ -107,10 +120,90 @@ function DeleteWorkflowDialog(props: {
           <button
             type="button"
             className="modal-delete"
-            disabled={props.deleting}
+            disabled={props.busy}
             onClick={props.onConfirm}
           >
-            Delete Workflow
+            {props.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The save ceremony (DEC-002): naming the draft. The input pre-selects
+ * the manifest's existing default timestamp name; a failed rename keeps
+ * the dialog and its error visible, and the draft state stands.
+ */
+function SaveRecordingDialog(props: {
+  defaultName: string;
+  stepCount: number;
+  error: string | null;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: (name: string) => void;
+}) {
+  const [name, setName] = useState(props.defaultName);
+  const invalid = name.trim() === "";
+  return (
+    <div className="modal-scrim">
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Save recording"
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !props.saving) {
+            props.onCancel();
+          }
+        }}
+      >
+        <h3>Save recording</h3>
+        <p>
+          {props.stepCount} {props.stepCount === 1 ? "step" : "steps"}{" "}
+          captured. Events are already on disk — naming finishes the
+          save, and edits save automatically.
+        </p>
+        <input
+          className="modal-name-input"
+          aria-label="Recording name"
+          autoFocus
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onFocus={(event) => event.target.select()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !invalid && !props.saving) {
+              props.onSave(name);
+            }
+          }}
+        />
+        {invalid && (
+          <p className="landing-error" role="alert">
+            Name cannot be empty
+          </p>
+        )}
+        {props.error !== null && (
+          <p className="landing-error" role="alert">
+            {props.error}
+          </p>
+        )}
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="modal-cancel"
+            disabled={props.saving}
+            onClick={props.onCancel}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="modal-save"
+            disabled={invalid || props.saving}
+            onClick={() => props.onSave(name)}
+          >
+            Save
           </button>
         </div>
       </div>
@@ -125,8 +218,16 @@ export interface DetailViewProps {
   initialName: string;
   onBack: () => void;
   /** Called only after a successful backend hard delete; the landing
-   *  list refreshes on mount, so the row disappears with it. */
+   *  list refreshes on mount, so the row disappears with it. Draft
+   *  Discard shares this exit. */
   onDeleted: () => void;
+  /**
+   * Mounts the view in draft review (DEC-002, DEC-005): draft badge,
+   * Discard, and Save… replace the rename input and Delete…. `failure`
+   * carries a failed recording's error into the banner. Draft is
+   * UI-session state; it exits only on rename-command success.
+   */
+  draft?: { failure: string | null };
 }
 
 export function DetailView(props: DetailViewProps) {
@@ -146,6 +247,13 @@ export function DetailView(props: DetailViewProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Draft review is UI-session state (DEC-005): it starts from the
+  // mount-time prop and exits only on rename-command success.
+  const [draftActive, setDraftActive] = useState(props.draft !== undefined);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  const [naming, setNaming] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [saveDraftError, setSaveDraftError] = useState<string | null>(null);
   const [shotUrls, setShotUrls] = useState<ReadonlyMap<string, string>>(
     new Map(),
   );
@@ -412,43 +520,120 @@ export function DetailView(props: DetailViewProps) {
     );
   }
 
+  /**
+   * The naming save ceremony (DEC-002): renames through
+   * `rename_workflow` and exits draft mode only when the command
+   * succeeds. A failure keeps the dialog, its error, and draft state.
+   */
+  async function saveDraft(rawName: string): Promise<void> {
+    const trimmed = rawName.trim();
+    if (trimmed === "") {
+      return;
+    }
+    setSavingDraft(true);
+    setSaveDraftError(null);
+    try {
+      await api.renameWorkflow(workflowId, trimmed);
+    } catch (caught) {
+      setSaveDraftError(String(caught));
+      setSavingDraft(false);
+      return;
+    }
+    setSavingDraft(false);
+    nameRef.current = trimmed;
+    nameEditedRef.current = true;
+    setName(trimmed);
+    setNaming(false);
+    setDraftActive(false);
+  }
+
   return (
     <div className="detail-root">
       <header className="app-header">
         <button type="button" className="back-button" onClick={props.onBack}>
           ‹ Workflows
         </button>
-        <input
-          className="name-input"
-          aria-label="Workflow name"
-          value={name}
-          onChange={(event) => editName(event.target.value)}
-        />
-        {nameError !== null && (
-          <span className="save-status save-error" role="alert">
-            {nameError}
-          </span>
+        {draftActive ? (
+          <>
+            {/* Naming is the save ceremony (DEC-002): in draft mode the
+                manifest's default name is static and the dialog names
+                the workflow, so the rename autosave stays out of play. */}
+            <span className="draft-name">
+              {name !== "" ? name : "New Recording"}
+            </span>
+            <span className="draft-badge">draft</span>
+            <span className="header-spacer" />
+            <div className="draft-actions">
+              <button
+                type="button"
+                className="discard-button"
+                onClick={() => {
+                  setDeleteError(null);
+                  setConfirmingDiscard(true);
+                }}
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                className="save-draft-button"
+                disabled={steps === null}
+                onClick={() => {
+                  setSaveDraftError(null);
+                  setNaming(true);
+                }}
+              >
+                Save…
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <input
+              className="name-input"
+              aria-label="Workflow name"
+              value={name}
+              onChange={(event) => editName(event.target.value)}
+            />
+            {nameError !== null && (
+              <span className="save-status save-error" role="alert">
+                {nameError}
+              </span>
+            )}
+            {/* While the input is invalid the validation error replaces
+                the save indicator, so a stale Retry can never resend a
+                previous name over a blank input. */}
+            {nameError === null && (
+              <SaveIndicator
+                status={statuses.get(WORKFLOW_KEY)}
+                onRetry={() => autosave.retry(WORKFLOW_KEY)}
+              />
+            )}
+            <button
+              type="button"
+              className="delete-workflow-button"
+              onClick={() => {
+                setDeleteError(null);
+                setConfirmingDelete(true);
+              }}
+            >
+              Delete…
+            </button>
+          </>
         )}
-        {/* While the input is invalid the validation error replaces the
-            save indicator, so a stale Retry can never resend a previous
-            name over a blank input. */}
-        {nameError === null && (
-          <SaveIndicator
-            status={statuses.get(WORKFLOW_KEY)}
-            onRetry={() => autosave.retry(WORKFLOW_KEY)}
-          />
-        )}
-        <button
-          type="button"
-          className="delete-workflow-button"
-          onClick={() => {
-            setDeleteError(null);
-            setConfirmingDelete(true);
-          }}
-        >
-          Delete…
-        </button>
       </header>
+
+      {/* Not gated on draftActive: a genuine failed terminal can settle
+          after the user already saved the draft (the supersedable
+          fallback race), and the incomplete recording must not present
+          as an ordinary saved workflow. */}
+      {props.draft?.failure != null && (
+        <p className="record-failed-banner" role="alert">
+          Recording failed and may be incomplete: {props.draft.failure}.
+          The steps below were captured before the failure — review them
+          before relying on this workflow.
+        </p>
+      )}
 
       {loadError !== null ? (
         <main className="detail-pane">
@@ -646,12 +831,46 @@ export function DetailView(props: DetailViewProps) {
       )}
 
       {confirmingDelete && (
-        <DeleteWorkflowDialog
-          name={name}
+        <ConfirmRemovalDialog
+          ariaLabel={`Delete workflow ${name}`}
+          title={`Delete “${name}”?`}
+          body={
+            "This permanently deletes the saved workflow — its recorded " +
+            "keystroke data, screenshots, and event log. This cannot be " +
+            "undone."
+          }
+          confirmLabel="Delete Workflow"
           error={deleteError}
-          deleting={deleting}
+          busy={deleting}
           onCancel={() => setConfirmingDelete(false)}
           onConfirm={confirmDeleteWorkflow}
+        />
+      )}
+
+      {confirmingDiscard && (
+        <ConfirmRemovalDialog
+          ariaLabel="Discard recording"
+          title="Discard this recording?"
+          body={
+            "This permanently deletes the draft — its recorded keystroke " +
+            "data, screenshots, and event log. This cannot be undone."
+          }
+          confirmLabel="Discard Recording"
+          error={deleteError}
+          busy={deleting}
+          onCancel={() => setConfirmingDiscard(false)}
+          onConfirm={confirmDeleteWorkflow}
+        />
+      )}
+
+      {naming && steps !== null && (
+        <SaveRecordingDialog
+          defaultName={name}
+          stepCount={steps.length}
+          error={saveDraftError}
+          saving={savingDraft}
+          onCancel={() => setNaming(false)}
+          onSave={(newName) => void saveDraft(newName)}
         />
       )}
     </div>

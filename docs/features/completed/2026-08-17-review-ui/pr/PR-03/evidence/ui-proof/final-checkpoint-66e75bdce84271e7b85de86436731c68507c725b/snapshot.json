@@ -1,0 +1,14 @@
+{
+  "schema": "project-ui-proof",
+  "source": "project_ui_adapter",
+  "taskStage": "final_orchestrated_pr",
+  "sliceId": "PR-03",
+  "identityKind": "head_tree",
+  "identity": "66e75bdce84271e7b85de86436731c68507c725b",
+  "automatedAcceptanceId": "AC-004",
+  "proofTarget": "stop-recording-banner",
+  "observation": {
+    "kind": "displayed_value",
+    "value": "Final human checkpoint session on the signed build at head f693fa96: the user ran the full gate loop (record across apps, live rows, stop, draft review, save, reopen, edit, step delete, reveal, workflow delete) and reported one review-UI issue: the hover Reveal-in-Finder control overlaps the row's chevron on the landing list. Two capture-domain observations (pre-event screenshot framing per ADR-0001; key-event element crops resolving to focused-element/fallback regions) were explained as accepted capture-capability behavior and routed separately."
+  }
+}

@@ -136,4 +136,23 @@ describe("reveal versus navigate", () => {
     expect(props.onRevealWorkflow).toHaveBeenCalledWith(approveInvoice.id);
     expect(props.onOpenWorkflow).not.toHaveBeenCalled();
   });
+
+  it("lays out Reveal and the chevron as separate row siblings", () => {
+    // The pinned prototype Home row: open target, Reveal, chevron in
+    // flow order, so the hover-revealed control cannot overlap the
+    // chevron (final-gate finding, revision epoch 2).
+    renderLanding();
+    const row = screen.getAllByRole("listitem")[0];
+    const open = within(row).getByRole("button", { name: /Approve invoice/ });
+    const reveal = within(row).getByRole("button", { name: "⌘ Reveal" });
+    const chevron = within(row).getByText("›");
+    expect(chevron.parentElement).toBe(row);
+    expect(open.contains(chevron)).toBe(false);
+    expect(reveal.compareDocumentPosition(chevron)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(open.compareDocumentPosition(reveal)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
 });

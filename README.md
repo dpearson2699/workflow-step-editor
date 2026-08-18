@@ -1,8 +1,39 @@
 # Workflow Step Editor
 
 A Tauri v2 desktop application that records desktop workflow steps from real
-clicks and key presses. This is the application shell with the permission
-module; the capture pipeline builds on it.
+clicks and key presses, then lets you review, edit, name, and manage the
+recordings.
+
+## Features
+
+- **Live recording.** One Record button captures clicks and key presses
+  across every application. Each captured event becomes a step that
+  streams into the step list while you work, with a classification dot,
+  an auto-generated title, and the event time. A prominent Stop
+  Recording banner is the only action while recording. Interactions
+  with the recorder's own window — including the Stop click itself —
+  are excluded from the captured steps.
+- **Draft review and save.** Stopping opens the full editor in draft
+  mode. Review the captured steps, then Save… with a name (the dialog
+  pre-selects the default timestamp name) or Discard the recording
+  behind a confirmation. Events and screenshots are already on disk when
+  you stop — naming finishes the save.
+- **Step editor.** A compact step list beside a detail pane that keeps
+  all three screenshots visible: one large, two labeled click-to-swap
+  thumbnails (full screen, window crop, element crop — captured from a
+  pre-event frame, so the screen shows the state *before* the action).
+  Edit titles and descriptions, switch the classification
+  (`click`/`type`/`wait`/`assert`), and delete steps. Edits save
+  automatically.
+- **Workflow library.** The landing page lists saved workflows —
+  thumbnail, name, `date · step count · duration`, newest first — with
+  hover Reveal-in-Finder, rename in the detail header, and hard deletion
+  behind a destructive confirmation.
+- **Permission-gated.** A header strip shows the three required macOS
+  permissions; recording stays disabled until all three are granted.
+- **Local-only.** Recordings live under
+  `~/Library/Application Support/com.dpearson.workflow-step-editor/workflows/`
+  as plain JSON plus PNG screenshots. No external services.
 
 ## Requirements
 
@@ -53,6 +84,34 @@ and Screen Recording. Input Monitoring must be requested first: an early
 Accessibility check suppresses the Input Monitoring prompt. The backend
 enforces this order and reports an out-of-order Accessibility request as
 `blocked_by_prerequisite`.
+
+Grant them from the header strip: click each red pill in order and approve
+the System Settings prompt. Run the built, signed `.app` (not the dev
+binary) when you want grants to persist across rebuilds — macOS ties them
+to the signed bundle identity.
+
+## Usage
+
+1. Launch the app. It opens on the workflow list with the permission
+   strip in the header. Grant any missing permission; the Record button
+   enables when all three pass.
+2. Click **● Record New Workflow**. The live capture view opens with the
+   red **■ Stop Recording** banner. Work through the flow you want to
+   record — click and type in any application. Each click and key press
+   appears as a step row while you work.
+3. Click **■ Stop Recording**. The editor opens in draft review with a
+   `draft` badge. Select steps to check their screenshots and metadata,
+   edit titles or classifications, and delete noise steps.
+4. Click **Save…**, type a name over the pre-selected timestamp default,
+   and save. Or click **Discard** and confirm to delete the recording's
+   folder. If a recording fails mid-way (for example a revoked
+   permission), the committed steps still open in draft review behind an
+   error banner.
+5. From the landing list, click a row to reopen a workflow. Edit titles,
+   descriptions, and classifications (they save automatically), rename
+   the workflow in the header, hover a row for **⌘ Reveal** in Finder,
+   or use **Delete…** in the detail header to remove a workflow and all
+   its captured data.
 
 ## Limitations
 

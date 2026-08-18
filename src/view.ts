@@ -1,16 +1,20 @@
-// The discriminated view state of the product shell and its reducer.
-// PR-01 ships the landing view and the detail shell; later slices add
-// the recording and draft-review states.
+// The discriminated view state of the product shell and its reducer:
+// the landing page, the detail view for a saved workflow, and the
+// record flow (live capture through draft review, PR-03). The landing
+// error carries a record-flow exit failure onto the landing page.
 
 export type View =
-  | { kind: "landing" }
-  | { kind: "detail"; workflowId: string; workflowName: string };
+  | { kind: "landing"; error: string | null }
+  | { kind: "detail"; workflowId: string; workflowName: string }
+  | { kind: "record" };
 
 export type ViewAction =
   | { kind: "open_workflow"; workflowId: string; workflowName: string }
-  | { kind: "back_to_landing" };
+  | { kind: "back_to_landing" }
+  | { kind: "start_record" }
+  | { kind: "exit_record"; error: string | null };
 
-export const initialView: View = { kind: "landing" };
+export const initialView: View = { kind: "landing", error: null };
 
 export function viewReducer(_view: View, action: ViewAction): View {
   switch (action.kind) {
@@ -21,7 +25,11 @@ export function viewReducer(_view: View, action: ViewAction): View {
         workflowName: action.workflowName,
       };
     case "back_to_landing":
-      return { kind: "landing" };
+      return { kind: "landing", error: null };
+    case "start_record":
+      return { kind: "record" };
+    case "exit_record":
+      return { kind: "landing", error: action.error };
     default: {
       const exhausted: never = action;
       return exhausted;

@@ -190,7 +190,7 @@ impl StepSink for TestSink {
         if let Some(gate) = &self.gate {
             gate.pass();
         }
-        if let (Some(observer), LiveEnvelope::Step { step }) = (&self.step_observer, &item) {
+        if let (Some(observer), LiveEnvelope::Step { step, .. }) = (&self.step_observer, &item) {
             observer(step);
         }
         self.log.lock().unwrap().push(item);

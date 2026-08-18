@@ -317,6 +317,7 @@ impl RecordingCoordinator {
             install: install.clone(),
             save_failure: save_failure.clone(),
             mutation: self.mutation.clone(),
+            own_pid: std::process::id() as i32,
         };
         let worker = thread::Builder::new()
             .name("recording-worker".into())
@@ -556,6 +557,13 @@ struct WorkerContext {
     save_failure: Arc<Mutex<Option<String>>>,
     /// The DEC-008 mutation lock; finalization's manifest save takes it.
     mutation: Arc<Mutex<()>>,
+    /// This process's pid, resolved at the composition root. Events whose
+    /// resolved window belongs to the recorder itself are dropped before
+    /// any disk write: the record view's only visible action is the Stop
+    /// control (DEC-002), so the tap-accepted gesture that stops every
+    /// recording would otherwise persist as a trailing junk step and
+    /// screenshot drained at stop time.
+    own_pid: i32,
 }
 
 enum Outcome {
@@ -576,6 +584,7 @@ fn run_worker(context: WorkerContext) {
         install,
         save_failure,
         mutation,
+        own_pid,
     } = context;
     let workflow_id = manifest.id.clone();
 
@@ -586,7 +595,6 @@ fn run_worker(context: WorkerContext) {
     let outcome: Option<Outcome> = loop {
         match rx.recv() {
             Ok(SessionMsg::Pipeline(PipelineEvent::Packet(packet))) => {
-                seq += 1;
                 let CapturePacket {
                     input,
                     pos,
@@ -597,6 +605,14 @@ fn run_worker(context: WorkerContext) {
                     frame_age_ms,
                     shots,
                 } = *packet;
+                // The recorder's own window is never workflow content:
+                // drop self-targeted events (the Stop click that ends
+                // every recording, or any other gesture into this app)
+                // before any disk write, keeping event ids dense.
+                if window.as_ref().is_some_and(|window| window.pid == own_pid) {
+                    continue;
+                }
+                seq += 1;
                 let event_id = format!("evt_{seq:04}");
                 let (kind, button, key) = match input {
                     PacketInput::Click { button } => (EventKind::Click, Some(button), None),
@@ -622,8 +638,13 @@ fn run_worker(context: WorkerContext) {
                         steps.push(step.clone());
                         // Emitted only after the event line and all three
                         // screenshots are committed. A channel disconnect
-                        // never interrupts disk persistence.
-                        let _ = sink.emit(LiveEnvelope::Step { step });
+                        // never interrupts disk persistence. The event
+                        // timestamp rides the envelope for the live rows
+                        // (DEC-009).
+                        let _ = sink.emit(LiveEnvelope::Step {
+                            step,
+                            ts: event.ts.clone(),
+                        });
                     }
                     Err(error) => {
                         break Some(Outcome::Failed(format!(
@@ -840,13 +861,17 @@ mod tests {
         // Channel: two ordered steps, then the terminal, terminal-last.
         let items = log.items();
         assert_eq!(items.len(), 3);
-        let LiveEnvelope::Step { step: step1 } = &items[0] else {
+        let LiveEnvelope::Step { step: step1, ts: ts1 } = &items[0] else {
             panic!("first item must be a step, got {:?}", items[0]);
         };
-        let LiveEnvelope::Step { step: step2 } = &items[1] else {
+        let LiveEnvelope::Step { step: step2, ts: ts2 } = &items[1] else {
             panic!("second item must be a step, got {:?}", items[1]);
         };
         assert_eq!(items[2], LiveEnvelope::Stopped { workflow_id: id.clone() });
+        // DEC-009: each step envelope carries its event's timestamp as a
+        // transient field for the live rows.
+        assert_eq!(ts1, "2026-08-16T22:31:05.000Z");
+        assert_eq!(ts2, "2026-08-16T22:31:05.000Z");
         assert_eq!(step1.title, "Click \"OK\" — TextEdit");
         assert_eq!(step1.classification, Classification::Click);
         assert_eq!(step1.event_ids, vec!["evt_0001".to_owned()]);
@@ -893,6 +918,61 @@ mod tests {
 
         // The controller's pipeline was stopped exactly once by the stop.
         assert_eq!(harness.controllers[0].stop_count(), 1);
+    }
+
+    #[test]
+    fn own_app_events_are_dropped_before_any_disk_write() {
+        let harness = harness(1);
+        let (sink, log) = TestSink::recording();
+        let id = harness
+            .coordinator
+            .start_recording(Some("Approve invoice"), Box::new(sink))
+            .unwrap();
+
+        harness.controllers[0].emit(click_packet());
+        // The recorder's own window: the drained Stop-control click that
+        // would otherwise end every recording as a junk trailing step.
+        let mut own = click_packet();
+        let own_window = own.window.as_mut().expect("fixture click has a window");
+        own_window.app = "workflow-step-editor".into();
+        own_window.pid = std::process::id() as i32;
+        harness.controllers[0].emit(own);
+        harness.controllers[0].emit(key_packet());
+        harness.coordinator.stop_recording().unwrap();
+
+        // Channel: the self-targeted click never becomes a step; ids stay
+        // dense across the dropped packet.
+        let items = log.items();
+        assert_eq!(items.len(), 3);
+        let LiveEnvelope::Step { step: step1, .. } = &items[0] else {
+            panic!("first item must be a step, got {:?}", items[0]);
+        };
+        let LiveEnvelope::Step { step: step2, .. } = &items[1] else {
+            panic!("second item must be a step, got {:?}", items[1]);
+        };
+        assert_eq!(items[2], LiveEnvelope::Stopped { workflow_id: id.clone() });
+        assert_eq!(step1.event_ids, vec!["evt_0001".to_owned()]);
+        assert_eq!(step2.event_ids, vec!["evt_0002".to_owned()]);
+
+        // Disk: nothing of the dropped packet persists — two JSONL lines,
+        // six PNGs, two manifest steps.
+        let loaded = harness.coordinator.get_workflow(&id).unwrap();
+        assert_eq!(loaded.events.len(), 2);
+        assert_eq!(loaded.manifest.steps.len(), 2);
+        let dir = workflow_dir(&harness, &id);
+        let jsonl = fs::read_to_string(dir.join("events.jsonl")).unwrap();
+        assert_eq!(jsonl.lines().count(), 2);
+        let png_count = fs::read_dir(dir.join("shots"))
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .ends_with(".png")
+            })
+            .count();
+        assert_eq!(png_count, 6);
     }
 
     #[test]
