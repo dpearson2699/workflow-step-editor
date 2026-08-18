@@ -626,7 +626,7 @@
       },
       "revision_epoch": 0,
       "revision_history": [],
-      "status": "blocked",
+      "status": "pending",
       "task_history": [],
       "terminal_freshness": null,
       "title": "Record flow and draft save/discard",

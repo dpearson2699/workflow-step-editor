@@ -12,7 +12,7 @@ import type {
 } from "./api/client";
 import { createTauriClient } from "./api/client";
 import { initialView, viewReducer } from "./view";
-import { DetailShell } from "./views/DetailShell";
+import { DetailView } from "./views/DetailView";
 import { LandingView } from "./views/LandingView";
 import "./App.css";
 
@@ -166,9 +166,12 @@ function App() {
 
   if (view.kind === "detail") {
     return (
-      <DetailShell
-        workflowName={view.workflowName}
+      <DetailView
+        api={client}
+        workflowId={view.workflowId}
+        initialName={view.workflowName}
         onBack={() => dispatch({ kind: "back_to_landing" })}
+        onDeleted={() => dispatch({ kind: "back_to_landing" })}
       />
     );
   }

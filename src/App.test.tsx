@@ -19,8 +19,22 @@ function apiWith(overrides: Partial<ApiClient>): ApiClient {
     checkPermissions: async () => oneMissing,
     requestPermission: async () => "granted",
     listWorkflows: async () => [],
+    getWorkflow: async () => ({
+      manifest: {
+        schema_version: 1,
+        id: "wf",
+        name: "wf",
+        created_at: "2026-08-16T22:31:05Z",
+        steps: [],
+      },
+      events: [],
+    }),
     revealWorkflow: async () => {},
     readScreenshot: async () => new Uint8Array(),
+    updateStep: async () => {},
+    deleteStep: async () => {},
+    renameWorkflow: async () => {},
+    deleteWorkflow: async () => {},
     ...overrides,
   };
 }

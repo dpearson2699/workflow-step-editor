@@ -44,11 +44,95 @@ export interface WorkflowSummary {
 /** The DEC-007 screenshot variant allowlist. */
 export type ShotVariant = "full" | "window" | "element";
 
+/** The four-value step classification enum (schema v1). */
+export type Classification = "click" | "type" | "wait" | "assert";
+
+/** One reviewable manifest step. */
+export interface Step {
+  id: string;
+  /** The raw events this step was parsed from; resolve by id, never
+   *  by array index. */
+  event_ids: string[];
+  classification: Classification;
+  title: string;
+  description: string;
+}
+
+/** The editable `workflow.json` manifest. */
+export interface Manifest {
+  schema_version: number;
+  id: string;
+  name: string;
+  created_at: string;
+  steps: Step[];
+}
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** The `key` object of a key-down event (null on clicks). */
+export interface KeyInfo {
+  key_code: number;
+  chars: string;
+  /** snake_case modifier names in capture order. */
+  modifiers: string[];
+}
+
+/** The window the event hit (null when none resolved, DEC-011). */
+export interface WindowInfo {
+  app: string;
+  title: string;
+  pid: number;
+  bounds: Rect;
+}
+
+/** Where the element metadata came from. */
+export type ElementSource = "ax" | "fallback";
+
+export interface ElementInfo {
+  role: string | null;
+  title: string | null;
+  frame: Rect;
+  source: ElementSource;
+}
+
+/** One line of `events.jsonl`: a raw captured event. */
+export interface WorkflowEvent {
+  id: string;
+  /** RFC 3339 UTC timestamp with millisecond precision. */
+  ts: string;
+  kind: "click" | "key_down";
+  display_id: number;
+  pos: { x: number; y: number };
+  button: "left" | "right" | "middle" | null;
+  key: KeyInfo | null;
+  window: WindowInfo | null;
+  element: ElementInfo;
+}
+
+/** The result of `get_workflow`: manifest plus the raw event log. */
+export interface LoadedWorkflow {
+  manifest: Manifest;
+  events: WorkflowEvent[];
+}
+
+/** A transient step patch: only supplied fields change (DEC-004). */
+export interface StepPatch {
+  title?: string;
+  description?: string;
+  classification?: Classification;
+}
+
 /** The IPC surface this slice of the product uses. */
 export interface ApiClient {
   checkPermissions(): Promise<PermissionReport>;
   requestPermission(kind: PermissionKind): Promise<PermissionStatus>;
   listWorkflows(): Promise<WorkflowSummary[]>;
+  getWorkflow(id: string): Promise<LoadedWorkflow>;
   /** Reveals the workflow folder in Finder (backend-resolved path). */
   revealWorkflow(id: string): Promise<void>;
   /** The scoped screenshot read: raw PNG bytes by ids, never paths. */
@@ -57,6 +141,12 @@ export interface ApiClient {
     eventId: string,
     variant: ShotVariant,
   ): Promise<Uint8Array>;
+  updateStep(workflowId: string, stepId: string, patch: StepPatch): Promise<void>;
+  deleteStep(workflowId: string, stepId: string): Promise<void>;
+  /** Manifest name only, trimmed and non-empty; folder and id never change. */
+  renameWorkflow(id: string, name: string): Promise<void>;
+  /** ADR 0003 hard delete: success means the folder is absent. */
+  deleteWorkflow(id: string): Promise<void>;
 }
 
 export function createTauriClient(): ApiClient {
@@ -70,6 +160,9 @@ export function createTauriClient(): ApiClient {
     listWorkflows() {
       return invoke<WorkflowSummary[]>("list_workflows");
     },
+    getWorkflow(id) {
+      return invoke<LoadedWorkflow>("get_workflow", { id });
+    },
     revealWorkflow(id) {
       return invoke<void>("reveal_workflow", { id });
     },
@@ -80,6 +173,18 @@ export function createTauriClient(): ApiClient {
         variant,
       });
       return new Uint8Array(bytes);
+    },
+    updateStep(workflowId, stepId, patch) {
+      return invoke<void>("update_step", { workflowId, stepId, patch });
+    },
+    deleteStep(workflowId, stepId) {
+      return invoke<void>("delete_step", { workflowId, stepId });
+    },
+    renameWorkflow(id, name) {
+      return invoke<void>("rename_workflow", { id, name });
+    },
+    deleteWorkflow(id) {
+      return invoke<void>("delete_workflow", { id });
     },
   };
 }
