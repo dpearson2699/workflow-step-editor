@@ -66,24 +66,28 @@
   "blockers": [],
   "completion_binding": null,
   "completion_specification_digest": null,
-  "observation_epoch_high_water": 2,
-  "observed_main_sha": "09a980d557e675f7253785c231ab00f60b463756",
+  "observation_epoch_high_water": 4,
+  "observed_main_sha": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
   "parallel_assessments": [],
-  "phase": "plan",
+  "phase": "delivery",
   "planning": {
     "active_response_digest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833",
-    "blind_completeness": null,
+    "blind_completeness": {
+      "epoch": 4,
+      "receipt": "discovery/blind-completeness-0001.json",
+      "receipt_digest": "cd5b7d8eeafe684ac0361a262807b66426860dfa6d8de622af1343886869e294"
+    },
     "blind_requirement": {
-      "plan_digest": "dd6e868c63b5f810250325c40968171229f3acd15765ea1bb40b95be91829d7a",
+      "plan_digest": "3d195f5aae0b1358917f1369d05614d89992761c7a2903aef8302e2fadc80774",
       "requirement": "required_multi_slice_reconciliation"
     },
-    "current_plan_digest": "dd6e868c63b5f810250325c40968171229f3acd15765ea1bb40b95be91829d7a",
-    "current_source_commit": "09a980d557e675f7253785c231ab00f60b463756",
-    "current_specification_digest": "2959a7a474d89e05d106edf75e8f277364eb53ddd29e44f89e2032e00f1d669f",
+    "current_plan_digest": "3d195f5aae0b1358917f1369d05614d89992761c7a2903aef8302e2fadc80774",
+    "current_source_commit": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
+    "current_specification_digest": "84bf72fe25d06ce0a0164c5358a43b460207ab4bb1172144365914e8d580fa18",
     "evidence": [
       {
-        "accepted_for_digest": "2959a7a474d89e05d106edf75e8f277364eb53ddd29e44f89e2032e00f1d669f",
-        "accepted_source_commit": "09a980d557e675f7253785c231ab00f60b463756",
+        "accepted_for_digest": "84bf72fe25d06ce0a0164c5358a43b460207ab4bb1172144365914e8d580fa18",
+        "accepted_source_commit": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
         "annotations": [],
         "answer_artifact": "discovery/pro-lifecycle-evidence/aedd5850e5664dca75c43cdff6369b05a00e4156c0bb5a0bec84b5b20891ebb5.md",
         "applicability": [
@@ -138,6 +142,32 @@
             "to_digest": "2959a7a474d89e05d106edf75e8f277364eb53ddd29e44f89e2032e00f1d669f",
             "to_source_commit": "09a980d557e675f7253785c231ab00f60b463756",
             "validation_result": "prior_evidence_applicable"
+          },
+          {
+            "changed_paths": [
+              "DECISIONS.md",
+              "discovery/planning-routing.md"
+            ],
+            "classification": "non_material",
+            "correction_receipt": null,
+            "correction_receipt_digest": null,
+            "epoch": 3,
+            "evidence_anchors": [
+              "DECISIONS.md",
+              "discovery/planning-routing.md",
+              "review/plan-consensus-log.md"
+            ],
+            "from_digest": "2959a7a474d89e05d106edf75e8f277364eb53ddd29e44f89e2032e00f1d669f",
+            "from_source_commit": "09a980d557e675f7253785c231ab00f60b463756",
+            "implementation_slices_changed": false,
+            "original_receipt": null,
+            "original_receipt_digest": null,
+            "receipt": "discovery/pro-applicability-0003.json",
+            "receipt_digest": "a9359976d5f9366db540d8c2e0d044d061c16d317f6dd8a19672ce2bba549d18",
+            "recommendations_changed": false,
+            "to_digest": "84bf72fe25d06ce0a0164c5358a43b460207ab4bb1172144365914e8d580fa18",
+            "to_source_commit": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
+            "validation_result": "prior_evidence_applicable"
           }
         ],
         "contract_disposition": "clean",
@@ -155,12 +185,12 @@
     ],
     "pro_primary_waiver": null
   },
-  "revision": 14,
+  "revision": 21,
   "schema": "spec-workflow-state",
   "slices": [
     {
       "base_ref": "origin/main",
-      "base_sha": "09a980d557e675f7253785c231ab00f60b463756",
+      "base_sha": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
       "branch": "feat/pr-01-landing-page",
       "depends_on": [],
       "execution_mode": "serial",
@@ -296,7 +326,7 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "09a980d557e675f7253785c231ab00f60b463756",
+      "base_sha": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
       "branch": "feat/pr-02-detail-review",
       "depends_on": [
         "PR-01"
@@ -361,7 +391,7 @@
       ],
       "plan": "pr/PR-02/PLAN.md",
       "plan_checkpoint_sha": null,
-      "plan_digest": "7d5fc2552c24430ea50b8bc18b34f68a7864a5bcc844872e78d36a175fbc1228",
+      "plan_digest": "3c327792162decb6350df6cc17a47db960ba9fe5abf7cd81623417e7973a9c1a",
       "pr": null,
       "premerge_drift": null,
       "receipt": null,
@@ -423,7 +453,7 @@
     },
     {
       "base_ref": "origin/main",
-      "base_sha": "09a980d557e675f7253785c231ab00f60b463756",
+      "base_sha": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
       "branch": "feat/pr-03-record-flow",
       "depends_on": [
         "PR-02"
@@ -634,7 +664,7 @@
     ],
     "primary_digest": "efeb9599abc0724dfa44d440af96e4e37ab6c55f8f4fceb8e8eb368495a6dc18"
   },
-  "updated_at": "2026-08-17T23:54:56Z",
+  "updated_at": "2026-08-18T00:08:47Z",
   "work_id": "2026-08-17-review-ui",
   "work_kind": "feature"
 }

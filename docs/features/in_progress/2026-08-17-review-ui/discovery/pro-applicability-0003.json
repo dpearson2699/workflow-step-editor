@@ -1,0 +1,27 @@
+{
+  "schema": "spec-work-pro-applicability",
+  "workKind": "feature",
+  "workId": "2026-08-17-review-ui",
+  "workBundle": "2026-08-17-review-ui",
+  "responseDigest": "3949c4b02a0e869f8038c1fa500132a09e7bbde0193cab0d5d342ed2dc93c833",
+  "fromDigest": "2959a7a474d89e05d106edf75e8f277364eb53ddd29e44f89e2032e00f1d669f",
+  "toDigest": "84bf72fe25d06ce0a0164c5358a43b460207ab4bb1172144365914e8d580fa18",
+  "fromSourceCommit": "09a980d557e675f7253785c231ab00f60b463756",
+  "toSourceCommit": "ba01a482b977838a3e40b72d3c390fb14d8e9027",
+  "classification": "non_material",
+  "changedPaths": [
+    "DECISIONS.md",
+    "discovery/planning-routing.md"
+  ],
+  "recommendationsChanged": false,
+  "implementationSlicesChanged": false,
+  "validationResult": "prior_evidence_applicable",
+  "evidenceAnchors": [
+    "DECISIONS.md",
+    "discovery/planning-routing.md",
+    "review/plan-consensus-log.md"
+  ],
+  "semanticDiffSummary": "Blind-audit consistency reconciliation: the planning-routing governor predicates re-derived for the post-consensus slice composition (deletion moved to PR-02); DEC-005 sharpened to state that Save renames the manifest name only and the folder and workflow id never change, matching the plans and the Pro response's verified folder-stability assumption.",
+  "applicabilityRationale": "Both changes align recorded wording with what the plans and the immutable Pro response already establish; no goal, scope, slice boundary, or analyzed recommendation changed, so the prior response remains fully applicable without a fresh primary.",
+  "assessmentEpoch": 3
+}
