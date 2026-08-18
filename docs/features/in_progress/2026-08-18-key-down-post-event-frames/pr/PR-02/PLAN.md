@@ -93,8 +93,12 @@ commit and then applies the DEC-004 correction.
     `CapturePacket.frame_age_ms` (`recording/pipeline.rs`): "Nonnegative
     event-to-selected-frame age in milliseconds, saturating at zero; a
     post-event key-down frame therefore reports 0."
-  - `docs/adr/0001-pre-buffered-screen-capture.md`: append an amendment
-    section dated 2026-08-18 recording the per-kind rule (clicks
+  - `docs/adr/0001-pre-buffered-screen-capture.md`: revise in place the
+    existing section `## Amendment 2026-08-18: per-kind frame timing
+    (issue #38)` that PR-01's commit `176be565` already added (replace its
+    oldest-retained-frame selection bullet and its "pays up to one frame
+    interval" consequence; do not append a second amendment) so that it
+    records the per-kind rule (clicks
     pre-event; key-downs the newest retained frame in the bounded
     post-event window, selected after a 100 ms settle so an intermediate
     repaint such as a dirty-state title does not win over the glyph
@@ -220,6 +224,11 @@ commit and then applies the DEC-004 correction.
 - UI proof target: none
 - Final UI slice: none
 - Final design acceptance: none
+
+## Parallelization Assessment
+
+- none: PR-02 is the only non-terminal slice (PR-01 is superseded), so no
+  same-wave pair exists.
 
 ## Implementation Route
 

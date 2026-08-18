@@ -59,3 +59,15 @@
   state the post-event value.
 - Owning seam: The named documentation files at the PR head.
 - Evidence required: Review of the changed documentation in the PR.
+
+## AC-004: Superseded PR-01 attempt is closed unmerged and integrated
+
+- Ownership: slice
+- Invariant: The PR-01 implementation of the superseded "oldest in-window
+  frame" rule (PR #39, head `176be565676b5abc383f684a81597893c3260524`) is
+  never merged: PR #39 is closed as superseded, and its commit is an
+  ancestor of the PR-02 head so no work is lost.
+- Owning seam: GitHub PR #39 state and PR-02 branch ancestry.
+- Evidence required: `gh pr view 39` showing `CLOSED` and not merged, and
+  `git merge-base --is-ancestor 176be565… <PR-02 head>` succeeding;
+  recorded in `pr/PR-01/RECEIPT.md`.

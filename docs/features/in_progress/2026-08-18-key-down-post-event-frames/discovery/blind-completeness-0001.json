@@ -1,0 +1,16 @@
+{
+  "schema": "spec-work-blind-completeness",
+  "workKind": "feature",
+  "workId": "2026-08-18-key-down-post-event-frames",
+  "workBundle": "2026-08-18-key-down-post-event-frames",
+  "planDigest": "02fa8e59b07a98e7c1e312906038315821f6b128c31215563d5027c750a4536c",
+  "approvedSourcePackDigest": "24b7072c300a4f5ba6f198db54be59de506d4ad34b2609de56b19180e2de705c",
+  "verdict": "CLEAN",
+  "materialFindings": [],
+  "limitations": [
+    "Cold-context read-only auditor (Explore subagent, model sonnet) over the exact bundle bytes at the candidate Plan (PR-02 revised plan, DEC-004/DEC-005), the immutable Pro response, the consensus log, and the PR-01 code at commit 176be565; a first pass surfaced one material finding (ADR amendment must be revised in place, not appended) that was folded before this clean pass; no compilation or test execution; state.json/STATUS.md read for context only."
+  ],
+  "descendantQuiescenceVerdict": "QUIESCENT",
+  "descendantQuiescenceDigest": "37b5a5b920afd920d6efca47b6825074e810b289238f8cafe51b90bd90d0f886",
+  "auditEpoch": 4
+}
