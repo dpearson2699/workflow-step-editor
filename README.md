@@ -452,9 +452,10 @@ project aren't chat one-liners; they're the harness itself. The skill and
 workflow definitions the agents ran are committed under
 [`.agents/`](.agents/), and the verbatim record of every planning
 conversation, consensus round, interview answer, and gate verdict is under
-`docs/features/completed/*/`. [`prompts/README.md`](prompts/README.md) maps
-each human control point to the file that holds it, and the appendix below
-explains how the pieces fit together.
+`docs/features/completed/*/` (`INTERVIEW.md`, `DECISIONS.md`,
+`discovery/pro-lifecycle-evidence/`, `review/plan-consensus-log.md`,
+`review/*gate-run.md`). The appendix at the end of this file explains how
+the pieces fit together.
 
 ## Appendix: the agentic engineering harness
 
