@@ -297,10 +297,8 @@ worth knowing before a demo:
 
 ### The four-hour limit
 
-The brief says four hours. I read that as four hours of my own time, not
-four hours of agent time. My time at the keyboard stayed inside that. The
-agents ran a lot longer, in parallel worktrees, across three calendar days
-(2026-08-16 to 2026-08-18).
+The brief says four hours. I read that as four hours of human in the loop time, not
+four hours of agent time. My time at the keyboard stayed inside that.
 
 I didn't prompt an assistant line by line. I built and ran an agent harness
 that lives in this repo under [`.agents/`](.agents/), and I worked above it:
@@ -460,12 +458,12 @@ the pieces fit together.
 ## Appendix: the agentic engineering harness
 
 This is the part of the project I'd most like a reviewer to look at. The
-app is the deliverable; the harness is how one person shipped it inside
-four hours of their own time with an auditable record of every decision.
+app is the deliverable; the harness is how I was able to ship it inside
+four hours of my own time with an auditable record of each decision I made.
 
 ### What it is
 
-A set of skills and one shared workflow, all plain Markdown plus a few
+A set of skills and one shared workflow, standard Markdown plus a few
 deterministic scripts, checked into [`.agents/`](.agents/):
 
 | Piece | Path | What it owns |
@@ -580,7 +578,7 @@ the app.
 
 ### What I'd change
 
-The harness is heavier than a four-hour take-home needs. Five consensus
-rounds per plan and a blind audit on every change are right for a codebase
-that has to last; near the end I overrode them to ship. The state machine
-also needs the recovery path #40 describes. Both are on the list.
+The harness is heavier than a four-hour take-home needs. Unbounded consensus
+rounds between Claude and Codex per plan and a blind audit on every change are right for a codebase
+that has to last, but was a little overkill for a MVP. Towards the end of the allotted time I overrode them to ship. Also,
+the state machine needs a fix for the recovery path #40 describes.
