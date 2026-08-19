@@ -39,22 +39,69 @@ recordings.
   `~/Library/Application Support/com.dpearson.workflow-step-editor/workflows/`
   as plain JSON plus PNG screenshots. No external services.
 
-## Requirements
+## Quick start (build and run from a fresh clone)
 
-- macOS. The application is macOS-only; the capture backend uses CGEventTap,
-  ScreenCaptureKit, and the Accessibility API.
-- Node.js 22.22+, 24.15+, or 26+ and npm (the jsdom test harness sets
-  this floor).
-- Rust (stable) with Cargo.
-- Xcode Command Line Tools.
+The repository contains source only. There is no prebuilt app; the
+`src-tauri/target/` build output is gitignored. Build it once with the
+standard Tauri commands, then open the `.app` it produces.
 
-## Setup
+### Requirements
+
+- macOS 14 (Sonoma) or newer. The app is macOS-only: the capture backend
+  uses CGEventTap, ScreenCaptureKit, and the Accessibility API.
+- Xcode Command Line Tools: `xcode-select --install`
+- Rust (stable) with Cargo: https://rustup.rs
+- Node.js 22.22+, 24.15+, or 26+ with npm (the jsdom test harness sets
+  this floor): https://nodejs.org or `brew install node`
+
+### 1. Install and build
 
 ```sh
+git clone https://github.com/dpearson2699/workflow-step-editor.git
+cd workflow-step-editor
 npm install
-npm run tauri dev     # run the app in development mode
-npm run tauri build   # build the signed release app
+npm run tauri build
 ```
+
+The first build compiles every Rust dependency and takes several minutes.
+Later builds are incremental. The app lands at:
+
+```
+src-tauri/target/release/bundle/macos/workflow-step-editor.app
+```
+
+### 2. Open the app
+
+```sh
+open src-tauri/target/release/bundle/macos/workflow-step-editor.app
+```
+
+Or double-click it in Finder. It opens on the workflow list.
+
+### 3. Grant the three permissions
+
+The header strip shows three pills: Input Monitoring, Accessibility, Screen
+Recording. Click each red pill **in that order** and approve the System
+Settings prompt. macOS may ask you to quit and reopen the app after a grant;
+do that. Recording is enabled when all three pills are green. See
+[Permissions](#permissions) for why the order matters.
+
+### 4. Record
+
+Click **● Record New Workflow**, do something in another app (click around,
+type a few characters), then click **■ Stop Recording** and review the
+steps. Full flow under [Usage](#usage).
+
+### Development mode
+
+```sh
+npm run tauri dev
+```
+
+runs the app against the Vite dev server with hot reload. macOS binds
+permission grants to the binary, so the dev build may ask for the three
+permissions again and may lose them on rebuild. For a normal review, use the
+built `.app` from step 1.
 
 ## Tests
 
@@ -63,23 +110,23 @@ npm test                       # frontend component tests (vitest + jsdom)
 (cd src-tauri && cargo test)   # backend tests
 ```
 
-The built app lands at
-`src-tauri/target/release/bundle/macos/workflow-step-editor.app`.
-
 ## Code signing
 
-Dev builds sign with a local Apple Development identity when the
-`APPLE_SIGNING_IDENTITY` environment variable is set in the build
-environment:
+`npm run tauri build` works without any certificate; the app is then
+unsigned and runs locally. Signing is optional and only affects how macOS
+remembers permission grants across rebuilds.
+
+If you have an Apple Development identity, set it before building:
 
 ```sh
-export APPLE_SIGNING_IDENTITY="Apple Development: dpearson2699@gmail.com (86K7G9BGZ7)"
+export APPLE_SIGNING_IDENTITY="Apple Development: Your Name (TEAMID)"
+npm run tauri build
 ```
 
 A stable identity plus the fixed bundle identifier
 (`com.dpearson.workflow-step-editor`) keeps macOS permission grants (TCC)
-across rebuilds. A clone without that certificate still builds with the same
-commands; the app is then unsigned.
+across rebuilds. Without it, expect to re-grant permissions after some
+rebuilds.
 
 ## Permissions
 
