@@ -6,19 +6,19 @@ recordings.
 
 ## Features
 
-- Live recording. One Record button captures clicks and key presses
+- **Live recording.** One Record button captures clicks and key presses
   across every application. Each captured event becomes a step that
   streams into the step list while you work, with a classification dot,
   an auto-generated title, and the event time. A prominent Stop
   Recording banner is the only action while recording. Interactions
   with the recorder's own window, including the Stop click itself, are
   excluded from the captured steps.
-- Draft review and save. Stopping opens the full editor in draft
-  mode. Review the captured steps, then Save… with a name (the dialog
-  pre-selects the default timestamp name) or Discard the recording
-  behind a confirmation. Events and screenshots are already on disk when
+- **Draft review and save.** Stopping opens the full editor in draft
+  mode. Review the captured steps, then click **Save…** and enter a name
+  (the dialog pre-selects the default timestamp name), or click
+  **Discard** and confirm. Events and screenshots are already on disk when
   you stop. Naming finishes the save.
-- Step editor. A compact step list beside a detail pane that keeps
+- **Step editor.** A compact step list beside a detail pane that keeps
   all three screenshots visible: one large, two labeled click-to-swap
   thumbnails (full screen, window crop, element crop). Click steps are
   cut from a pre-event frame, so the screen shows the state *before* the
@@ -29,13 +29,13 @@ recordings.
   Edit titles and descriptions, switch the classification
   (`click`/`type`/`wait`/`assert`), and delete steps. Edits save
   automatically.
-- Workflow library. The landing page lists saved workflows
+- **Workflow library.** The landing page lists saved workflows
   (thumbnail, name, `date · step count · duration`, newest first) with
-  hover Reveal-in-Finder, rename in the detail header, and hard deletion
-  behind a destructive confirmation.
-- Permission-gated. A header strip shows the three required macOS
+  **⌘ Reveal** (reveal in Finder) on hover, rename in the detail header,
+  and hard deletion behind a destructive confirmation.
+- **Permission-gated.** A header strip shows the three required macOS
   permissions; recording stays disabled until all three are granted.
-- Local-only. Recordings live under
+- **Local-only.** Recordings live under
   `~/Library/Application Support/com.dpearson.workflow-step-editor/workflows/`
   as plain JSON plus PNG screenshots. No external services.
 
@@ -49,12 +49,13 @@ standard Tauri commands, then open the `.app` it produces.
 
 - macOS 14 (Sonoma) or newer. The app is macOS-only: the capture backend
   uses CGEventTap, ScreenCaptureKit, and the Accessibility API.
-- Xcode Command Line Tools: `xcode-select --install`
-- Rust (stable) with Cargo: https://rustup.rs
-- Node.js 22.22+, 24.15+, or 26+ with npm (the jsdom test harness sets
-  this floor): https://nodejs.org or `brew install node`
+- Xcode Command Line Tools. Install them with `xcode-select --install`.
+- Rust (stable) with Cargo. Install it with [rustup](https://rustup.rs).
+- Node.js 22.22 or later, 24.15 or later, or 26 or later, with npm (the
+  jsdom test harness sets this floor). Install it from
+  [nodejs.org](https://nodejs.org) or with `brew install node`.
 
-### 1. Install and build
+### Install and build
 
 ```sh
 git clone https://github.com/dpearson2699/workflow-step-editor.git
@@ -70,7 +71,7 @@ Later builds are incremental. The app lands at:
 src-tauri/target/release/bundle/macos/workflow-step-editor.app
 ```
 
-### 2. Open the app
+### Open the app
 
 ```sh
 open src-tauri/target/release/bundle/macos/workflow-step-editor.app
@@ -78,30 +79,31 @@ open src-tauri/target/release/bundle/macos/workflow-step-editor.app
 
 Or double-click it in Finder. It opens on the workflow list.
 
-### 3. Grant the three permissions
+### Grant the three permissions
 
 The header strip shows three pills: Input Monitoring, Accessibility, Screen
-Recording. Click each red pill **in that order** and approve the System
-Settings prompt. macOS may ask you to quit and reopen the app after a grant;
-do that. Recording is enabled when all three pills are green. See
+Recording. Click each red pill in that order and approve the System
+Settings prompt. If macOS asks you to quit and reopen the app after a grant,
+do so. Recording is enabled when all three pills are green. See
 [Permissions](#permissions) for why the order matters.
 
-### 4. Record
+### Record a workflow
 
 Click **● Record New Workflow**, do something in another app (click around,
 type a few characters), then click **■ Stop Recording** and review the
-steps. Full flow under [Usage](#usage).
+steps. For the full flow, see [Usage](#usage).
 
-### Development mode
+### Optional: run in development mode
+
+To run the app against the Vite dev server with hot reload:
 
 ```sh
 npm run tauri dev
 ```
 
-runs the app against the Vite dev server with hot reload. macOS binds
-permission grants to the binary, so the dev build may ask for the three
-permissions again and may lose them on rebuild. For a normal review, use the
-built `.app` from step 1.
+macOS binds permission grants to the binary, so the dev build may ask for
+the three permissions again and can lose them on rebuild. For a normal
+review, use the built `.app` from [Install and build](#install-and-build).
 
 ## Tests
 
@@ -110,7 +112,7 @@ npm test                       # frontend component tests (vitest + jsdom)
 (cd src-tauri && cargo test)   # backend tests
 ```
 
-## Code signing
+## Optional: sign the build
 
 `npm run tauri build` works without any certificate; the app is then
 unsigned and runs locally. Signing is optional and only affects how macOS
@@ -124,9 +126,9 @@ npm run tauri build
 ```
 
 A stable identity plus the fixed bundle identifier
-(`com.dpearson.workflow-step-editor`) keeps macOS permission grants (TCC)
-across rebuilds. Without it, expect to re-grant permissions after some
-rebuilds.
+(`com.dpearson.workflow-step-editor`) keeps macOS Transparency, Consent, and
+Control (TCC) permission grants across rebuilds. Without it, expect to
+re-grant permissions after some rebuilds.
 
 ## Permissions
 
@@ -170,8 +172,7 @@ to the signed bundle identity.
 - Window crop caveat: the window-crop screenshot is a crop of the full-screen
   frame at the window's bounds, not an isolated image of the window. Content
   overlapping those bounds appears in the crop.
-- Known open defects are tracked on GitHub; see
-  [Known issues](#known-issues) below.
+- Known open defects are tracked on GitHub. See [Known issues](#known-issues).
 
 ## Walkthrough
 
@@ -188,7 +189,7 @@ Against the brief in [`docs/PROJECT_GOAL.md`](docs/PROJECT_GOAL.md):
 | Tauri desktop application (Rust backend) | Done | `src-tauri/`, React + Vite frontend in `src/` |
 | Frontend button that starts recording | Done | **● Record New Workflow** on the landing page |
 | Rust backend monitors clicks and keyboard entries | Done | ListenOnly `CGEventTap` on a dedicated run-loop thread (`src-tauri/src/capture/tap.rs`) |
-| Three screenshots per event: full screen, window crop, element crop | Done | Continuous ScreenCaptureKit stream per display, pre-buffered frames (`src-tauri/src/capture/`, ADR-0001) |
+| Three screenshots per event: full screen, window crop, element crop | Done | Continuous ScreenCaptureKit stream per display, pre-buffered frames (`src-tauri/src/capture/`, architecture decision record [ADR-0001](docs/adr/0001-pre-buffered-screen-capture.md)) |
 | Parse captured actions into understandable steps | Done (1:1) | Each event becomes one step at capture time with an auto-title such as `Click "Save" — TextEdit` or `Press Cmd+S — TextEdit` (`src-tauri/src/domain/parser.rs`) |
 | Text titles and descriptions per step | Done | Detail pane, autosaved |
 | Classify each step as `click`, `type`, `wait`, or `assert` | Done | Auto-classified `click`/`type`; the user can switch any step to `wait` or `assert` |
@@ -211,52 +212,57 @@ The durable record is the three ADRs in [`docs/adr/`](docs/adr/) and the
 `DECISIONS.md` file inside each work bundle under
 [`docs/features/completed/`](docs/features/completed/). The short version:
 
-- Pre-buffered capture instead of capture-on-demand
-  ([ADR-0001](docs/adr/0001-pre-buffered-screen-capture.md)). A screenshot
+- **Pre-buffered capture instead of capture on demand.** A screenshot
   taken after a click can miss the menu or the page that the click closed.
-  So the app runs one ScreenCaptureKit stream per display (about 10 fps) and
-  keeps the two newest frames in memory; a click uses the newest frame that
-  precedes the event. Cost: a standing capture stream while recording, and a
-  window crop that is a bounds crop of the display frame.
-- Per-kind frame timing (ADR-0001 amendment, issue
-  [#38](https://github.com/dpearson2699/workflow-step-editor/issues/38)).
-  The pre-event frame is useless for typing: it shows the field before the
-  character. Key-down steps now select the first frame within 250 ms whose
-  pixels inside the focused element differ from the pre-event frame. Clicks
+  So the app runs one ScreenCaptureKit stream per display, at about 10
+  frames per second (fps), and keeps the two newest frames in memory; a
+  click uses the newest frame that precedes the event
+  ([ADR-0001](docs/adr/0001-pre-buffered-screen-capture.md)). Cost: a
+  standing capture stream while recording, and a window crop that is a
+  bounds crop of the display frame.
+- **Per-kind frame timing.** The pre-event frame is useless for typing: it
+  shows the field before the character. Key-down steps select the first
+  frame within 250 ms whose pixels inside the focused element differ from
+  the pre-event frame. Clicks
   keep the pre-event rule byte-for-byte. Accepted tradeoff: the very first
   keystroke of a recording can still show the pre-glyph frame (issue
   [#43](https://github.com/dpearson2699/workflow-step-editor/issues/43)).
-- The tap never blocks. All metadata resolution, frame selection, PNG
-  encoding, and disk writes run on one FIFO worker behind a bounded queue.
-  If the queue saturates, the recording fail-stops with an explicit error
+  See the ADR-0001 amendment and issue
+  [#38](https://github.com/dpearson2699/workflow-step-editor/issues/38).
+- **The tap never blocks.** All metadata resolution, frame selection, PNG
+  encoding, and disk writes run on one first-in, first-out (FIFO) worker
+  behind a bounded queue. If the queue saturates, the recording fail-stops with an explicit error
   rather than dropping events silently (foundation DEC-009).
-- Ordered permission requests. macOS suppresses the Input Monitoring
+- **Ordered permission requests.** macOS suppresses the Input Monitoring
   prompt if Accessibility is checked first, so the backend enforces the
   order and reports `blocked_by_prerequisite`. A stable signing identity and
   bundle id keep TCC grants across rebuilds.
-- Lossless events under editable steps (foundation DEC-002). Capture
-  appends `events.jsonl` and PNGs; the editable manifest `workflow.json`
-  references events by id. Data on disk survives a stop or a fail-stop; only
-  an explicit Discard or Delete removes it.
-- Live 1:1 parsing, no synthetic steps (foundation DEC-003). Every event
-  is one step, streamed to the UI as soon as it's committed. Grouping and detection
-  were deferred to stay inside the MVP.
-- `KeySemantics` classifier in the core (ADR-0002). Chord detection uses
-  modifier state, never timing, and its verdicts are never persisted, so
-  both stretch capabilities can share one boundary rule later.
-- Draft is a UI state, not a storage state (review-UI DEC-005). Stopping
-  writes everything; the naming dialog only renames. A crash between Stop
-  and Save loses nothing.
-- Confirmed hard delete ([ADR-0003](docs/adr/0003-hard-delete-for-saved-workflows.md))
-  instead of a trash lifecycle.
+- **Lossless events under editable steps.** Capture appends `events.jsonl`
+  and PNGs; the editable manifest `workflow.json` references events by ID.
+  Data on disk survives a stop or a fail-stop; only an explicit **Discard**
+  or **Delete…** removes it (foundation DEC-002).
+- **Live 1:1 parsing, no synthetic steps.** Every event is one step,
+  streamed to the UI as soon as it's committed. Grouping and detection were
+  deferred to stay inside the minimum viable product (MVP); see foundation
+  DEC-003.
+- **`KeySemantics` classifier in the core.** Chord detection uses modifier
+  state, never timing, and its verdicts are never persisted, so both stretch
+  capabilities can share one boundary rule later
+  ([ADR-0002](docs/adr/0002-key-event-semantic-classifier.md)).
+- **Draft is a UI state, not a storage state.** Stopping writes everything;
+  the naming dialog only renames. A crash between Stop and Save loses
+  nothing (review-UI DEC-005).
+- **Confirmed hard delete.** Delete removes the workflow folder after a
+  confirmation; there is no trash lifecycle
+  ([ADR-0003](docs/adr/0003-hard-delete-for-saved-workflows.md)).
 
 ## Known issues
 
 Open defects live in the
 [issue tracker](https://github.com/dpearson2699/workflow-step-editor/issues?q=is%3Aissue+is%3Aopen+label%3Abug).
-Every one came out of a PR review or a gate run, and none is reachable on
-the normal record → stop → review → save path. The ones worth knowing
-before a demo:
+Every one came out of a pull request (PR) review or a gate run, and none
+is reachable on the normal record → stop → review → save path. The ones
+worth knowing before a demo:
 
 - [#21](https://github.com/dpearson2699/workflow-step-editor/issues/21)
   (P2): the manifest is written at stop or fail-stop only. A force-quit or
@@ -270,7 +276,8 @@ before a demo:
   and the restart-after-failure window remain.
 - [#43](https://github.com/dpearson2699/workflow-step-editor/issues/43),
   [#42](https://github.com/dpearson2699/workflow-step-editor/issues/42):
-  key-down timing residuals accepted as tradeoffs (see above).
+  key-down timing residuals accepted as tradeoffs (see
+  [Key technical decisions and tradeoffs](#key-technical-decisions-and-tradeoffs)).
 - The rest are P3 races with microsecond windows, cosmetic naming
   ([#27](https://github.com/dpearson2699/workflow-step-editor/issues/27)),
   and metadata edge cases.
@@ -306,7 +313,7 @@ implementation, the review, and the issue filing.
 | Tool | Role |
 | --- | --- |
 | Claude Code (Fable 5) | Root orchestrator and implementer. Ran the repository-local harness under [`.agents/`](.agents/): the wayfinder map, the spec-driven feature orchestrator, the debugging route, and UI verification. Implementation and review of every PR ran as separate worktree tasks; the implementer never reviewed its own PR. |
-| ChatGPT Pro (via [`chatgpt-pro-feature-planner`](.agents/skills/chatgpt-pro-feature-planner/SKILL.md)) | Wrote the primary plan for each capability. Every consultation is captured verbatim under `docs/features/completed/*/discovery/pro-lifecycle-evidence/` and linked from the ADRs. |
+| ChatGPT Pro (through [`chatgpt-pro-feature-planner`](.agents/skills/chatgpt-pro-feature-planner/SKILL.md)) | Wrote the primary plan for each capability. Every consultation is captured verbatim under `docs/features/completed/*/discovery/pro-lifecycle-evidence/` and linked from the ADRs. |
 | Codex CLI (`gpt-5.6-sol`, read-only sandbox) | Consensus counterparty. Each plan went through up to five adversarial rounds before adoption; the logs are `docs/features/completed/*/review/plan-consensus-log.md`. Codex also did a second-opinion pass on some PRs. |
 | GitNexus | Code graph for impact analysis during implementation, and the `gitnexus-pr-review` skill for exact-head PR review. It also filed the follow-up issues under [`.github/issue-label-policy.json`](.github/issue-label-policy.json). |
 | MuninnDB | Project memory across sessions (decisions, preferences, lessons). |
@@ -364,7 +371,7 @@ implementation, the review, and the issue filing.
 
 The macOS capture research. Tickets #2 to #5 worked out, against the real
 APIs and crates, that a ListenOnly `CGEventTap` on its own run loop, a
-continuous `SCStream` per display, and AX hit-testing at the click point
+continuous `SCStream` per display, and accessibility (AX) hit-testing at the click point
 were the right primitives. Ticket #2 also caught the TCC prompt-order trap:
 check Accessibility first and macOS never shows the Input Monitoring
 prompt. The first capability went from adopted plan to a passing real
@@ -405,8 +412,8 @@ static display aren't affected.
   and a severity.
 - The human gate as a merge blocker worked. When the automated proof was
   thin, I ran a real recording and went with what it showed.
-- Time-based heuristics without a real run didn't work (the #38 story
-  above).
+- Time-based heuristics without a real run didn't work (the #38 case in
+  [Where AI got it wrong](#where-ai-got-it-wrong)).
 - The harness's own state machine didn't hold up at the edges. A failed
   human gate on a single-slice final PR had no modeled recovery
   ([#40](https://github.com/dpearson2699/workflow-step-editor/issues/40)),

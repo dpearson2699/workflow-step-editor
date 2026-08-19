@@ -1,7 +1,7 @@
 # Hard delete for saved workflows
 
 Deleting a saved workflow permanently removes its folder from the app's
-storage — the raw event log including recorded keystrokes, the manifest, and
+storage: the raw event log including recorded keystrokes, the manifest, and
 all screenshots. The backend performs the deletion: it resolves the workflow
 id to a recognized directory inside the configured workflow root, validates
 that the operation cannot escape that root or follow an externally
@@ -15,7 +15,8 @@ folder, and provides no restore or purge lifecycle.
 
 Adopted from the user-approved decision record in
 [issue #8](https://github.com/dpearson2699/workflow-step-editor/issues/8),
-which supersedes the earlier "no workflow deletion in the MVP UI" ruling in
+which supersedes the earlier "no workflow deletion in the minimum viable
+product (MVP) UI" ruling in
 issue #7.
 
 ## Considered options

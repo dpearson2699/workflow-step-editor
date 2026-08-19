@@ -1,13 +1,13 @@
 # Workflow Step Editor
 
-A macOS desktop tool that records how a human performs a task — clicks, typing,
-and screenshots — and lets them review and annotate the recording as automation
+A macOS desktop tool that records how a human performs a task (clicks, typing,
+and screenshots) and lets them review and annotate the recording as automation
 workflow steps.
 
 ## Language
 
 **Event**:
-One raw input occurrence observed during recording — a click or a key-down.
+One raw input occurrence observed during recording: a click or a key-down.
 _Avoid_: action, input, click record
 
 **Step**:
@@ -21,7 +21,7 @@ and the element crop.
 _Avoid_: screenshots, captures
 
 **Workflow**:
-One recorded task — the events captured in a single recording run together
+One recorded task: the events captured in a single recording run together
 with the steps a user reviews and annotates.
 _Avoid_: recording, session, script
 

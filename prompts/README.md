@@ -34,7 +34,7 @@ ran for much longer, across three calendar days.
 | ChatGPT Pro planning prompts and responses, verbatim | `docs/features/completed/*/discovery/pro-lifecycle-evidence/*.md` |
 | Codex consensus rounds and root arbitration | `docs/features/completed/*/review/plan-consensus-log.md` |
 | Real-recording gate runs and verdicts | `docs/features/completed/2026-08-17-capture-pipeline-and-backend-foundation/review/proven-gate-run.md`; `review/timing-gate-run.md` on branch `claude/spec-driven-orchestrator-issue-38-072a42` |
-| Review findings turned into issues | Every open [bug](https://github.com/dpearson2699/workflow-step-editor/issues?q=is%3Aissue+label%3Abug) issue carries its PR of origin, head SHA, and finding id |
+| Review findings turned into issues | Every open [bug](https://github.com/dpearson2699/workflow-step-editor/issues?q=is%3Aissue+label%3Abug) issue carries its pull request of origin, head SHA, and finding ID |
 
 ## Representative human inputs
 
