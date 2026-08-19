@@ -176,7 +176,7 @@ to the signed bundle identity.
 
 ## Walkthrough
 
-- Video: _link to be added before submission._
+- Video: [Workflow Step Editor walkthrough](https://youtu.be/d9cNUFqyCsU) (2:41, unlisted on YouTube).
 - Written: [docs/walkthrough/WALKTHROUGH.md](docs/walkthrough/WALKTHROUGH.md)
   follows the video and carries the points that do not fit on screen.
 
