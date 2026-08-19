@@ -1,8 +1,8 @@
 # Prompts and human control points
 
-The brief invites a `/prompts` directory with example prompts. This project
-was not built with chat one-liners, so the honest content of this folder is
-a map of where the human steered and where the verbatim record lives.
+The brief invites a `/prompts` directory with example prompts. I didn't
+build this with chat one-liners, so this folder is a map of where I steered
+and where the verbatim record lives.
 
 ## Mode of work
 
@@ -70,5 +70,5 @@ me. Examples from the key-down timing capability (issue #38), in order:
   doesn't show, but if that's a tradeoff to make every other character be
   in sync then I authorize that tradeoff."
 
-Three of those inputs are gate verdicts from a real recording; each one
-changed the shipped rule. That is where the human time went.
+Three of those inputs are gate verdicts from a real recording, and each
+one changed the shipped rule. That's where most of my time went.

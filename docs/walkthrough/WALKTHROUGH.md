@@ -1,7 +1,7 @@
 # Written walkthrough
 
 This is the text companion to the video. It follows the same order and
-carries the points that do not fit in an on-screen annotation. Five minutes
+carries the points that don't fit in an on-screen annotation. Five minutes
 to read.
 
 ## 1. What you are looking at
@@ -80,7 +80,7 @@ confirmed hard delete (ADR-0003); no trash lifecycle in the MVP.
 ## 5. How it was built
 
 The brief allows four hours. I read that as four hours of my own time in
-the loop. I did not prompt an assistant line by line. I ran a
+the loop. I didn't prompt an assistant line by line. I ran a
 repository-local agent harness (`.agents/`) and worked above it:
 
 1. A wayfinder map (issue #1) turned the brief into decision tickets. Four
@@ -90,10 +90,10 @@ repository-local agent harness (`.agents/`) and worked above it:
 2. Each capability then ran interview → ChatGPT Pro plan → Codex consensus
    rounds → blind completeness audit → adopted plan → one worktree task
    per PR → independent exact-head review → merge. Eight PRs, seven merged.
-3. Every capability ended in a real recording on the signed build that I
-   ran and inspected. Merge was blocked until I accepted.
+3. Every capability ended with me running a real recording on the signed
+   build. Nothing merged until I'd run it.
 
-Where it went wrong, and why that mattered: the key-down timing rule was
+Where it went wrong: the key-down timing rule was
 planned by ChatGPT Pro, agreed by Codex over five rounds, unit-tested
 green, and failed the first real recording (it captured the title bar's
 dirty-state repaint instead of the typed character). The second rule, a
