@@ -101,7 +101,8 @@ dirty-state repaint instead of the typed character). The second rule, a
 next recording (it showed characters typed after the step). The
 content-aware rule shipped on the third gate with one stated tradeoff: the
 very first keystroke of a recording can still show the pre-glyph frame
-(issue #43). The tests were never the proof. The recording was.
+(issue #43). The unit tests passed all three times. Running the app is what
+caught the two bad rules.
 
 Every defect that review found and I chose not to fix inside the four
 hours is an open issue with a reproduction, a fingerprint, and a severity.

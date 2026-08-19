@@ -384,7 +384,7 @@ checks and failed the next real recording: at typing speed it showed
 characters typed *after* the step. Only my observation of both failures
 ("Hel" for the `e` step) led to the content-aware rule that shipped. Three
 gate runs, two failed, one accepted with a stated tradeoff. The unit tests
-were green every time; the real recording was the only test that mattered.
+passed all three times. Running the app is what caught the two bad rules.
 
 A second case: the display-reconfiguration observer
 ([#24](https://github.com/dpearson2699/workflow-step-editor/issues/24)) was
